@@ -1,0 +1,4 @@
+/* Re-export: el diseño completo vive en design-system.css (copia de style.css del proyecto original). */
+@import "./design-system.css";
+@import "./store-page-overrides.css";
+@import "./admin-overrides.css";

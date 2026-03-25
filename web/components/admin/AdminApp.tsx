@@ -1,0 +1,3121 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { signOut, useSession } from "next-auth/react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  createAdminCategory,
+  createAdminSubcategory,
+  deleteAdminCategory,
+  deleteAdminSubcategory,
+  fetchAdminCategories,
+  updateAdminCategory,
+  updateAdminSubcategory,
+} from "@/lib/api/admin-categories";
+import {
+  createAdminProduct,
+  deleteAdminProduct,
+  fetchAdminProducts,
+  updateAdminProduct,
+} from "@/lib/api/admin-products";
+import {
+  addProductGalleryImage,
+  removeProductGalleryImage,
+  uploadAdminProductImage,
+} from "@/lib/api/admin-upload";
+import {
+  deleteBulkImportJob,
+  patchBulkImportJob,
+  postBulkImportCommit,
+  postBulkImportPreview,
+} from "@/lib/api/admin-bulk-import";
+import type { BulkPreviewNewTaxonomyItem, BulkPreviewResult } from "@/lib/bulk-import/build-preview";
+import { isHttpImageUrl } from "@/lib/util/image-url";
+import { getDefaultAdminMenu } from "@/data/admin-initial";
+import type { AdminCategoryTree } from "@/lib/types/admin-category";
+import type { AdminProduct, AdminSale, MenuConfig } from "@/lib/types/admin";
+import { formatPrice } from "@/lib/format";
+
+type AdminPageId = "dashboard" | "products" | "sales" | "stock" | "categories" | "menu" | "reports";
+
+function categoryDisplayName(slug: string, tree: AdminCategoryTree[]): string {
+  return tree.find((c) => c.slug === slug)?.name ?? slug;
+}
+
+function AdminProductThumb({ imageUrl, emoji }: { imageUrl: string | null; emoji: string }) {
+  return (
+    <div className="table-product-img">
+      {isHttpImageUrl(imageUrl) ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={imageUrl!} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : (
+        emoji || "📦"
+      )}
+    </div>
+  );
+}
+
+export function AdminApp() {
+  const router = useRouter();
+  const { data: session, status } = useSession();
+
+  const [page, setPage] = useState<AdminPageId>("dashboard");
+  const [pageTitle, setPageTitle] = useState("Dashboard");
+  const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsError, setProductsError] = useState<string | null>(null);
+  const [categoriesTree, setCategoriesTree] = useState<AdminCategoryTree[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
+  const [productMutation, setProductMutation] = useState<"add" | "bulk" | "edit" | null>(null);
+  const [stockSavingId, setStockSavingId] = useState<string | null>(null);
+  const [sales, setSales] = useState<AdminSale[]>([]);
+  const [menuConfig, setMenuConfig] = useState<MenuConfig>(getDefaultAdminMenu);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+
+  const [productTab, setProductTab] = useState<"list" | "add" | "bulk">("list");
+  const [productSearch, setProductSearch] = useState("");
+  const [productFilterBrand, setProductFilterBrand] = useState("");
+  const [productFilterCategorySlug, setProductFilterCategorySlug] = useState("");
+  const [productFilterSubcategory, setProductFilterSubcategory] = useState("");
+
+  const [addSaleOpen, setAddSaleOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailProductId, setDetailProductId] = useState<string | null>(null);
+  const [featuredHomeSavingId, setFeaturedHomeSavingId] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<{ id: number; msg: string; type: string; icon: string }[]>([]);
+
+  const showToast = useCallback((msg: string, type = "default", icon = "✅") => {
+    const id = Date.now();
+    setToasts((t) => [...t, { id, msg, type, icon }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
+  }, []);
+
+  const loadProducts = useCallback(async () => {
+    setProductsLoading(true);
+    setProductsError(null);
+    try {
+      const list = await fetchAdminProducts();
+      setProducts(list);
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[AdminApp] Productos cargados desde API:", list.length);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Error al cargar productos";
+      setProductsError(msg);
+      showToast(msg, "danger", "⚠️");
+    } finally {
+      setProductsLoading(false);
+    }
+  }, [showToast]);
+
+  const loadCategories = useCallback(async () => {
+    setCategoriesLoading(true);
+    setCategoriesError(null);
+    try {
+      const list = await fetchAdminCategories();
+      setCategoriesTree(list);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Error al cargar categorías";
+      setCategoriesError(msg);
+      showToast(msg, "danger", "⚠️");
+    } finally {
+      setCategoriesLoading(false);
+    }
+  }, [showToast]);
+
+  const sessionUserId = session?.user?.id;
+
+  /** Carga cuando la sesión está lista (`user.id` estable en deps). */
+  useEffect(() => {
+    if (status !== "authenticated" || !sessionUserId) return;
+    void loadProducts();
+  }, [status, sessionUserId, loadProducts]);
+
+  /** Al abrir Gestión de productos, refresco por si la primera GET quedó en caché vacía. */
+  useEffect(() => {
+    if (status !== "authenticated" || !sessionUserId) return;
+    if (page !== "products") return;
+    void loadProducts();
+  }, [page, status, sessionUserId, loadProducts]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !sessionUserId) return;
+    void loadCategories();
+  }, [status, sessionUserId, loadCategories]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !sessionUserId) return;
+    if (page !== "categories") return;
+    void loadCategories();
+  }, [page, status, sessionUserId, loadCategories]);
+
+  useEffect(() => {
+    if (status === "loading") return;
+    if (status === "unauthenticated") {
+      router.replace("/admin/login");
+      return;
+    }
+    if (session?.user?.role && session.user.role !== "ADMIN") {
+      router.replace("/admin/login?error=forbidden");
+    }
+  }, [status, session, router]);
+
+  const titles: Record<AdminPageId, string> = {
+    dashboard: "Dashboard",
+    products: "Gestión de Productos",
+    sales: "Ventas",
+    stock: "Inventario",
+    categories: "Categorías y subcategorías",
+    menu: "Gestión del Menú",
+    reports: "Reportes",
+  };
+
+  const goPage = (p: AdminPageId) => {
+    setPage(p);
+    setPageTitle(titles[p]);
+  };
+
+  const productListSortedCategories = useMemo(
+    () => [...categoriesTree].sort((a, b) => a.sortOrder - b.sortOrder),
+    [categoriesTree]
+  );
+
+  const productFilterBrandOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const p of products) {
+      const b = (p.brand ?? "").trim();
+      if (!b) continue;
+      if (seen.has(b)) continue;
+      seen.add(b);
+      out.push(b);
+    }
+    out.sort((a, b) => a.localeCompare(b, "es"));
+    return out;
+  }, [products]);
+
+  const productFilterSubcategoryOptions = useMemo(() => {
+    const pool = productFilterCategorySlug
+      ? products.filter((p) => p.category === productFilterCategorySlug)
+      : products;
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const p of pool) {
+      const s = (p.subcategory ?? "").trim();
+      if (!s) continue;
+      if (seen.has(s)) continue;
+      seen.add(s);
+      out.push(s);
+    }
+    out.sort((a, b) => a.localeCompare(b, "es"));
+    return out;
+  }, [products, productFilterCategorySlug]);
+
+  const filteredProducts = useMemo(() => {
+    let list = products;
+    const q = productSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((x) => x.name.toLowerCase().includes(q));
+    }
+    if (productFilterBrand) {
+      list = list.filter((x) => (x.brand ?? "").trim() === productFilterBrand);
+    }
+    if (productFilterCategorySlug) {
+      list = list.filter((x) => x.category === productFilterCategorySlug);
+    }
+    if (productFilterSubcategory) {
+      list = list.filter((x) => (x.subcategory ?? "").trim() === productFilterSubcategory);
+    }
+    return list;
+  }, [
+    products,
+    productSearch,
+    productFilterBrand,
+    productFilterCategorySlug,
+    productFilterSubcategory,
+  ]);
+
+  const setProductFilterCategorySlugAndResetSub = useCallback((slug: string) => {
+    setProductFilterCategorySlug(slug);
+    setProductFilterSubcategory("");
+  }, []);
+
+  useEffect(() => {
+    if (
+      productFilterSubcategory &&
+      !productFilterSubcategoryOptions.includes(productFilterSubcategory)
+    ) {
+      setProductFilterSubcategory("");
+    }
+  }, [productFilterSubcategory, productFilterSubcategoryOptions]);
+
+  const renderDashboard = () => {
+    const totalRevenue = sales.reduce((s, sale) => s + (Number(sale.total) || 0), 0);
+    const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun"];
+    const values = [320000, 480000, 390000, 520000, 610000, 580000];
+    const max = Math.max(...values);
+    return (
+      <>
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-icon">💰</div>
+            <div className="stat-num">{formatPrice(totalRevenue)}</div>
+            <div className="stat-label">Ingresos este mes</div>
+            <div className="stat-trend up">↑ 12% vs mes anterior</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon">🛒</div>
+            <div className="stat-num">{sales.length}</div>
+            <div className="stat-label">Ventas registradas</div>
+            <div className="stat-trend up">↑ 8 nuevas hoy</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon">📦</div>
+            <div className="stat-num">{products.filter((p) => p.active).length}</div>
+            <div className="stat-label">Productos activos</div>
+            <div className="stat-trend down">↓ 3 con stock bajo</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon">⭐</div>
+            <div className="stat-num">4.8</div>
+            <div className="stat-label">Calificación promedio</div>
+            <div className="stat-trend up">↑ Excelente</div>
+          </div>
+        </div>
+        <div className="charts-row">
+          <div className="admin-card">
+            <div className="admin-card-title">Ventas últimos 6 meses</div>
+            <div className="bar-chart" id="bar-chart">
+              {months.map((m, i) => {
+                const h = Math.round((values[i] / max) * 140);
+                return (
+                  <div key={m} className="bar-group">
+                    <span className="bar-value">{Math.round(values[i] / 1000)}K</span>
+                    <div className="bar" style={{ height: h, background: "linear-gradient(180deg,var(--rose),var(--blush))" }} title={formatPrice(values[i])} />
+                    <span className="bar-label">{m}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="admin-card">
+            <div className="admin-card-title">Ventas por categoría</div>
+            <div className="donut-chart">
+              <div className="donut-visual" />
+              <div className="donut-legend">
+                <div className="legend-item">
+                  <div className="legend-dot" style={{ background: "var(--rose)" }} />
+                  Maquillaje <span className="legend-pct">46%</span>
+                </div>
+                <div className="legend-item">
+                  <div className="legend-dot" style={{ background: "var(--lavender)" }} />
+                  Cuidado Piel <span className="legend-pct">20%</span>
+                </div>
+                <div className="legend-item">
+                  <div className="legend-dot" style={{ background: "var(--sage)" }} />
+                  Capilar <span className="legend-pct">19%</span>
+                </div>
+                <div className="legend-item">
+                  <div className="legend-dot" style={{ background: "var(--gold)" }} />
+                  Otros <span className="legend-pct">15%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="admin-card">
+          <div className="admin-card-title">Ventas recientes</div>
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Cliente</th>
+                <th>Canal</th>
+                <th>Total</th>
+                <th>Estado</th>
+                <th>Fecha</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sales.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                    Sin ventas registradas aún
+                  </td>
+                </tr>
+              ) : (
+                [...sales].slice(-8).reverse().map((s) => {
+                  const prod = products.find((p) => p.id === s.productId);
+                  return (
+                    <tr key={s.id}>
+                      <td>
+                        <div className="table-product-cell">
+                          <AdminProductThumb imageUrl={prod?.imageUrl ?? null} emoji={prod?.emoji ?? "📦"} />
+                          <div className="table-product-name">{prod ? prod.name : s.productName}</div>
+                        </div>
+                      </td>
+                      <td>{s.client || "—"}</td>
+                      <td>{s.channel || "—"}</td>
+                      <td>{formatPrice(s.total)}</td>
+                      <td>
+                        <span className={`status-chip ${s.status === "Completada" ? "status-active" : "status-low"}`}>{s.status}</span>
+                      </td>
+                      <td>{s.date}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </>
+    );
+  };
+
+  if (status === "loading") {
+    return (
+      <div className="admin-login-gate">
+        <p style={{ color: "var(--text-muted)" }}>Cargando…</p>
+      </div>
+    );
+  }
+
+  if (!session?.user || session.user.role !== "ADMIN") {
+    return (
+      <div className="admin-login-gate">
+        <p style={{ color: "var(--text-muted)" }}>Redirigiendo…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="admin-app-shell">
+      <div className="admin-layout">
+        <aside className="admin-sidebar">
+          <div className="admin-sidebar-header">
+            <div className="admin-logo">
+              <span style={{ fontSize: 22 }}>🌸</span>
+              <span className="admin-logo-text">
+                Ginna<em>Beauty</em>
+              </span>
+            </div>
+            <div className="admin-role">Panel Administrativo</div>
+          </div>
+          <nav className="sidebar-nav">
+            <div className="nav-section-label">Principal</div>
+            <button type="button" className={`sidebar-link ${page === "dashboard" ? "active" : ""}`} onClick={() => goPage("dashboard")}>
+              <span className="icon">📊</span> Dashboard
+            </button>
+            <button type="button" className={`sidebar-link ${page === "products" ? "active" : ""}`} onClick={() => goPage("products")}>
+              <span className="icon">📦</span> Productos
+            </button>
+            <button type="button" className={`sidebar-link ${page === "sales" ? "active" : ""}`} onClick={() => goPage("sales")}>
+              <span className="icon">💰</span> Ventas
+            </button>
+            <button type="button" className={`sidebar-link ${page === "stock" ? "active" : ""}`} onClick={() => goPage("stock")}>
+              <span className="icon">📋</span> Inventario
+            </button>
+            <div className="nav-section-label">Configuración</div>
+            <button type="button" className={`sidebar-link ${page === "categories" ? "active" : ""}`} onClick={() => goPage("categories")}>
+              <span className="icon">🏷️</span> Categorías
+            </button>
+            <button type="button" className={`sidebar-link ${page === "menu" ? "active" : ""}`} onClick={() => goPage("menu")}>
+              <span className="icon">🗂️</span> Gestión de Menú
+            </button>
+            <button type="button" className={`sidebar-link ${page === "reports" ? "active" : ""}`} onClick={() => goPage("reports")}>
+              <span className="icon">📈</span> Reportes
+            </button>
+            <div className="nav-section-label">Tienda</div>
+            <Link href="/" className="sidebar-link" target="_blank">
+              <span className="icon">🌐</span> Ver Tienda
+            </Link>
+          </nav>
+          <div className="sidebar-bottom">
+            <div className="admin-user-chip">
+              <div className="admin-avatar">G</div>
+              <div>
+                <div className="admin-user-name">{session.user.name || "Admin"}</div>
+                <div className="admin-user-role">Administradora</div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <main className="admin-main">
+          <div className="admin-topbar">
+            <div className="admin-page-title">{pageTitle}</div>
+            <div className="admin-topbar-actions">
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => { goPage("products"); setProductTab("add"); }}>
+                + Agregar Producto
+              </button>
+              <button type="button" className="btn btn-rose btn-sm" onClick={() => setAddSaleOpen(true)}>
+                + Registrar Venta
+              </button>
+              <button type="button" className="btn btn-sm" style={{ color: "var(--text-muted)" }} onClick={() => signOut({ callbackUrl: "/admin/login" })}>
+                Salir
+              </button>
+            </div>
+          </div>
+
+          <div className="admin-content">
+            <div className={`admin-page ${page === "dashboard" ? "active" : ""}`} style={{ display: page === "dashboard" ? "block" : "none" }}>
+              {renderDashboard()}
+            </div>
+
+            <div className={`admin-page ${page === "products" ? "active" : ""}`} style={{ display: page === "products" ? "block" : "none" }}>
+              {productsError && (
+                <div className="admin-card" style={{ marginBottom: 16, padding: 14, background: "var(--lavender-light)", border: "1px solid var(--dusty-rose)", fontSize: 13 }}>
+                  <strong>Error:</strong> {productsError}{" "}
+                  <button type="button" className="btn btn-outline btn-sm" style={{ marginLeft: 8 }} onClick={() => void loadProducts()}>
+                    Reintentar
+                  </button>
+                </div>
+              )}
+              {productsLoading && products.length === 0 && (
+                <p style={{ color: "var(--text-muted)", marginBottom: 16 }}>Cargando productos desde la base de datos…</p>
+              )}
+              <div className="tabs">
+                <button type="button" className={`tab-btn ${productTab === "list" ? "active" : ""}`} onClick={() => setProductTab("list")}>
+                  📋 Lista de productos
+                </button>
+                <button type="button" className={`tab-btn ${productTab === "add" ? "active" : ""}`} onClick={() => setProductTab("add")}>
+                  + Agregar producto
+                </button>
+                <button type="button" className={`tab-btn ${productTab === "bulk" ? "active" : ""}`} onClick={() => setProductTab("bulk")}>
+                  📤 Carga masiva
+                </button>
+              </div>
+              {productTab === "list" && (
+                <AdminProductListTab
+                  productSearch={productSearch}
+                  setProductSearch={setProductSearch}
+                  filterBrand={productFilterBrand}
+                  setFilterBrand={setProductFilterBrand}
+                  filterCategorySlug={productFilterCategorySlug}
+                  setFilterCategorySlug={setProductFilterCategorySlugAndResetSub}
+                  filterSubcategory={productFilterSubcategory}
+                  setFilterSubcategory={setProductFilterSubcategory}
+                  brandOptions={productFilterBrandOptions}
+                  subcategoryOptions={productFilterSubcategoryOptions}
+                  sortedCategories={productListSortedCategories}
+                  filteredProducts={filteredProducts}
+                  totalProductCount={products.length}
+                  listLoading={productsLoading}
+                  categoryTree={categoriesTree}
+                  featuredHomeSavingId={featuredHomeSavingId}
+                  onToggleFeaturedInHome={async (id, value) => {
+                    setFeaturedHomeSavingId(id);
+                    try {
+                      await updateAdminProduct(id, { featuredInHome: value });
+                      showToast(
+                        value
+                          ? "Este producto saldrá entre los primeros en Productos Destacados del home"
+                          : "Orden normal en la tienda para este producto",
+                        "success",
+                        "✨"
+                      );
+                      await loadProducts();
+                    } catch (e) {
+                      showToast(e instanceof Error ? e.message : "No se pudo actualizar", "danger", "⚠️");
+                    } finally {
+                      setFeaturedHomeSavingId(null);
+                    }
+                  }}
+                  onEdit={(p) => {
+                    setEditingProductId(p.id);
+                    setEditOpen(true);
+                  }}
+                  onView={(p) => {
+                    setDetailProductId(p.id);
+                    setDetailOpen(true);
+                  }}
+                  onDelete={async (id) => {
+                    if (!confirm("¿Eliminar este producto?")) return;
+                    try {
+                      await deleteAdminProduct(id);
+                      showToast("Producto eliminado", "default", "🗑️");
+                      await loadProducts();
+                    } catch (e) {
+                      showToast(e instanceof Error ? e.message : "No se pudo eliminar", "danger", "⚠️");
+                    }
+                  }}
+                />
+              )}
+              {productTab === "add" && (
+                <AdminAddProductForm
+                  categories={categoriesTree}
+                  categoriesLoading={categoriesLoading}
+                  saving={productMutation === "add"}
+                  showToast={showToast}
+                  onSubmit={async (body) => {
+                    setProductMutation("add");
+                    try {
+                      await createAdminProduct(body);
+                      showToast(`"${String(body.name)}" agregado exitosamente`, "success", "✅");
+                      setProductTab("list");
+                      await loadProducts();
+                    } catch (e) {
+                      showToast(e instanceof Error ? e.message : "Error al crear", "danger", "⚠️");
+                    } finally {
+                      setProductMutation(null);
+                    }
+                  }}
+                />
+              )}
+              {productTab === "bulk" && (
+                <AdminBulkTab
+                  categories={categoriesTree}
+                  categoriesLoading={categoriesLoading}
+                  saving={productMutation === "bulk"}
+                  showToast={showToast}
+                  setMutation={setProductMutation}
+                  onImported={async () => {
+                    await loadProducts();
+                  }}
+                  onCategoriesUpdated={async () => {
+                    await loadCategories();
+                  }}
+                />
+              )}
+            </div>
+
+            <div className={`admin-page ${page === "sales" ? "active" : ""}`} style={{ display: page === "sales" ? "block" : "none" }}>
+              <AdminSalesTab sales={sales} products={products} />
+            </div>
+
+            <div className={`admin-page ${page === "stock" ? "active" : ""}`} style={{ display: page === "stock" ? "block" : "none" }}>
+              <AdminStockTab
+                products={products}
+                categoryTree={categoriesTree}
+                stockSavingId={stockSavingId}
+                onPersistStock={async (id, stock) => {
+                  const p = products.find((x) => x.id === id);
+                  if (!p) return;
+                  setStockSavingId(id);
+                  try {
+                    await updateAdminProduct(id, { stock });
+                    await loadProducts();
+                  } catch (e) {
+                    showToast(e instanceof Error ? e.message : "No se pudo guardar stock", "danger", "⚠️");
+                  } finally {
+                    setStockSavingId(null);
+                  }
+                }}
+              />
+            </div>
+
+            <div className={`admin-page ${page === "categories" ? "active" : ""}`} style={{ display: page === "categories" ? "block" : "none" }}>
+              <AdminCategoriesTab
+                tree={categoriesTree}
+                loading={categoriesLoading}
+                error={categoriesError}
+                onReload={() => void loadCategories()}
+                showToast={showToast}
+              />
+            </div>
+
+            <div className={`admin-page ${page === "menu" ? "active" : ""}`} style={{ display: page === "menu" ? "block" : "none" }}>
+              <AdminMenuTab menuConfig={menuConfig} setMenuConfig={setMenuConfig} showToast={showToast} />
+            </div>
+
+            <div className={`admin-page ${page === "reports" ? "active" : ""}`} style={{ display: page === "reports" ? "block" : "none" }}>
+              <AdminReportsTab sales={sales} showToast={showToast} />
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <AdminAddSaleModal
+        open={addSaleOpen}
+        onClose={() => setAddSaleOpen(false)}
+        products={products}
+        onSave={(sale) => {
+          setSales((s) => [...s, sale]);
+          setProducts((prev) =>
+            prev.map((p) => {
+              if (p.id !== sale.productId) return p;
+              return { ...p, stock: Math.max(0, p.stock - sale.qty) };
+            }),
+          );
+          showToast("Venta registrada exitosamente", "success", "💰");
+        }}
+      />
+
+      <AdminEditProductModal
+        open={editOpen}
+        saving={productMutation === "edit"}
+        product={products.find((p) => p.id === editingProductId) ?? null}
+        onClose={() => { setEditOpen(false); setEditingProductId(null); }}
+        onProductRefresh={(p) => {
+          setProducts((prev) => prev.map((x) => (x.id === p.id ? p : x)));
+        }}
+        showToast={showToast}
+        onSave={async (patch) => {
+          if (!editingProductId) return;
+          setProductMutation("edit");
+          try {
+            await updateAdminProduct(editingProductId, patch);
+            showToast("Producto actualizado", "success", "✅");
+            setEditOpen(false);
+            setEditingProductId(null);
+            await loadProducts();
+          } catch (e) {
+            showToast(e instanceof Error ? e.message : "Error al guardar", "danger", "⚠️");
+          } finally {
+            setProductMutation(null);
+          }
+        }}
+      />
+
+      <AdminProductDetailModal
+        open={detailOpen}
+        product={products.find((p) => p.id === detailProductId) ?? null}
+        saving={productMutation === "edit"}
+        categoryTree={categoriesTree}
+        onClose={() => {
+          setDetailOpen(false);
+          setDetailProductId(null);
+        }}
+        onEdit={(p) => {
+          setDetailOpen(false);
+          setDetailProductId(null);
+          setEditingProductId(p.id);
+          setEditOpen(true);
+        }}
+        onDelete={async (id) => {
+          if (!confirm("¿Eliminar este producto?")) return;
+          setProductMutation("edit");
+          try {
+            await deleteAdminProduct(id);
+            showToast("Producto eliminado", "default", "🗑️");
+            setDetailOpen(false);
+            setDetailProductId(null);
+            await loadProducts();
+          } catch (e) {
+            showToast(e instanceof Error ? e.message : "No se pudo eliminar", "danger", "⚠️");
+          } finally {
+            setProductMutation(null);
+          }
+        }}
+        onProductRefresh={(p) => {
+          setProducts((prev) => prev.map((x) => (x.id === p.id ? p : x)));
+        }}
+        showToast={showToast}
+      />
+
+      <div className="admin-toast-container" id="admin-toast-container">
+        {toasts.map((t) => (
+          <div key={t.id} className={`toast ${t.type}`}>
+            <span>{t.icon}</span>
+            <span>{t.msg}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdminProductListTab({
+  productSearch,
+  setProductSearch,
+  filterBrand,
+  setFilterBrand,
+  filterCategorySlug,
+  setFilterCategorySlug,
+  filterSubcategory,
+  setFilterSubcategory,
+  brandOptions,
+  subcategoryOptions,
+  sortedCategories,
+  filteredProducts,
+  totalProductCount,
+  listLoading,
+  categoryTree,
+  featuredHomeSavingId,
+  onToggleFeaturedInHome,
+  onView,
+  onEdit,
+  onDelete,
+}: {
+  productSearch: string;
+  setProductSearch: (v: string) => void;
+  filterBrand: string;
+  setFilterBrand: (v: string) => void;
+  filterCategorySlug: string;
+  setFilterCategorySlug: (v: string) => void;
+  filterSubcategory: string;
+  setFilterSubcategory: (v: string) => void;
+  brandOptions: string[];
+  subcategoryOptions: string[];
+  sortedCategories: AdminCategoryTree[];
+  filteredProducts: AdminProduct[];
+  totalProductCount: number;
+  listLoading: boolean;
+  categoryTree: AdminCategoryTree[];
+  featuredHomeSavingId: string | null;
+  onToggleFeaturedInHome: (id: string, value: boolean) => void | Promise<void>;
+  onView: (p: AdminProduct) => void;
+  onEdit: (p: AdminProduct) => void;
+  onDelete: (id: string) => void | Promise<void>;
+}) {
+  const hasActiveFilters =
+    !!filterBrand || !!filterCategorySlug || !!filterSubcategory || !!productSearch.trim();
+
+  return (
+    <>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "flex-end",
+          gap: 12,
+          marginBottom: 20,
+        }}
+      >
+        <div className="search-bar" style={{ width: 260, minWidth: 200, flex: "1 1 200px" }}>
+          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
+          <input type="text" placeholder="Buscar producto..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} />
+        </div>
+        <div className="form-group" style={{ margin: 0, minWidth: 160, flex: "1 1 140px" }}>
+          <label className="form-label" style={{ fontSize: 11, marginBottom: 4 }}>
+            Marca
+          </label>
+          <select
+            className="form-select"
+            value={filterBrand}
+            onChange={(e) => setFilterBrand(e.target.value)}
+            aria-label="Filtrar por marca"
+          >
+            <option value="">Todas</option>
+            {brandOptions.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group" style={{ margin: 0, minWidth: 160, flex: "1 1 140px" }}>
+          <label className="form-label" style={{ fontSize: 11, marginBottom: 4 }}>
+            Categoría
+          </label>
+          <select
+            className="form-select"
+            value={filterCategorySlug}
+            onChange={(e) => setFilterCategorySlug(e.target.value)}
+            aria-label="Filtrar por categoría"
+          >
+            <option value="">Todas</option>
+            {sortedCategories.map((c) => (
+              <option key={c.slug} value={c.slug}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group" style={{ margin: 0, minWidth: 160, flex: "1 1 140px" }}>
+          <label className="form-label" style={{ fontSize: 11, marginBottom: 4 }}>
+            Subcategoría
+          </label>
+          <select
+            className="form-select"
+            value={filterSubcategory}
+            onChange={(e) => setFilterSubcategory(e.target.value)}
+            aria-label="Filtrar por subcategoría"
+            disabled={subcategoryOptions.length === 0}
+          >
+            <option value="">Todas</option>
+            {subcategoryOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            style={{ height: 38, alignSelf: "flex-end" }}
+            onClick={() => {
+              setProductSearch("");
+              setFilterBrand("");
+              setFilterCategorySlug("");
+              setFilterSubcategory("");
+            }}
+          >
+            Limpiar filtros
+          </button>
+        )}
+      </div>
+      {!listLoading && totalProductCount > 0 && (
+        <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: -12, marginBottom: 16 }}>
+          Mostrando {filteredProducts.length} de {totalProductCount} producto(s)
+          {hasActiveFilters ? " (filtros activos)" : ""}
+        </p>
+      )}
+      <div className="admin-card" style={{ padding: 0, overflow: "hidden" }}>
+        <table className="admin-table">
+          <thead style={{ padding: "0 16px" }}>
+            <tr>
+              <th style={{ padding: 16 }}>Producto</th>
+              <th>Marca</th>
+              <th>Categoría</th>
+              <th title="Orden en la sección Productos Destacados del home (sin etiqueta pública)">Prioridad home</th>
+              <th>Precio</th>
+              <th>Stock</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {listLoading && filteredProducts.length === 0 ? (
+              <tr>
+                <td colSpan={8} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                  Cargando…
+                </td>
+              </tr>
+            ) : filteredProducts.length === 0 ? (
+              <tr>
+                <td colSpan={8} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                  {totalProductCount === 0
+                    ? "Sin productos"
+                    : "Ningún producto coincide con la búsqueda o los filtros seleccionados."}
+                </td>
+              </tr>
+            ) : (
+              filteredProducts.map((p) => {
+                const stockStatus = p.stock === 0 ? "status-out" : p.stock < 5 ? "status-low" : "status-active";
+                const stockLabel = p.stock === 0 ? "Sin stock" : p.stock < 5 ? "Stock bajo" : "Disponible";
+                return (
+                  <tr key={p.id}>
+                    <td>
+                      <div className="table-product-cell" style={{ cursor: "pointer" }} onClick={() => onView(p)} title="Ver detalle">
+                        <AdminProductThumb imageUrl={p.imageUrl} emoji={p.emoji} />
+                        <div>
+                          <div className="table-product-name">{p.name}</div>
+                          <div className="table-product-cat">{p.subcategory}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>{p.brand || "—"}</td>
+                    <td>{categoryDisplayName(p.category, categoryTree)}</td>
+                    <td style={{ textAlign: "center" }}>
+                      <input
+                        type="checkbox"
+                        checked={p.featuredInHome === true}
+                        disabled={featuredHomeSavingId === p.id}
+                        title="Marcar para mostrar primero en Productos Destacados del home (solo orden, sin insignia en la tienda)"
+                        aria-label={`Prioridad en home: ${p.name}`}
+                        onChange={(e) => {
+                          void onToggleFeaturedInHome(p.id, e.target.checked);
+                        }}
+                      />
+                    </td>
+                    <td>{formatPrice(p.price)}</td>
+                    <td>{p.stock}</td>
+                    <td>
+                      <span className={`status-chip ${stockStatus}`}>{stockLabel}</span>
+                    </td>
+                    <td>
+                      <div className="action-group">
+                        <button type="button" className="btn-table" onClick={() => onView(p)}>👁 Ver</button>
+                        <button type="button" className="btn-table" onClick={() => onEdit(p)}>✏️ Editar</button>
+                        <button type="button" className="btn-table danger" onClick={() => onDelete(p.id)}>🗑️</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function AdminAddProductForm({
+  categories,
+  categoriesLoading,
+  onSubmit,
+  saving,
+  showToast,
+}: {
+  categories: AdminCategoryTree[];
+  categoriesLoading: boolean;
+  onSubmit: (body: Record<string, unknown>) => Promise<void>;
+  saving: boolean;
+  showToast: (msg: string, type?: string, icon?: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [brand, setBrand] = useState("GinnaBeauty");
+  const [category, setCategory] = useState("");
+  const [subcategory, setSubcategory] = useState("");
+  const [price, setPrice] = useState("");
+  const [originalPrice, setOriginalPrice] = useState("");
+  const [stock, setStock] = useState("10");
+  const [emoji, setEmoji] = useState("");
+  const [description, setDescription] = useState("");
+  const [badge, setBadge] = useState<string>("");
+  const [mainImageUrl, setMainImageUrl] = useState<string | null>(null);
+  const [galleryUrls, setGalleryUrls] = useState<string[]>([]);
+  const [uploadingMain, setUploadingMain] = useState(false);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+
+  const subOptions = useMemo(() => {
+    if (!category) return [];
+    const c = categories.find((x) => x.slug === category);
+    return c ? [...c.subcategories].sort((a, b) => a.sortOrder - b.sortOrder) : [];
+  }, [category, categories]);
+
+  return (
+    <div className="admin-card">
+      <div className="admin-card-title">Nuevo Producto</div>
+      {categoriesLoading && categories.length === 0 && (
+        <p style={{ color: "var(--text-muted)", marginBottom: 12, fontSize: 13 }}>Cargando categorías desde la base de datos…</p>
+      )}
+      {!categoriesLoading && categories.length === 0 && (
+        <p style={{ color: "var(--dusty-rose)", marginBottom: 12, fontSize: 13 }}>
+          No hay categorías en la base de datos. Crea al menos una categoría y subcategorías en <strong>Configuración → Categorías</strong>.
+        </p>
+      )}
+      <div className="form-grid">
+        <div className="form-group">
+          <label className="form-label">Nombre del producto *</label>
+          <input type="text" className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Labial Velvet Rose" />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Marca</label>
+          <input type="text" className="form-input" value={brand} onChange={(e) => setBrand(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Categoría *</label>
+          <select className="form-select" value={category} onChange={(e) => { setCategory(e.target.value); setSubcategory(""); }}>
+            <option value="">Seleccionar...</option>
+            {[...categories].sort((a, b) => a.sortOrder - b.sortOrder).map((c) => (
+              <option key={c.id} value={c.slug}>
+                {c.icon ? `${c.icon} ` : ""}{c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Subcategoría *</label>
+          <select className="form-select" value={subcategory} onChange={(e) => setSubcategory(e.target.value)}>
+            <option value="">{category ? "Seleccionar..." : "Seleccionar categoría primero"}</option>
+            {subOptions.map((s) => (
+              <option key={s.id} value={s.name}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Precio *</label>
+          <input type="number" className="form-input" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Precio original (tachado)</label>
+          <input type="number" className="form-input" value={originalPrice} onChange={(e) => setOriginalPrice(e.target.value)} placeholder="Opcional" />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Stock inicial *</label>
+          <input type="number" className="form-input" value={stock} onChange={(e) => setStock(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Emoji representativo</label>
+          <input type="text" className="form-input" value={emoji} onChange={(e) => setEmoji(e.target.value)} placeholder="💄" maxLength={4} />
+        </div>
+        <div className="form-group full-width">
+          <label className="form-label">Imagen principal (Bunny CDN)</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+            <label className="btn btn-outline btn-sm" style={{ cursor: uploadingMain ? "wait" : "pointer" }}>
+              {uploadingMain ? "Subiendo…" : "📤 Elegir imagen"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                style={{ display: "none" }}
+                disabled={uploadingMain || saving}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!f) return;
+                  setUploadingMain(true);
+                  void (async () => {
+                    try {
+                      const url = await uploadAdminProductImage(f);
+                      setMainImageUrl(url);
+                      showToast("Imagen principal lista", "success", "🖼️");
+                    } catch (err) {
+                      showToast(err instanceof Error ? err.message : "Error al subir", "danger", "⚠️");
+                    } finally {
+                      setUploadingMain(false);
+                    }
+                  })();
+                }}
+              />
+            </label>
+            {mainImageUrl && (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={mainImageUrl} alt="" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, border: "1px solid var(--line)" }} />
+                <button type="button" className="btn btn-sm" style={{ color: "var(--text-muted)" }} onClick={() => setMainImageUrl(null)}>
+                  Quitar
+                </button>
+              </>
+            )}
+          </div>
+          <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>JPEG, PNG, WebP o GIF. Máx. 8 MB. Requiere variables Bunny en el servidor.</p>
+        </div>
+        <div className="form-group full-width">
+          <label className="form-label">Más imágenes (galería)</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+            <label className="btn btn-outline btn-sm" style={{ cursor: uploadingGallery ? "wait" : "pointer" }}>
+              {uploadingGallery ? "Subiendo…" : "➕ Añadir foto"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                style={{ display: "none" }}
+                disabled={uploadingGallery || saving || galleryUrls.length >= 24}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!f) return;
+                  setUploadingGallery(true);
+                  void (async () => {
+                    try {
+                      const url = await uploadAdminProductImage(f);
+                      setGalleryUrls((g) => [...g, url]);
+                      showToast("Imagen añadida a la galería", "success", "🖼️");
+                    } catch (err) {
+                      showToast(err instanceof Error ? err.message : "Error al subir", "danger", "⚠️");
+                    } finally {
+                      setUploadingGallery(false);
+                    }
+                  })();
+                }}
+              />
+            </label>
+            {galleryUrls.map((u) => (
+              <span key={u} style={{ position: "relative", display: "inline-block" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={u} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }} />
+                <button
+                  type="button"
+                  aria-label="Quitar"
+                  onClick={() => setGalleryUrls((g) => g.filter((x) => x !== u))}
+                  style={{
+                    position: "absolute",
+                    top: -6,
+                    right: -6,
+                    width: 22,
+                    height: 22,
+                    borderRadius: "50%",
+                    border: "none",
+                    background: "var(--dusty-rose)",
+                    color: "#fff",
+                    fontSize: 12,
+                    cursor: "pointer",
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="form-group full-width">
+          <label className="form-label">Descripción *</label>
+          <textarea className="form-textarea" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="Descripción del producto..." />
+        </div>
+        <div className="form-group full-width">
+          <label className="form-label">Badge</label>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {[
+              ["new", "Nuevo"],
+              ["hot", "🔥 Hot"],
+              ["sale", "Oferta"],
+              ["best", "⭐ Top"],
+              ["", "Sin badge"],
+            ].map(([v, l]) => (
+              <label key={v || "none"} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13 }}>
+                <input type="radio" name="new-badge" value={v} checked={badge === v} onChange={() => setBadge(v)} />
+                {l}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={saving}
+          onClick={() => {
+            void (async () => {
+              const pr = Number(price);
+              if (!name.trim() || !pr || !category || !subcategory.trim()) return;
+              if (!description.trim()) return;
+              await onSubmit({
+                name: name.trim(),
+                brand: brand || "GinnaBeauty",
+                category,
+                subcategory: subcategory.trim(),
+                price: pr,
+                originalPrice: originalPrice ? Number(originalPrice) : null,
+                stock: Number(stock) || 0,
+                rating: 5,
+                reviews: 0,
+                badge: badge || null,
+                description: description.trim(),
+                emoji: emoji || "💄",
+                imageUrl: mainImageUrl,
+                extraImageUrls: galleryUrls.length ? galleryUrls : undefined,
+                active: true,
+                isNew: false,
+              });
+            })();
+          }}
+        >
+          {saving ? "Guardando…" : "✅ Guardar producto"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AdminBulkTab({
+  categories,
+  categoriesLoading,
+  saving,
+  showToast,
+  setMutation,
+  onImported,
+  onCategoriesUpdated,
+}: {
+  categories: AdminCategoryTree[];
+  categoriesLoading: boolean;
+  saving: boolean;
+  showToast: (msg: string, type?: string, icon?: string) => void;
+  setMutation: React.Dispatch<React.SetStateAction<"add" | "bulk" | "edit" | null>>;
+  onImported: () => Promise<void>;
+  onCategoriesUpdated: () => Promise<void>;
+}) {
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [zipFile, setZipFile] = useState<File | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<BulkPreviewResult | null>(null);
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(() => new Set());
+  const [existingPolicy, setExistingPolicy] = useState<"skip" | "replace">("skip");
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [showNewCategoriesModal, setShowNewCategoriesModal] = useState(false);
+  const [applyingNewCategories, setApplyingNewCategories] = useState(false);
+
+  const sortedCats = useMemo(
+    () => [...categories].sort((a, b) => a.sortOrder - b.sortOrder),
+    [categories]
+  );
+
+  useEffect(() => {
+    if (!preview) {
+      setSelectedRowIds(new Set());
+      return;
+    }
+    const matched = preview.matchedRows ?? [];
+    setSelectedRowIds((prev) => {
+      const keep = new Set<string>();
+      const available = new Set(matched.map((r) => r.previewRowId ?? r.rowId));
+      prev.forEach((id) => {
+        if (available.has(id)) keep.add(id);
+      });
+      if (keep.size > 0) return keep;
+      const defaults = matched
+        .filter((r) => r.selected)
+        .map((r) => r.previewRowId ?? r.rowId);
+      return new Set(defaults);
+    });
+  }, [preview]);
+
+  const resetSession = () => {
+    setJobId(null);
+    setPreview(null);
+    setExpiresAt(null);
+    setCsvFile(null);
+    setZipFile(null);
+    setSelectedRowIds(new Set());
+    setExistingPolicy("skip");
+    setShowNewCategoriesModal(false);
+    setApplyingNewCategories(false);
+  };
+
+  const pendingNewCategories = useMemo((): BulkPreviewNewTaxonomyItem[] => {
+    const raw = preview?.newCategories ?? [];
+    return raw
+      .map((it): BulkPreviewNewTaxonomyItem | null => {
+        if (it && typeof it === "object" && "kind" in it) {
+          if (it.kind === "newCategory" || it.kind === "newSubcategoriesOnly") return it as BulkPreviewNewTaxonomyItem;
+        }
+        const legacy = it as { categoryName?: string; subcategories?: string[]; rowCount?: number };
+        if (legacy?.categoryName) {
+          return {
+            kind: "newCategory",
+            categoryName: legacy.categoryName,
+            subcategories: Array.isArray(legacy.subcategories) ? legacy.subcategories : [],
+            rowCount: typeof legacy.rowCount === "number" ? legacy.rowCount : 0,
+          };
+        }
+        return null;
+      })
+      .filter((x): x is BulkPreviewNewTaxonomyItem => x != null);
+  }, [preview]);
+
+  useEffect(() => {
+    if (!preview) {
+      setShowNewCategoriesModal(false);
+      return;
+    }
+    setShowNewCategoriesModal((preview.newCategories?.length ?? 0) > 0);
+  }, [preview]);
+
+  const toggleRow = (previewRowId: string) => {
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(previewRowId)) next.delete(previewRowId);
+      else next.add(previewRowId);
+      return next;
+    });
+  };
+
+  const selectAllValid = () => {
+    if (!preview) return;
+    const next = new Set<string>();
+    for (const r of preview.matchedRows) {
+      const blocking = r.issues.filter((x) => {
+        if (x === "Sin imagen en ZIP para este código") return false;
+        if (x === "Producto ya registrado" && existingPolicy === "replace") return false;
+        return true;
+      });
+      if (blocking.length === 0 && r.normalizedCode) next.add(r.previewRowId ?? r.rowId);
+    }
+    setSelectedRowIds(next);
+  };
+
+  const clearSelection = () => setSelectedRowIds(new Set());
+
+  const previewTableRows = useMemo(
+    () =>
+      (preview?.matchedRows ?? []).map((r) => {
+        const previewRowId = r.previewRowId ?? r.rowId;
+        const blockingErrors = r.issues.filter((x) => {
+          if (x === "Sin imagen en ZIP para este código") return false;
+          if (x === "Producto ya registrado" && existingPolicy === "replace") return false;
+          return true;
+        });
+        const hasExisting = r.issues.includes("Producto ya registrado");
+        return {
+          previewRowId,
+          csvRowIndex: r.rowIndex,
+          codeValue: r.codeRaw,
+          categoryCsv: r.mapped.category,
+          subcategoryCsv: r.mapped.subcategory,
+          categorySlug: r.mapped.categorySlug,
+          subcategoryValue: r.mapped.subcategoryName,
+          priceValue: r.mapped.price,
+          stockValue: r.mapped.stock,
+          nameValue: r.mapped.name,
+          matchedImages: r.imageMatches,
+          matchStatus: "valid" as const,
+          selected: selectedRowIds.has(previewRowId),
+          errors: blockingErrors,
+          warnings: r.issues.filter((x) => x === "Sin imagen en ZIP para este código"),
+          hasExisting,
+          existingProductName: r.existingProductName,
+        };
+      }),
+    [preview, selectedRowIds, existingPolicy]
+  );
+
+  return (
+    <div className="admin-card">
+      <div className="admin-card-title" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span>📦 Carga masiva CSV + ZIP</span>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+            color: "var(--dusty-rose)",
+            border: "1px solid var(--dusty-rose)",
+            borderRadius: 999,
+            padding: "4px 10px",
+          }}
+        >
+          Fase 2 — Preview en servidor
+        </span>
+      </div>
+
+      <div
+        style={{
+          background: "linear-gradient(135deg, var(--lavender-light) 0%, #fff5f8 100%)",
+          border: "1px solid var(--dusty-rose)",
+          borderRadius: "var(--radius-md)",
+          padding: "16px 18px",
+          marginBottom: 22,
+          fontSize: 13,
+          color: "var(--text)",
+          lineHeight: 1.5,
+        }}
+      >
+        <strong>Flujo:</strong> sube un <strong>CSV</strong> (encabezados en la primera fila) y un <strong>ZIP</strong> con fotos cuyo{" "}
+        <strong>nombre de archivo</strong> (sin extensión) coincide con la <strong>columna de código</strong> del CSV. Pulsa{" "}
+        <strong>Analizar</strong> para ver el resumen y la tabla; luego <strong>Importar seleccionados</strong> crea productos y sube
+        imágenes a Bunny. Máx. 500 filas y 2&nbsp;MB CSV / 50&nbsp;MB ZIP.
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+          gap: 16,
+          marginBottom: 20,
+        }}
+      >
+        <div
+          className="form-group"
+          style={{
+            margin: 0,
+            padding: 14,
+            background: "#fff",
+            borderRadius: "var(--radius-md)",
+            border: "2px dashed var(--dusty-rose)",
+          }}
+        >
+          <label className="form-label">1. Archivo CSV</label>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="form-input"
+            disabled={saving}
+            onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
+          />
+          {csvFile && (
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>✓ {csvFile.name}</div>
+          )}
+        </div>
+        <div
+          className="form-group"
+          style={{
+            margin: 0,
+            padding: 14,
+            background: "#fff",
+            borderRadius: "var(--radius-md)",
+            border: "2px dashed var(--dusty-rose)",
+          }}
+        >
+          <label className="form-label">2. Archivo ZIP (imágenes)</label>
+          <input
+            type="file"
+            accept=".zip,application/zip"
+            className="form-input"
+            disabled={saving}
+            onChange={(e) => setZipFile(e.target.files?.[0] ?? null)}
+          />
+          {zipFile && (
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>✓ {zipFile.name}</div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
+        <button
+          type="button"
+          className="btn btn-rose"
+          disabled={saving || !csvFile || !zipFile || sortedCats.length === 0}
+          onClick={() => {
+            void (async () => {
+              if (!csvFile || !zipFile) return;
+              setMutation("bulk");
+              try {
+                const fd = new FormData();
+                fd.append("csv", csvFile);
+                fd.append("zip", zipFile);
+                const res = await postBulkImportPreview(fd);
+                setJobId(res.jobId);
+                setPreview(res.preview);
+                setExpiresAt(res.expiresAt);
+                if ((res.preview.newCategories?.length ?? 0) > 0) {
+                  showToast("Se detectaron categorías o subcategorías nuevas. Revísalas antes de importar.", "default", "🆕");
+                } else {
+                  showToast("Vista previa lista. Revisa columnas y filas.", "success", "🔍");
+                }
+              } catch (e) {
+                showToast(e instanceof Error ? e.message : "Error al analizar", "danger", "⚠️");
+              } finally {
+                setMutation(null);
+              }
+            })();
+          }}
+        >
+          {saving ? "Analizando…" : "🔍 Analizar CSV y ZIP"}
+        </button>
+        {jobId && (
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            disabled={saving}
+            onClick={() => {
+              void (async () => {
+                try {
+                  await deleteBulkImportJob(jobId);
+                } catch {
+                  /* ignore */
+                }
+                resetSession();
+                showToast("Sesión de importación cerrada", "default", "🗑️");
+              })();
+            }}
+          >
+            Cerrar sesión
+          </button>
+        )}
+      </div>
+
+      {preview && jobId && (
+        <>
+          {expiresAt && (
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: -8, marginBottom: 16 }}>
+              Esta sesión expira el {new Date(expiresAt).toLocaleString("es-CO")}.
+            </p>
+          )}
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
+            {(
+              [
+                ["Filas CSV", preview.stats.totalRows],
+                ["Imágenes en ZIP", preview.stats.zipImageFiles],
+                ["Filas con match", preview.stats.matchedRows],
+                ["Filas sin match", preview.stats.unmatchedRows],
+                ["Filas ambiguas", preview.stats.ambiguousRows],
+                ["Imágenes sin fila", preview.stats.unmatchedImages],
+                ["Con errores", preview.stats.rowsWithErrors],
+              ] as const
+            ).map(([label, n]) => (
+              <div
+                key={label}
+                style={{
+                  minWidth: 120,
+                  padding: "12px 16px",
+                  borderRadius: "var(--radius-md)",
+                  background: "var(--lavender-light)",
+                  border: "1px solid rgba(199, 165, 178, 0.45)",
+                }}
+              >
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>{label}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "var(--dark)" }}>{n}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="form-grid" style={{ marginBottom: 16, alignItems: "end" }}>
+            <div className="form-group">
+              <label className="form-label">Columna de código (match con nombre de archivo)</label>
+              <select
+                className="form-select"
+                value={preview.codeColumnIndex}
+                disabled={saving}
+                onChange={(e) => {
+                  const idx = Number(e.target.value);
+                  void (async () => {
+                    setMutation("bulk");
+                    try {
+                      const { preview: p } = await patchBulkImportJob(jobId, {
+                        codeColumnIndex: idx,
+                        selectedRowIds: Array.from(selectedRowIds),
+                      });
+                      setPreview(p);
+                      showToast("Columna de código actualizada", "default", "✓");
+                    } catch (err) {
+                      showToast(err instanceof Error ? err.message : "Error al actualizar", "danger", "⚠️");
+                    } finally {
+                      setMutation(null);
+                    }
+                  })();
+                }}
+              >
+                {preview.headers.map((h, i) => (
+                  <option key={`${h}-${i}`} value={i}>
+                    {h || `(vacío ${i})`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Reanalizar preview</label>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={saving}
+                onClick={() => {
+                  void (async () => {
+                    setMutation("bulk");
+                    try {
+                      const { preview: p } = await patchBulkImportJob(jobId, {
+                        selectedRowIds: Array.from(selectedRowIds),
+                      });
+                      setPreview(p);
+                      showToast("Vista previa recalculada", "success", "✓");
+                    } catch (err) {
+                      showToast(err instanceof Error ? err.message : "Error", "danger", "⚠️");
+                    } finally {
+                      setMutation(null);
+                    }
+                  })();
+                }}
+              >
+                Reanalizar
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+            <button type="button" className="btn btn-outline btn-sm" onClick={selectAllValid}>
+              Seleccionar filas importables
+            </button>
+            <button type="button" className="btn btn-outline btn-sm" onClick={clearSelection}>
+              Quitar selección
+            </button>
+            <span style={{ fontSize: 13, color: "var(--text-muted)", alignSelf: "center" }}>
+              {selectedRowIds.size} fila(s) seleccionada(s) / {previewTableRows.length} con match
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Producto ya registrado:</span>
+              <select
+                className="form-select"
+                style={{ minWidth: 220, height: 34 }}
+                value={existingPolicy}
+                onChange={(e) => setExistingPolicy(e.target.value as "skip" | "replace")}
+              >
+                <option value="skip">No subir producto ya registrado</option>
+                <option value="replace">Reemplazar producto registrado</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ overflowX: "auto", marginBottom: 16, border: "1px solid var(--dusty-rose)", borderRadius: "var(--radius-md)" }}>
+            <table className="admin-table" style={{ minWidth: 720, margin: 0 }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 40 }}>#</th>
+                  <th>Código</th>
+                  <th>Nombre</th>
+                  <th>Categoría CSV</th>
+                  <th>Subcategoría CSV</th>
+                  <th>Categoría</th>
+                  <th>Subcategoría</th>
+                  <th>Precio</th>
+                  <th>Stock</th>
+                  <th>Imágenes</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {previewTableRows.map((r) => {
+                  const warnOnly = r.warnings.length > 0;
+                  const ok = r.errors.length === 0;
+                  return (
+                    <tr
+                      key={r.previewRowId}
+                      style={{
+                        opacity: ok ? 1 : 0.75,
+                        background: r.hasExisting ? "rgba(255, 84, 84, 0.10)" : undefined,
+                      }}
+                    >
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={r.selected}
+                          onChange={() => toggleRow(r.previewRowId)}
+                          aria-label={`Seleccionar fila ${r.csvRowIndex + 1}`}
+                        />
+                      </td>
+                      <td style={{ fontSize: 12, fontFamily: "monospace" }}>{r.codeValue ?? "—"}</td>
+                      <td>{r.nameValue ?? "—"}</td>
+                      <td style={{ fontSize: 12 }}>{r.categoryCsv ?? "—"}</td>
+                      <td style={{ fontSize: 12 }}>{r.subcategoryCsv ?? "—"}</td>
+                      <td>{r.categorySlug ? categoryDisplayName(r.categorySlug, categories) : "—"}</td>
+                      <td>{r.subcategoryValue ?? "—"}</td>
+                      <td>{r.priceValue != null ? formatPrice(r.priceValue) : "—"}</td>
+                      <td>{r.stockValue ?? "—"}</td>
+                      <td style={{ fontSize: 12 }}>
+                        {r.matchedImages.length
+                          ? r.matchedImages
+                              .map((m) => {
+                                const how =
+                                  m.matchedBy === "numericPrefix"
+                                    ? "prefijo"
+                                    : m.matchedBy === "sixDigitPrefix"
+                                      ? "6 dígitos"
+                                      : "exacto";
+                                return `${m.imageFilename} (${how})`;
+                              })
+                              .join(", ")
+                          : "—"}
+                      </td>
+                      <td style={{ fontSize: 12 }}>
+                        {ok ? (
+                          <span style={{ color: r.hasExisting ? "#b00020" : "green" }}>
+                            {r.hasExisting
+                              ? existingPolicy === "replace"
+                                ? "↺ Reemplazar"
+                                : "⛔ Ya registrado"
+                              : warnOnly
+                                ? "⚠ Sin foto"
+                                : "✓ OK"}
+                          </span>
+                        ) : (
+                          <span style={{ color: "var(--danger, #b00020)" }} title={r.errors.join(" · ")}>
+                            ✗ {r.errors[0] ?? "Error"}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {previewTableRows.length === 0 && (
+                  <tr>
+                    <td colSpan={11} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>
+                      No hay filas con match válido para importar.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ overflowX: "auto", marginBottom: 16, border: "1px solid var(--line, #e7d9d4)", borderRadius: "var(--radius-md)" }}>
+            <table className="admin-table" style={{ minWidth: 900, margin: 0 }}>
+              <thead>
+                <tr>
+                  <th>Imagen</th>
+                  <th>rawImageCode</th>
+                  <th>numericPrefixCode</th>
+                  <th>matchedCsvCode</th>
+                  <th>matchedBy</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.imageMatches.map((m, idx) => (
+                  <tr key={`${m.imageFilename}-${idx}`}>
+                    <td style={{ fontSize: 12 }}>{m.imageFilename}</td>
+                    <td style={{ fontFamily: "monospace", fontSize: 12 }}>{m.rawImageCode}</td>
+                    <td style={{ fontFamily: "monospace", fontSize: 12 }}>{m.numericPrefixCode ?? "—"}</td>
+                    <td style={{ fontFamily: "monospace", fontSize: 12 }}>{m.matchedCsvCode ?? "—"}</td>
+                    <td style={{ fontSize: 12 }}>
+                      {m.matchedBy === "exact"
+                        ? "exact"
+                        : m.matchedBy === "numericPrefix"
+                          ? "numericPrefix"
+                          : m.matchedBy === "sixDigitPrefix"
+                            ? "sixDigitPrefix"
+                            : m.matchedBy === "ambiguous"
+                              ? "ambiguous"
+                              : "none"}
+                    </td>
+                  </tr>
+                ))}
+                {preview.imageMatches.length === 0 && (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>
+                      No se detectaron imágenes en el ZIP.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={saving || selectedRowIds.size === 0 || pendingNewCategories.length > 0}
+            onClick={() => {
+              void (async () => {
+                setMutation("bulk");
+                try {
+                  const res = await postBulkImportCommit(jobId, Array.from(selectedRowIds).sort(), existingPolicy);
+                  if (res.imported > 0) {
+                    showToast(`Importados ${res.imported} producto(s)`, "success", "🎉");
+                  }
+                  if (res.failed > 0) {
+                    showToast(`${res.failed} error(es). Revisa consola o mensajes.`, "danger", "⚠️");
+                  }
+                  await onImported();
+                  resetSession();
+                } catch (e) {
+                  showToast(e instanceof Error ? e.message : "Error al importar", "danger", "⚠️");
+                } finally {
+                  setMutation(null);
+                }
+              })();
+            }}
+          >
+            {saving ? "Importando…" : `⬆️ Importar ${selectedRowIds.size} producto(s) seleccionado(s)`}
+          </button>
+          {pendingNewCategories.length > 0 && (
+            <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
+              Debes resolver primero las categorías o subcategorías nuevas detectadas en el CSV.
+            </p>
+          )}
+        </>
+      )}
+      <AdminBulkNewCategoriesModal
+        open={showNewCategoriesModal && pendingNewCategories.length > 0}
+        items={pendingNewCategories}
+        saving={applyingNewCategories || saving}
+        onClose={() => setShowNewCategoriesModal(false)}
+        onSkip={() => {
+          setShowNewCategoriesModal(false);
+          showToast(
+            "Puedes continuar sin crearlas, pero esas filas no serán importables hasta que existan en el sistema.",
+            "default",
+            "ℹ️"
+          );
+        }}
+        onConfirm={() => {
+          void (async () => {
+            setApplyingNewCategories(true);
+            try {
+              const norm = (v: string) =>
+                v
+                  .trim()
+                  .toLowerCase()
+                  .normalize("NFD")
+                  .replace(/[\u0300-\u036f]/g, "")
+                  .replace(/[_-]/g, " ")
+                  .replace(/\s+/g, " ")
+                  .trim();
+              for (const item of pendingNewCategories) {
+                let tree = await fetchAdminCategories();
+                if (item.kind === "newCategory") {
+                  let parent =
+                    tree.find(
+                      (c) => norm(c.name) === norm(item.categoryName) || norm(c.slug) === norm(item.categoryName)
+                    ) ?? null;
+                  if (!parent) {
+                    const created = await createAdminCategory({ name: item.categoryName });
+                    tree = await fetchAdminCategories();
+                    parent =
+                      tree.find((c) => c.id === created.id) ??
+                      tree.find(
+                        (c) => norm(c.name) === norm(item.categoryName) || norm(c.slug) === norm(item.categoryName)
+                      ) ??
+                      null;
+                    if (!parent) throw new Error(`No se pudo localizar la categoría recién creada "${item.categoryName}".`);
+                  }
+                  for (const subName of item.subcategories) {
+                    tree = await fetchAdminCategories();
+                    const p = tree.find((c) => c.id === parent!.id);
+                    if (!p) throw new Error(`Categoría padre perdida al crear subcategoría "${subName}".`);
+                    const existsSub = p.subcategories.some(
+                      (s) => norm(s.name) === norm(subName) || norm(s.slug) === norm(subName)
+                    );
+                    if (!existsSub) await createAdminSubcategory(p.id, { name: subName });
+                  }
+                } else {
+                  const parent =
+                    tree.find((c) => c.slug === item.parentCategorySlug) ??
+                    tree.find(
+                      (c) =>
+                        norm(c.slug) === norm(item.parentCategorySlug) ||
+                        norm(c.name) === norm(item.parentCategoryName)
+                    );
+                  if (!parent) {
+                    throw new Error(`No se encontró la categoría "${item.parentCategoryName}" para crear subcategorías.`);
+                  }
+                  for (const subName of item.subcategories) {
+                    const treeFresh = await fetchAdminCategories();
+                    const p = treeFresh.find((c) => c.id === parent.id);
+                    if (!p) throw new Error(`Categoría padre perdida al crear subcategoría "${subName}".`);
+                    const existsSub = p.subcategories.some(
+                      (s) => norm(s.name) === norm(subName) || norm(s.slug) === norm(subName)
+                    );
+                    if (!existsSub) await createAdminSubcategory(p.id, { name: subName });
+                  }
+                }
+              }
+              await onCategoriesUpdated();
+              if (jobId) {
+                const { preview: refreshed } = await patchBulkImportJob(jobId, {
+                  selectedRowIds: Array.from(selectedRowIds),
+                });
+                setPreview(refreshed);
+              }
+              setShowNewCategoriesModal(false);
+              showToast("Taxonomía actualizada y preview recalculada.", "success", "✅");
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : "Error creando categorías nuevas", "danger", "⚠️");
+            } finally {
+              setApplyingNewCategories(false);
+            }
+          })();
+        }}
+      />
+    </div>
+  );
+}
+
+function AdminBulkNewCategoriesModal({
+  open,
+  items,
+  saving,
+  onClose,
+  onSkip,
+  onConfirm,
+}: {
+  open: boolean;
+  items: BulkPreviewNewTaxonomyItem[];
+  saving: boolean;
+  onClose: () => void;
+  onSkip: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className={`admin-modal-overlay${open ? " open" : ""}`}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      role="presentation"
+    >
+      <div className="admin-modal" style={{ maxWidth: 760 }}>
+        <button type="button" className="modal-close" onClick={onClose}>
+          ✕
+        </button>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>
+          Novedades en categorías / subcategorías
+        </div>
+        <p style={{ marginTop: 0, marginBottom: 14, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
+          El CSV incluye categorías que aún no existen, o subcategorías nuevas dentro de una categoría que sí está registrada.
+          ¿Deseas crearlas en el sistema para poder importar esas filas?
+        </p>
+        <div
+          style={{
+            border: "1px solid var(--line, #e7d9d4)",
+            borderRadius: "var(--radius-md)",
+            maxHeight: 320,
+            overflow: "auto",
+            marginBottom: 16,
+          }}
+        >
+          <table className="admin-table" style={{ minWidth: 580, margin: 0 }}>
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Detalle</th>
+                <th>Subcategorías a crear</th>
+                <th>Filas CSV</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it) => (
+                <tr
+                  key={
+                    it.kind === "newCategory"
+                      ? `new-cat-${it.categoryName}`
+                      : `new-sub-${it.parentCategorySlug}`
+                  }
+                >
+                  <td style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                    {it.kind === "newCategory" ? "Categoría nueva" : "Solo subcategorías"}
+                  </td>
+                  <td style={{ fontWeight: 700 }}>
+                    {it.kind === "newCategory" ? (
+                      it.categoryName
+                    ) : (
+                      <>
+                        En <span style={{ color: "var(--dusty-rose)" }}>{it.parentCategoryName}</span>
+                        <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-muted)", display: "block" }}>
+                          ({it.parentCategorySlug})
+                        </span>
+                      </>
+                    )}
+                  </td>
+                  <td style={{ fontSize: 12 }}>{it.subcategories.length ? it.subcategories.join(", ") : "—"}</td>
+                  <td>{it.rowCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <button type="button" className="btn btn-outline" disabled={saving} onClick={onSkip}>
+            Continuar sin crear
+          </button>
+          <button type="button" className="btn btn-primary" disabled={saving} onClick={onConfirm}>
+            {saving ? "Creando…" : "✅ Crear en el sistema"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminSalesTab({ sales, products }: { sales: AdminSale[]; products: AdminProduct[] }) {
+  const total = sales.reduce((s, v) => s + Number(v.total), 0);
+  return (
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+        <div style={{ display: "flex", gap: 16 }}>
+          <div className="admin-card" style={{ padding: "16px 24px", minWidth: 160, textAlign: "center" }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Total ventas</div>
+            <div className="stat-num" style={{ fontSize: 28 }}>{formatPrice(total)}</div>
+          </div>
+          <div className="admin-card" style={{ padding: "16px 24px", minWidth: 130, textAlign: "center" }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}># Pedidos</div>
+            <div className="stat-num" style={{ fontSize: 28 }}>{sales.length}</div>
+          </div>
+        </div>
+      </div>
+      <div className="admin-card" style={{ padding: 0, overflow: "hidden" }}>
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th style={{ padding: 16 }}>Producto</th>
+              <th>Cliente</th>
+              <th>Canal</th>
+              <th>Cantidad</th>
+              <th>Total</th>
+              <th>Estado</th>
+              <th>Fecha</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sales.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                  Sin ventas registradas. ¡Registra tu primera venta!
+                </td>
+              </tr>
+            ) : (
+              [...sales].reverse().map((s) => {
+                const p = products.find((x) => x.id === s.productId);
+                return (
+                  <tr key={s.id}>
+                    <td>
+                      <div className="table-product-cell">
+                        <AdminProductThumb imageUrl={p?.imageUrl ?? null} emoji={p?.emoji ?? "📦"} />
+                        <div className="table-product-name">{s.productName}</div>
+                      </div>
+                    </td>
+                    <td>{s.client}</td>
+                    <td>{s.channel}</td>
+                    <td>{s.qty}</td>
+                    <td style={{ fontWeight: 600, color: "var(--dark)" }}>{formatPrice(s.total)}</td>
+                    <td>
+                      <span className={`status-chip ${s.status === "Completada" ? "status-active" : "status-low"}`}>{s.status}</span>
+                    </td>
+                    <td>{s.date}</td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function AdminStockTab({
+  products,
+  categoryTree,
+  onPersistStock,
+  stockSavingId,
+}: {
+  products: AdminProduct[];
+  categoryTree: AdminCategoryTree[];
+  onPersistStock: (id: string, stock: number) => Promise<void>;
+  stockSavingId: string | null;
+}) {
+  let ok = 0, low = 0, out = 0;
+  products.forEach((p) => {
+    if (p.stock === 0) out++;
+    else if (p.stock < 5) low++;
+    else ok++;
+  });
+  return (
+    <>
+      <div style={{ marginBottom: 24, display: "flex", gap: 16 }}>
+        <div className="admin-card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 24 }}>✅</span>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--dark)" }}>{ok}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Stock normal</div>
+          </div>
+        </div>
+        <div className="admin-card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 24 }}>⚠️</span>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--gold)" }}>{low}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Stock bajo (&lt;5)</div>
+          </div>
+        </div>
+        <div className="admin-card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 24 }}>❌</span>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--dusty-rose)" }}>{out}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Sin stock</div>
+          </div>
+        </div>
+      </div>
+      <div className="admin-card" style={{ padding: 0, overflow: "hidden" }}>
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th style={{ padding: 16 }}>Producto</th>
+              <th>Categoría</th>
+              <th>Stock actual</th>
+              <th>Estado</th>
+              <th>Actualizar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {products.map((p) => {
+              let cls = "status-active", lbl = "Normal";
+              if (p.stock === 0) { cls = "status-out"; lbl = "Sin stock"; }
+              else if (p.stock < 5) { cls = "status-low"; lbl = "Stock bajo"; }
+              return (
+                <tr key={p.id}>
+                  <td>
+                    <div className="table-product-cell">
+                      <AdminProductThumb imageUrl={p.imageUrl} emoji={p.emoji} />
+                      <div>
+                        <div className="table-product-name">{p.name}</div>
+                        <div className="table-product-cat">{p.brand}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{categoryDisplayName(p.category, categoryTree)}</td>
+                  <td style={{ fontWeight: 600, color: p.stock === 0 ? "var(--dusty-rose)" : p.stock < 5 ? "var(--gold)" : "var(--sage-dark)", fontSize: 18 }}>{p.stock}</td>
+                  <td><span className={`status-chip ${cls}`}>{lbl}</span></td>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <button
+                        type="button"
+                        className="btn-table"
+                        disabled={stockSavingId === p.id}
+                        onClick={() => void onPersistStock(p.id, Math.max(0, p.stock - 1))}
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        key={`${p.id}-${p.stock}`}
+                        defaultValue={p.stock}
+                        min={0}
+                        style={{ width: 60, textAlign: "center", border: "1px solid var(--cream)", borderRadius: "var(--radius-sm)", padding: 5, fontSize: 13, fontFamily: "var(--font-body)" }}
+                        disabled={stockSavingId === p.id}
+                        onBlur={(e) => {
+                          const v = Math.max(0, Number(e.target.value) || 0);
+                          if (v !== p.stock) void onPersistStock(p.id, v);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="btn-table"
+                        disabled={stockSavingId === p.id}
+                        onClick={() => void onPersistStock(p.id, p.stock + 1)}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function AdminMenuTab({
+  menuConfig,
+  setMenuConfig,
+  showToast,
+}: {
+  menuConfig: MenuConfig;
+  setMenuConfig: React.Dispatch<React.SetStateAction<MenuConfig>>;
+  showToast: (m: string, t?: string, i?: string) => void;
+}) {
+  const [newCat, setNewCat] = useState("");
+  const [newIcon, setNewIcon] = useState("");
+  const [parent, setParent] = useState("");
+  const [grp, setGrp] = useState("");
+  const [subName, setSubName] = useState("");
+
+  return (
+    <>
+      <div className="admin-card" style={{ marginBottom: 20 }}>
+        <div className="admin-card-title">Agregar categoría</div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <input type="text" className="form-input" placeholder="Nombre de la categoría" style={{ maxWidth: 240 }} value={newCat} onChange={(e) => setNewCat(e.target.value)} />
+          <input type="text" className="form-input" placeholder="Emoji 🌿" style={{ maxWidth: 100 }} value={newIcon} onChange={(e) => setNewIcon(e.target.value)} />
+          <button type="button" className="btn btn-rose btn-sm" onClick={() => {
+            const name = newCat.trim();
+            if (!name) return;
+            if (menuConfig[name]) { showToast("Ya existe esta categoría", "danger", "⚠️"); return; }
+            setMenuConfig((m) => ({ ...m, [name]: { icon: newIcon.trim() || "📂", subs: { General: [] } } }));
+            setNewCat("");
+            showToast(`Categoría "${name}" agregada`, "success", "✅");
+          }}>Agregar categoría</button>
+        </div>
+        <div style={{ marginTop: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div>
+            <div className="form-label">Agregar subcategoría a:</div>
+            <select className="form-select" style={{ width: 200 }} value={parent} onChange={(e) => setParent(e.target.value)}>
+              <option value="">Seleccionar categoría</option>
+              {Object.keys(menuConfig).map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <div className="form-label">Grupo de subcategorías</div>
+            <input type="text" className="form-input" placeholder="Ej: Tratamiento" style={{ maxWidth: 180 }} value={grp} onChange={(e) => setGrp(e.target.value)} />
+          </div>
+          <div>
+            <div className="form-label">Subcategoría</div>
+            <input type="text" className="form-input" placeholder="Ej: Hidratación" style={{ maxWidth: 180 }} value={subName} onChange={(e) => setSubName(e.target.value)} />
+          </div>
+          <button type="button" className="btn btn-rose btn-sm" onClick={() => {
+            const group = grp.trim() || "General";
+            const name = subName.trim();
+            if (!parent || !name) { showToast("Completa todos los campos", "danger", "⚠️"); return; }
+            setMenuConfig((m) => {
+              const next = { ...m };
+              const cat = { ...next[parent], subs: { ...next[parent].subs } };
+              if (!cat.subs[group]) cat.subs[group] = [];
+              cat.subs[group] = [...cat.subs[group], name];
+              next[parent] = cat;
+              return next;
+            });
+            setSubName("");
+            showToast("Subcategoría agregada", "success", "✅");
+          }}>Agregar</button>
+        </div>
+      </div>
+      <div className="admin-card">
+        <div className="admin-card-title">Estructura del menú</div>
+        <div className="menu-tree">
+          {Object.entries(menuConfig).map(([cat, data]) => {
+            const allSubs = Object.entries(data.subs).flatMap(([g, items]) => items.map((i) => ({ grp: g, i })));
+            return (
+              <div key={cat} className="menu-cat-row">
+                <div className="menu-cat-header" onClick={(e) => { const el = (e.currentTarget.parentElement?.querySelector(".menu-cat-subs") as HTMLElement); if (el) el.hidden = !el.hidden; }}>
+                  <div className="menu-cat-name">{data.icon} {cat}</div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button type="button" className="btn-table danger" onClick={(e) => {
+                      e.stopPropagation();
+                      if (!confirm(`¿Eliminar categoría "${cat}" y todas sus subcategorías?`)) return;
+                      setMenuConfig((m) => { const n = { ...m }; delete n[cat]; return n; });
+                      showToast("Categoría eliminada", "default", "🗑️");
+                    }}>🗑️ Eliminar categoría</button>
+                    <span style={{ color: "var(--text-muted)", fontSize: 18 }}>›</span>
+                  </div>
+                </div>
+                <div className="menu-cat-subs">
+                  {allSubs.map(({ grp: g, i }) => (
+                    <div key={`${cat}-${g}-${i}`} className="sub-chip">
+                      <span>{i}</span>
+                      <span style={{ fontSize: 10, color: "var(--text-muted)" }}>({g})</span>
+                      <button type="button" title="Eliminar" onClick={() => {
+                        setMenuConfig((m) => {
+                          const next = { ...m };
+                          const c = { ...next[cat], subs: { ...next[cat].subs } };
+                          c.subs[g] = c.subs[g].filter((x) => x !== i);
+                          next[cat] = c;
+                          return next;
+                        });
+                      }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <button type="button" className="btn btn-primary btn-sm" style={{ marginTop: 16 }} onClick={() => showToast("Menú guardado. Próximo paso: persistir vía API/Prisma.", "success", "💾")}>💾 Guardar cambios del menú</button>
+      </div>
+    </>
+  );
+}
+
+function AdminReportsTab({ sales, showToast }: { sales: AdminSale[]; showToast: (m: string, t?: string, i?: string) => void }) {
+  const [showTop, setShowTop] = useState(false);
+  const sorted = useMemo(() => {
+    const counts: Record<string, number> = {};
+    sales.forEach((s) => { counts[s.productName] = (counts[s.productName] || 0) + s.qty; });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  }, [sales]);
+  const max = sorted[0]?.[1] ?? 1;
+  return (
+    <>
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
+        <div className="admin-card" style={{ textAlign: "center", padding: 32 }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📊</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>Reporte Mensual</div>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>Análisis completo de ventas e inventario del mes actual.</p>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => showToast("Generando reporte...", "info", "📊")}>Generar PDF</button>
+        </div>
+        <div className="admin-card" style={{ textAlign: "center", padding: 32 }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📉</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>Productos más vendidos</div>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>Top 10 productos con mayor volumen de ventas.</p>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowTop(true)}>Ver reporte</button>
+        </div>
+        <div className="admin-card" style={{ textAlign: "center", padding: 32 }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>💸</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>Ganancias netas</div>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>Cálculo de utilidad por período seleccionado.</p>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => showToast("Próximamente disponible", "info", "💸")}>Ver ganancias</button>
+        </div>
+      </div>
+      {showTop && (
+        <div className="admin-card" style={{ marginTop: 0 }}>
+          <div className="admin-card-title">🏆 Productos más vendidos</div>
+          {sorted.length === 0 ? (
+            <p style={{ color: "var(--text-muted)", fontSize: 14, textAlign: "center", padding: 24 }}>Sin datos de ventas aún</p>
+          ) : (
+            sorted.map(([name, count], idx) => (
+              <div key={name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--cream)" }}>
+                <span style={{ fontSize: 16, width: 24, fontWeight: 700, color: "var(--text-muted)" }}>{idx + 1}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--dark)", marginBottom: 4 }}>{name}</div>
+                  <div style={{ height: 6, background: "var(--cream)", borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${(count / max) * 100}%`, background: "linear-gradient(90deg,var(--rose),var(--blush))", borderRadius: 3 }} />
+                  </div>
+                </div>
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--dusty-rose)" }}>{count} uds</span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function AdminCategoriesTab({
+  tree,
+  loading,
+  error,
+  onReload,
+  showToast,
+}: {
+  tree: AdminCategoryTree[];
+  loading: boolean;
+  error: string | null;
+  onReload: () => void;
+  showToast: (msg: string, type?: string, icon?: string) => void;
+}) {
+  const [newName, setNewName] = useState("");
+  const [newSlug, setNewSlug] = useState("");
+  const [newIcon, setNewIcon] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const [editCatId, setEditCatId] = useState<string | null>(null);
+  const [editCatName, setEditCatName] = useState("");
+  const [editCatSlug, setEditCatSlug] = useState("");
+  const [editCatIcon, setEditCatIcon] = useState("");
+
+  const [subDraft, setSubDraft] = useState<Record<string, string>>({});
+  const [editSubId, setEditSubId] = useState<string | null>(null);
+  const [editSubName, setEditSubName] = useState("");
+
+  const sorted = useMemo(() => [...tree].sort((a, b) => a.sortOrder - b.sortOrder), [tree]);
+
+  function startEditCat(c: AdminCategoryTree) {
+    setEditCatId(c.id);
+    setEditCatName(c.name);
+    setEditCatSlug(c.slug);
+    setEditCatIcon(c.icon ?? "");
+  }
+
+  return (
+    <>
+      {error && (
+        <div className="admin-card" style={{ marginBottom: 16, padding: 14, background: "var(--lavender-light)", border: "1px solid var(--dusty-rose)", fontSize: 13 }}>
+          <strong>Error:</strong> {error}{" "}
+          <button type="button" className="btn btn-outline btn-sm" style={{ marginLeft: 8 }} onClick={onReload}>
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      <div className="admin-card" style={{ marginBottom: 20 }}>
+        <div className="admin-card-title">Nueva categoría</div>
+        <div className="form-grid">
+          <div className="form-group">
+            <label className="form-label">Nombre *</label>
+            <input type="text" className="form-input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Ej: Maquillaje" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Slug (opcional)</label>
+            <input type="text" className="form-input" value={newSlug} onChange={(e) => setNewSlug(e.target.value)} placeholder="Auto desde el nombre" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Emoji</label>
+            <input type="text" className="form-input" value={newIcon} onChange={(e) => setNewIcon(e.target.value)} maxLength={4} placeholder="💄" />
+          </div>
+          <div className="form-group" style={{ display: "flex", alignItems: "flex-end" }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy || !newName.trim()}
+              onClick={() => {
+                void (async () => {
+                  setBusy(true);
+                  try {
+                    await createAdminCategory({
+                      name: newName.trim(),
+                      ...(newSlug.trim() ? { slug: newSlug.trim() } : {}),
+                      ...(newIcon.trim() ? { icon: newIcon.trim() } : {}),
+                    });
+                    showToast("Categoría creada", "success", "✅");
+                    setNewName("");
+                    setNewSlug("");
+                    setNewIcon("");
+                    onReload();
+                  } catch (e) {
+                    showToast(e instanceof Error ? e.message : "Error", "danger", "⚠️");
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              {busy ? "Guardando…" : "➕ Crear categoría"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {loading && tree.length === 0 && (
+        <p style={{ color: "var(--text-muted)" }}>Cargando categorías…</p>
+      )}
+
+      {sorted.map((cat) => (
+        <div key={cat.id} className="admin-card" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <div className="admin-card-title" style={{ marginBottom: 4 }}>
+                {cat.icon ? `${cat.icon} ` : ""}{cat.name}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                Slug: <code>{cat.slug}</code> · Orden: {cat.sortOrder}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => startEditCat(cat)}>
+                ✏️ Editar
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                style={{ color: "var(--dusty-rose)", borderColor: "var(--dusty-rose)" }}
+                onClick={() => {
+                  if (!confirm(`¿Eliminar categoría "${cat.name}" y todas sus subcategorías?`)) return;
+                  void (async () => {
+                    try {
+                      await deleteAdminCategory(cat.id);
+                      showToast("Categoría eliminada", "default", "🗑️");
+                      onReload();
+                    } catch (e) {
+                      showToast(e instanceof Error ? e.message : "No se pudo eliminar", "danger", "⚠️");
+                    }
+                  })();
+                }}
+              >
+                🗑️ Eliminar
+              </button>
+            </div>
+          </div>
+
+          {editCatId === cat.id && (
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--cream)" }}>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label className="form-label">Nombre</label>
+                  <input type="text" className="form-input" value={editCatName} onChange={(e) => setEditCatName(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Slug</label>
+                  <input type="text" className="form-input" value={editCatSlug} onChange={(e) => setEditCatSlug(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Emoji</label>
+                  <input type="text" className="form-input" value={editCatIcon} onChange={(e) => setEditCatIcon(e.target.value)} maxLength={4} />
+                </div>
+                <div className="form-group" style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          await updateAdminCategory(cat.id, {
+                            name: editCatName.trim(),
+                            slug: editCatSlug.trim(),
+                            icon: editCatIcon.trim() || null,
+                          });
+                          showToast("Categoría actualizada", "success", "✅");
+                          setEditCatId(null);
+                          onReload();
+                        } catch (e) {
+                          showToast(e instanceof Error ? e.message : "Error", "danger", "⚠️");
+                        }
+                      })();
+                    }}
+                  >
+                    Guardar
+                  </button>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditCatId(null)}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>Subcategorías</div>
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th style={{ padding: 12 }}>Nombre</th>
+                  <th>Slug</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...cat.subcategories].sort((a, b) => a.sortOrder - b.sortOrder).length === 0 ? (
+                  <tr>
+                    <td colSpan={3} style={{ padding: 16, color: "var(--text-muted)", fontSize: 13 }}>
+                      Sin subcategorías. Añade una abajo.
+                    </td>
+                  </tr>
+                ) : (
+                  [...cat.subcategories].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => (
+                    <tr key={s.id}>
+                      <td style={{ padding: 12 }}>
+                        {editSubId === s.id ? (
+                          <input type="text" className="form-input" value={editSubName} onChange={(e) => setEditSubName(e.target.value)} style={{ maxWidth: 220 }} />
+                        ) : (
+                          s.name
+                        )}
+                      </td>
+                      <td><code style={{ fontSize: 12 }}>{s.slug}</code></td>
+                      <td>
+                        {editSubId === s.id ? (
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button
+                              type="button"
+                              className="btn-table"
+                              onClick={() => {
+                                void (async () => {
+                                  try {
+                                    await updateAdminSubcategory(s.id, { name: editSubName.trim() });
+                                    showToast("Subcategoría actualizada", "success", "✅");
+                                    setEditSubId(null);
+                                    onReload();
+                                  } catch (e) {
+                                    showToast(e instanceof Error ? e.message : "Error", "danger", "⚠️");
+                                  }
+                                })();
+                              }}
+                            >
+                              OK
+                            </button>
+                            <button type="button" className="btn-table" onClick={() => setEditSubId(null)}>✕</button>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button
+                              type="button"
+                              className="btn-table"
+                              onClick={() => {
+                                setEditSubId(s.id);
+                                setEditSubName(s.name);
+                              }}
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-table danger"
+                              onClick={() => {
+                                if (!confirm(`¿Eliminar subcategoría "${s.name}"?`)) return;
+                                void (async () => {
+                                  try {
+                                    await deleteAdminSubcategory(s.id);
+                                    showToast("Eliminada", "default", "🗑️");
+                                    onReload();
+                                  } catch (e) {
+                                    showToast(e instanceof Error ? e.message : "Error", "danger", "⚠️");
+                                  }
+                                })();
+                              }}
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                type="text"
+                className="form-input"
+                style={{ maxWidth: 240 }}
+                placeholder="Nueva subcategoría"
+                value={subDraft[cat.id] ?? ""}
+                onChange={(e) => setSubDraft((d) => ({ ...d, [cat.id]: e.target.value }))}
+              />
+              <button
+                type="button"
+                className="btn btn-rose btn-sm"
+                disabled={busy || !(subDraft[cat.id] ?? "").trim()}
+                onClick={() => {
+                  const nm = (subDraft[cat.id] ?? "").trim();
+                  if (!nm) return;
+                  void (async () => {
+                    setBusy(true);
+                    try {
+                      await createAdminSubcategory(cat.id, { name: nm });
+                      showToast("Subcategoría creada", "success", "✅");
+                      setSubDraft((d) => ({ ...d, [cat.id]: "" }));
+                      onReload();
+                    } catch (e) {
+                      showToast(e instanceof Error ? e.message : "Error", "danger", "⚠️");
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+              >
+                + Añadir subcategoría
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {!loading && sorted.length === 0 && (
+        <p style={{ color: "var(--text-muted)", fontSize: 14 }}>No hay categorías. Crea la primera arriba o ejecuta el seed.</p>
+      )}
+    </>
+  );
+}
+
+function AdminAddSaleModal({
+  open,
+  onClose,
+  products,
+  onSave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  products: AdminProduct[];
+  onSave: (s: AdminSale) => void;
+}) {
+  const [productId, setProductId] = useState("");
+  const [client, setClient] = useState("");
+  const [qty, setQty] = useState("1");
+  const [channel, setChannel] = useState("Tienda física");
+  const [status, setStatus] = useState("Completada");
+  const [total, setTotal] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const prod = products.find((p) => String(p.id) === productId);
+
+  return (
+    <div className={`admin-modal-overlay${open ? " open" : ""}`} onClick={(e) => e.target === e.currentTarget && onClose()} role="presentation">
+      <div className="admin-modal">
+        <button type="button" className="modal-close" onClick={onClose}>✕</button>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 20 }}>Registrar venta manual</div>
+        <div className="form-grid">
+          <div className="form-group">
+            <label className="form-label">Producto *</label>
+            <select className="form-select" value={productId} onChange={(e) => {
+              setProductId(e.target.value);
+              const p = products.find((x) => String(x.id) === e.target.value);
+              const q = Number(qty) || 1;
+              if (p) setTotal(String(p.price * q));
+            }}>
+              <option value="">Seleccionar producto...</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>{p.emoji} {p.name} — {formatPrice(p.price)}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Nombre del cliente</label>
+            <input type="text" className="form-input" value={client} onChange={(e) => setClient(e.target.value)} placeholder="Nombre del cliente" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Cantidad *</label>
+            <input type="number" className="form-input" value={qty} min={1} onChange={(e) => {
+              setQty(e.target.value);
+              const p = products.find((x) => String(x.id) === productId);
+              if (p) setTotal(String(p.price * (Number(e.target.value) || 1)));
+            }} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Canal de venta</label>
+            <select className="form-select" value={channel} onChange={(e) => setChannel(e.target.value)}>
+              <option value="Tienda física">Tienda física</option>
+              <option value="WhatsApp">WhatsApp</option>
+              <option value="Web">Web</option>
+              <option value="Instagram">Instagram</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Estado</label>
+            <select className="form-select" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="Completada">Completada</option>
+              <option value="Pendiente">Pendiente</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Total (COP)</label>
+            <input type="number" className="form-input" value={total} onChange={(e) => setTotal(e.target.value)} placeholder="Se auto-calcula" />
+          </div>
+          <div className="form-group full-width">
+            <label className="form-label">Notas</label>
+            <input type="text" className="form-input" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observaciones opcionales" />
+          </div>
+        </div>
+        <button type="button" className="btn btn-rose" style={{ width: "100%", justifyContent: "center" }} onClick={() => {
+          const q = Number(qty) || 1;
+          const t = Number(total) || (prod ? prod.price * q : 0);
+          onSave({
+            id: Date.now(),
+            productId: prod ? prod.id : null,
+            productName: prod ? prod.name : "Producto manual",
+            client: client || "Anónimo",
+            channel,
+            qty: q,
+            total: t,
+            status,
+            notes,
+            date: new Date().toLocaleDateString("es-CO"),
+          });
+          onClose();
+        }}>✅ Registrar venta</button>
+      </div>
+    </div>
+  );
+}
+
+function AdminEditProductModal({
+  open,
+  product,
+  saving,
+  onClose,
+  onSave,
+  onProductRefresh,
+  showToast,
+}: {
+  open: boolean;
+  product: AdminProduct | null;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (patch: Record<string, unknown>) => Promise<void>;
+  onProductRefresh?: (p: AdminProduct) => void;
+  showToast: (msg: string, type?: string, icon?: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [price, setPrice] = useState("");
+  const [stock, setStock] = useState("");
+  const [emoji, setEmoji] = useState("");
+  const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [uploadingMain, setUploadingMain] = useState(false);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+
+  useEffect(() => {
+    if (product) {
+      setName(product.name);
+      setPrice(String(product.price));
+      setStock(String(product.stock));
+      setEmoji(product.emoji || "");
+      setDescription(product.description || "");
+      setImageUrl(product.imageUrl || "");
+    }
+  }, [product]);
+
+  if (!product) return null;
+
+  return (
+    <div className={`admin-modal-overlay${open ? " open" : ""}`} onClick={(e) => e.target === e.currentTarget && onClose()} role="presentation">
+      <div className="admin-modal">
+        <button type="button" className="modal-close" onClick={onClose}>✕</button>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 20 }}>Editar producto</div>
+        <div className="form-grid">
+          <div className="form-group full-width">
+            <label className="form-label">Imagen principal</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+              <label className="btn btn-outline btn-sm" style={{ cursor: uploadingMain ? "wait" : "pointer" }}>
+                {uploadingMain ? "Subiendo…" : "📤 Cambiar imagen"}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  style={{ display: "none" }}
+                  disabled={uploadingMain || saving}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!f) return;
+                    setUploadingMain(true);
+                    void (async () => {
+                      try {
+                        const url = await uploadAdminProductImage(f);
+                        setImageUrl(url);
+                        showToast("Nueva imagen lista (guarda para persistir)", "success", "🖼️");
+                      } catch (err) {
+                        showToast(err instanceof Error ? err.message : "Error al subir", "danger", "⚠️");
+                      } finally {
+                        setUploadingMain(false);
+                      }
+                    })();
+                  }}
+                />
+              </label>
+              {isHttpImageUrl(imageUrl) && (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={imageUrl} alt="" style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 8, border: "1px solid var(--line)" }} />
+                </>
+              )}
+              <button type="button" className="btn btn-sm" style={{ color: "var(--text-muted)" }} onClick={() => setImageUrl("")}>
+                Quitar URL
+              </button>
+            </div>
+          </div>
+          <div className="form-group full-width">
+            <label className="form-label">Galería (extras)</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+              <label className="btn btn-outline btn-sm" style={{ cursor: uploadingGallery ? "wait" : "pointer" }}>
+                {uploadingGallery ? "Subiendo…" : "➕ Añadir a galería"}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  style={{ display: "none" }}
+                  disabled={uploadingGallery || saving || (product.images?.length ?? 0) >= 24}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!f) return;
+                    setUploadingGallery(true);
+                    void (async () => {
+                      try {
+                        const url = await uploadAdminProductImage(f);
+                        const updated = await addProductGalleryImage(product.id, url);
+                        onProductRefresh?.(updated);
+                        showToast("Imagen añadida a la galería", "success", "🖼️");
+                      } catch (err) {
+                        showToast(err instanceof Error ? err.message : "Error al subir", "danger", "⚠️");
+                      } finally {
+                        setUploadingGallery(false);
+                      }
+                    })();
+                  }}
+                />
+              </label>
+              {(product.images ?? []).map((im) => (
+                <span key={im.id} style={{ position: "relative", display: "inline-block" }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={im.url} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }} />
+                  <button
+                    type="button"
+                    aria-label="Eliminar"
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          const updated = await removeProductGalleryImage(product.id, im.id);
+                          onProductRefresh?.(updated);
+                          showToast("Imagen eliminada", "default", "🗑️");
+                        } catch (err) {
+                          showToast(err instanceof Error ? err.message : "Error", "danger", "⚠️");
+                        }
+                      })();
+                    }}
+                    style={{
+                      position: "absolute",
+                      top: -6,
+                      right: -6,
+                      width: 22,
+                      height: 22,
+                      borderRadius: "50%",
+                      border: "none",
+                      background: "var(--dusty-rose)",
+                      color: "#fff",
+                      fontSize: 12,
+                      cursor: "pointer",
+                      lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Nombre</label>
+            <input type="text" className="form-input" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Precio</label>
+            <input type="number" className="form-input" value={price} onChange={(e) => setPrice(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Stock</label>
+            <input type="number" className="form-input" value={stock} onChange={(e) => setStock(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Emoji</label>
+            <input type="text" className="form-input" value={emoji} onChange={(e) => setEmoji(e.target.value)} maxLength={4} />
+          </div>
+          <div className="form-group full-width">
+            <label className="form-label">Descripción</label>
+            <textarea className="form-textarea" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
+          </div>
+        </div>
+        <button
+          type="button"
+          className="btn btn-primary"
+          style={{ width: "100%", justifyContent: "center" }}
+          disabled={saving}
+          onClick={() => {
+            void onSave({
+              name,
+              price: Number(price),
+              stock: Number(stock),
+              emoji: emoji || null,
+              description,
+              imageUrl: imageUrl.trim() || null,
+            });
+          }}
+        >
+          {saving ? "Guardando…" : "💾 Guardar cambios"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AdminProductDetailModal({
+  open,
+  product,
+  saving,
+  categoryTree,
+  onClose,
+  onEdit,
+  onDelete,
+  onProductRefresh,
+  showToast,
+}: {
+  open: boolean;
+  product: AdminProduct | null;
+  saving: boolean;
+  categoryTree: AdminCategoryTree[];
+  onClose: () => void;
+  onEdit: (p: AdminProduct) => void;
+  onDelete: (id: string) => void | Promise<void>;
+  onProductRefresh?: (p: AdminProduct) => void;
+  showToast: (msg: string, type?: string, icon?: string) => void;
+}) {
+  const [uploadingMain, setUploadingMain] = useState(false);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+  const [homeFeaturedSaving, setHomeFeaturedSaving] = useState(false);
+  if (!product) return null;
+
+  return (
+    <div className={`admin-modal-overlay${open ? " open" : ""}`} onClick={(e) => e.target === e.currentTarget && onClose()} role="presentation">
+      <div className="admin-modal" style={{ maxWidth: 980 }}>
+        <button type="button" className="modal-close" onClick={onClose}>✕</button>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 18 }}>Detalle del producto</div>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(300px, 1fr) minmax(380px, 1.2fr)", gap: 20 }}>
+          <div>
+            <div style={{ border: "1px solid var(--line)", borderRadius: 12, overflow: "hidden", background: "var(--ivory)", aspectRatio: "1 / 1" }}>
+              {isHttpImageUrl(product.imageUrl) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={product.imageUrl!} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", fontSize: 64 }}>{product.emoji || "📦"}</div>
+              )}
+            </div>
+            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <label className="btn btn-outline btn-sm" style={{ cursor: uploadingMain || saving ? "wait" : "pointer" }}>
+                {uploadingMain ? "Subiendo…" : "📤 Cambiar principal"}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  style={{ display: "none" }}
+                  disabled={uploadingMain || saving}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!f) return;
+                    setUploadingMain(true);
+                    void (async () => {
+                      try {
+                        const url = await uploadAdminProductImage(f);
+                        const updated = await updateAdminProduct(product.id, { imageUrl: url });
+                        onProductRefresh?.(updated);
+                        showToast("Imagen principal actualizada", "success", "🖼️");
+                      } catch (err) {
+                        showToast(err instanceof Error ? err.message : "Error al subir", "danger", "⚠️");
+                      } finally {
+                        setUploadingMain(false);
+                      }
+                    })();
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+              <div className="admin-card" style={{ padding: 12 }}><strong>Marca:</strong> {product.brand || "—"}</div>
+              <div className="admin-card" style={{ padding: 12 }}><strong>Categoría:</strong> {categoryDisplayName(product.category, categoryTree)}</div>
+              <div className="admin-card" style={{ padding: 12 }}><strong>Subcategoría:</strong> {product.subcategory || "—"}</div>
+              <div className="admin-card" style={{ padding: 12 }}><strong>Precio:</strong> {formatPrice(product.price)}</div>
+              <div className="admin-card" style={{ padding: 12 }}><strong>Stock:</strong> {product.stock}</div>
+              <div className="admin-card" style={{ padding: 12 }}><strong>Estado:</strong> {product.active ? "Activo" : "Inactivo"}</div>
+            </div>
+
+            <div className="admin-card" style={{ padding: 12, marginBottom: 14 }}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 12,
+                  cursor: homeFeaturedSaving || saving ? "wait" : "pointer",
+                  fontSize: 13,
+                  lineHeight: 1.45,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={product.featuredInHome === true}
+                  disabled={homeFeaturedSaving || saving}
+                  style={{ marginTop: 3 }}
+                  onChange={(e) => {
+                    void (async () => {
+                      setHomeFeaturedSaving(true);
+                      try {
+                        const updated = await updateAdminProduct(product.id, { featuredInHome: e.target.checked });
+                        onProductRefresh?.(updated);
+                        showToast(
+                          e.target.checked ? "Prioridad en home activada" : "Prioridad en home desactivada",
+                          "success",
+                          "✨"
+                        );
+                      } catch (err) {
+                        showToast(err instanceof Error ? err.message : "Error", "danger", "⚠️");
+                      } finally {
+                        setHomeFeaturedSaving(false);
+                      }
+                    })();
+                  }}
+                />
+                <span>
+                  <strong>Prioridad en el home</strong>
+                  <div style={{ color: "var(--text-muted)", fontSize: 12, marginTop: 4 }}>
+                    Aparece entre los primeros en «Productos Destacados» en la tienda. No se muestra ninguna etiqueta pública (ni estrella ni «Top»).
+                  </div>
+                </span>
+              </label>
+            </div>
+
+            <div className="admin-card" style={{ padding: 12, marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>{product.name}</div>
+              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{product.description || "Sin descripción"}</div>
+            </div>
+
+            <div className="admin-card" style={{ padding: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>Imágenes extra</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                <label className="btn btn-outline btn-sm" style={{ cursor: uploadingGallery || saving ? "wait" : "pointer" }}>
+                  {uploadingGallery ? "Subiendo…" : "➕ Añadir imagen"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    style={{ display: "none" }}
+                    disabled={uploadingGallery || saving || (product.images?.length ?? 0) >= 24}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!f) return;
+                      setUploadingGallery(true);
+                      void (async () => {
+                        try {
+                          const url = await uploadAdminProductImage(f);
+                          const updated = await addProductGalleryImage(product.id, url);
+                          onProductRefresh?.(updated);
+                          showToast("Imagen añadida", "success", "🖼️");
+                        } catch (err) {
+                          showToast(err instanceof Error ? err.message : "Error al subir", "danger", "⚠️");
+                        } finally {
+                          setUploadingGallery(false);
+                        }
+                      })();
+                    }}
+                  />
+                </label>
+                {(product.images ?? []).map((im) => (
+                  <span key={im.id} style={{ position: "relative", display: "inline-block" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={im.url} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }} />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void (async () => {
+                          try {
+                            const updated = await removeProductGalleryImage(product.id, im.id);
+                            onProductRefresh?.(updated);
+                            showToast("Imagen eliminada", "default", "🗑️");
+                          } catch (err) {
+                            showToast(err instanceof Error ? err.message : "Error", "danger", "⚠️");
+                          }
+                        })();
+                      }}
+                      style={{ position: "absolute", top: -6, right: -6, width: 22, height: 22, borderRadius: "50%", border: "none", background: "var(--dusty-rose)", color: "#fff", fontSize: 12, cursor: "pointer", lineHeight: 1 }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+          <button type="button" className="btn btn-outline" onClick={() => onEdit(product)}>✏️ Editar</button>
+          <button type="button" className="btn btn-rose" onClick={() => void onDelete(product.id)}>🗑️ Eliminar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
