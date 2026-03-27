@@ -1112,7 +1112,7 @@ input, select, textarea { font-family: inherit; }
   align-items: center;
   justify-content: center;
   font-size: 60px;
-  opacity: 0.4;
+  opacity: 1;
 }
 .modal-details {
   padding: 36px;

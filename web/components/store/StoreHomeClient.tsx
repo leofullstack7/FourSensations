@@ -14,6 +14,14 @@ const CART_KEY = "gb_cart";
 
 type ToastItem = { id: number; msg: string; type: string; icon: string };
 
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 function loadCart(): CartLine[] {
   if (typeof window === "undefined") return [];
   try {
@@ -238,14 +246,31 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
   }, [products, activeCategory, manualSub, sortValue]);
 
   const searchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (q.length < 2) return [];
-    return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.subcategory.toLowerCase().includes(q) ||
-        getCategoryLabel(p.category).toLowerCase().includes(q),
-    );
+    const q = normalizeSearchText(searchQuery);
+    if (q.length < 1) return [];
+
+    const starts: StoreProduct[] = [];
+    const contains: StoreProduct[] = [];
+
+    for (const p of products) {
+      const fields = [
+        normalizeSearchText(p.name),
+        normalizeSearchText(p.brand),
+        normalizeSearchText(p.subcategory),
+        normalizeSearchText(getCategoryLabel(p.category)),
+      ];
+      const tokens = fields.flatMap((f) => f.split(/\s+/).filter(Boolean));
+
+      if (fields.some((f) => f.startsWith(q)) || tokens.some((t) => t.startsWith(q))) {
+        starts.push(p);
+        continue;
+      }
+      if (fields.some((f) => f.includes(q))) {
+        contains.push(p);
+      }
+    }
+
+    return [...starts, ...contains];
   }, [products, searchQuery]);
 
   const filterByCat = (cat: string) => {
@@ -1266,7 +1291,7 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
           </button>
         </div>
         <div className="search-results-grid" id="search-results-grid">
-          {searchQuery.trim().length >= 2 &&
+          {searchQuery.trim().length >= 1 &&
             (searchResults.length === 0 ? (
               <p style={{ gridColumn: "1/-1", textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>Sin resultados para &quot;{searchQuery}&quot;</p>
             ) : (
