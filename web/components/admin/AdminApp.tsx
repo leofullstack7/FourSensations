@@ -178,6 +178,12 @@ export function AdminApp() {
     setPageTitle(titles[p]);
   };
 
+  const handleLogout = useCallback(async () => {
+    // Evita depender de callbackUrl absoluto (p. ej. localhost en entornos mal configurados).
+    await signOut({ redirect: false });
+    router.replace("/admin/login");
+  }, [router]);
+
   const productListSortedCategories = useMemo(
     () => [...categoriesTree].sort((a, b) => a.sortOrder - b.sortOrder),
     [categoriesTree]
@@ -454,7 +460,7 @@ export function AdminApp() {
               <button type="button" className="btn btn-rose btn-sm" onClick={() => setAddSaleOpen(true)}>
                 + Registrar Venta
               </button>
-              <button type="button" className="btn btn-sm" style={{ color: "var(--text-muted)" }} onClick={() => signOut({ callbackUrl: "/admin/login" })}>
+              <button type="button" className="btn btn-sm" style={{ color: "var(--text-muted)" }} onClick={() => void handleLogout()}>
                 Salir
               </button>
             </div>
