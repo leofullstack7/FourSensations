@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useReveal } from "@/hooks/useReveal";
-import { defaultMenuConfig } from "@/lib/menu-config";
+import { defaultMenuConfig, toCategorySlug } from "@/lib/menu-config";
 import type { MenuConfig } from "@/lib/types/admin";
 import type { CartLine, StoreProduct } from "@/lib/types/product";
 import { catKeyFromDisplayName, getCategoryLabel } from "@/lib/category-labels";
@@ -390,38 +390,25 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
                   <div key={group} className="mega-subcol">
                     <div className="mega-subcol-title">{group}</div>
                     {items.map((i) => (
-                      <a
+                      <Link
                         key={i}
-                        href="#"
+                        href={`/categoria/${toCategorySlug(cat)}?sub=${encodeURIComponent(group)}&tag=${encodeURIComponent(i)}`}
                         className="mega-link"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setManualSub(i);
-                          setActiveCategory("__sub__");
-                          document.querySelector("#featured")?.scrollIntoView({ behavior: "smooth" });
-                        }}
                       >
                         <span className="dot" />
                         {i}
-                      </a>
+                      </Link>
                     ))}
                   </div>
                 ));
                 return (
                   <li key={cat} className="nav-item">
-                    <a
-                      href="#"
-                      className="nav-link"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        filterByCat(cat);
-                      }}
-                    >
+                    <Link href={`/categoria/${toCategorySlug(cat)}`} className="nav-link">
                       {data.icon} {cat}
                       <svg width="10" height="10" viewBox="0 0 10 10">
                         <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
                       </svg>
-                    </a>
+                    </Link>
                     <div className="mega-menu">
                       <div className="mega-header">{cat}</div>
                       <div className={`mega-grid ${subKeys.length <= 2 ? "cols-2" : subKeys.length >= 4 ? "cols-4" : ""}`}>{allLinks}</div>
@@ -430,16 +417,9 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
                           <strong>{cat} Premium</strong>
                           Los mejores productos para ti
                         </div>
-                        <a
-                          href="#"
-                          className="mega-promo-btn"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            filterByCat(cat);
-                          }}
-                        >
+                        <Link href={`/categoria/${toCategorySlug(cat)}`} className="mega-promo-btn">
                           Ver todo
-                        </a>
+                        </Link>
                       </div>
                     </div>
                   </li>
@@ -540,10 +520,8 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
                                 type="button"
                                 className="mobile-mega-link"
                                 onClick={() => {
-                                  setManualSub(i);
-                                  setActiveCategory("__sub__");
+                                  window.location.href = `/categoria/${toCategorySlug(cat)}?sub=${encodeURIComponent(group)}&tag=${encodeURIComponent(i)}`;
                                   closeMobileMenu();
-                                  document.querySelector("#featured")?.scrollIntoView({ behavior: "smooth" });
                                 }}
                               >
                                 {i}
@@ -556,7 +534,7 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
                         type="button"
                         className="mobile-mega-see-all"
                         onClick={() => {
-                          filterByCat(cat);
+                          window.location.href = `/categoria/${toCategorySlug(cat)}`;
                           closeMobileMenu();
                         }}
                       >

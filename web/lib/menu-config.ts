@@ -31,3 +31,17 @@ export const defaultMenuConfig: MenuConfig = {
     subs: { Color: ["Esmaltes", "Gel UV", "Semipermanente"], Cuidado: ["Fortalecedor", "Cuticulas", "Aceites"], Herramientas: ["Limas", "Pulidores", "Kits completos"] },
   },
 };
+
+export function toCategorySlug(label: string): string {
+  return label
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
+export function getMenuCategoryBySlug(slug: string) {
+  return Object.entries(defaultMenuConfig).find(([label]) => toCategorySlug(label) === slug) ?? null;
+}

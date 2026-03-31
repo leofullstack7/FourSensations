@@ -43,6 +43,20 @@ function categoryDisplayName(slug: string, tree: AdminCategoryTree[]): string {
   return tree.find((c) => c.slug === slug)?.name ?? slug;
 }
 
+function parseTagsInput(raw: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const part of raw.split(",")) {
+    const tag = part.trim();
+    if (!tag) continue;
+    const key = tag.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(tag);
+  }
+  return out;
+}
+
 function AdminProductThumb({ imageUrl, emoji }: { imageUrl: string | null; emoji: string }) {
   return (
     <div className="table-product-img">
@@ -79,11 +93,13 @@ export function AdminApp() {
   const [productFilterBrand, setProductFilterBrand] = useState("");
   const [productFilterCategorySlug, setProductFilterCategorySlug] = useState("");
   const [productFilterSubcategory, setProductFilterSubcategory] = useState("");
+  const [productFilterTag, setProductFilterTag] = useState("");
 
   const [addSaleOpen, setAddSaleOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailProductId, setDetailProductId] = useState<string | null>(null);
+  const [tagsModalProduct, setTagsModalProduct] = useState<AdminProduct | null>(null);
   const [featuredHomeSavingId, setFeaturedHomeSavingId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<{ id: number; msg: string; type: string; icon: string }[]>([]);
 
@@ -220,6 +236,26 @@ export function AdminApp() {
     return out;
   }, [products, productFilterCategorySlug]);
 
+  const productFilterTagOptions = useMemo(() => {
+    const pool = productFilterCategorySlug
+      ? products.filter((p) => p.category === productFilterCategorySlug)
+      : products;
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const p of pool) {
+      for (const raw of p.tags ?? []) {
+        const tag = raw.trim();
+        if (!tag) continue;
+        const key = tag.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(tag);
+      }
+    }
+    out.sort((a, b) => a.localeCompare(b, "es"));
+    return out;
+  }, [products, productFilterCategorySlug]);
+
   const filteredProducts = useMemo(() => {
     let list = products;
     const q = productSearch.trim().toLowerCase();
@@ -235,6 +271,11 @@ export function AdminApp() {
     if (productFilterSubcategory) {
       list = list.filter((x) => (x.subcategory ?? "").trim() === productFilterSubcategory);
     }
+    if (productFilterTag) {
+      list = list.filter((x) =>
+        (x.tags ?? []).some((t) => t.trim().toLowerCase() === productFilterTag.toLowerCase())
+      );
+    }
     return list;
   }, [
     products,
@@ -242,6 +283,7 @@ export function AdminApp() {
     productFilterBrand,
     productFilterCategorySlug,
     productFilterSubcategory,
+    productFilterTag,
   ]);
 
   const setProductFilterCategorySlugAndResetSub = useCallback((slug: string) => {
@@ -504,8 +546,11 @@ export function AdminApp() {
                   setFilterCategorySlug={setProductFilterCategorySlugAndResetSub}
                   filterSubcategory={productFilterSubcategory}
                   setFilterSubcategory={setProductFilterSubcategory}
+                  filterTag={productFilterTag}
+                  setFilterTag={setProductFilterTag}
                   brandOptions={productFilterBrandOptions}
                   subcategoryOptions={productFilterSubcategoryOptions}
+                  tagOptions={productFilterTagOptions}
                   sortedCategories={productListSortedCategories}
                   filteredProducts={filteredProducts}
                   totalProductCount={products.length}
@@ -548,6 +593,7 @@ export function AdminApp() {
                       showToast(e instanceof Error ? e.message : "No se pudo eliminar", "danger", "⚠️");
                     }
                   }}
+                  onViewTags={(p) => setTagsModalProduct(p)}
                 />
               )}
               {productTab === "add" && (
@@ -616,6 +662,7 @@ export function AdminApp() {
             <div className={`admin-page ${page === "categories" ? "active" : ""}`} style={{ display: page === "categories" ? "block" : "none" }}>
               <AdminCategoriesTab
                 tree={categoriesTree}
+                products={products}
                 loading={categoriesLoading}
                 error={categoriesError}
                 onReload={() => void loadCategories()}
@@ -711,6 +758,11 @@ export function AdminApp() {
         }}
         showToast={showToast}
       />
+      <AdminTagsSummaryModal
+        open={!!tagsModalProduct}
+        product={tagsModalProduct}
+        onClose={() => setTagsModalProduct(null)}
+      />
 
       <div className="admin-toast-container" id="admin-toast-container">
         {toasts.map((t) => (
@@ -733,8 +785,11 @@ function AdminProductListTab({
   setFilterCategorySlug,
   filterSubcategory,
   setFilterSubcategory,
+  filterTag,
+  setFilterTag,
   brandOptions,
   subcategoryOptions,
+  tagOptions,
   sortedCategories,
   filteredProducts,
   totalProductCount,
@@ -745,6 +800,7 @@ function AdminProductListTab({
   onView,
   onEdit,
   onDelete,
+  onViewTags,
 }: {
   productSearch: string;
   setProductSearch: (v: string) => void;
@@ -754,8 +810,11 @@ function AdminProductListTab({
   setFilterCategorySlug: (v: string) => void;
   filterSubcategory: string;
   setFilterSubcategory: (v: string) => void;
+  filterTag: string;
+  setFilterTag: (v: string) => void;
   brandOptions: string[];
   subcategoryOptions: string[];
+  tagOptions: string[];
   sortedCategories: AdminCategoryTree[];
   filteredProducts: AdminProduct[];
   totalProductCount: number;
@@ -766,9 +825,10 @@ function AdminProductListTab({
   onView: (p: AdminProduct) => void;
   onEdit: (p: AdminProduct) => void;
   onDelete: (id: string) => void | Promise<void>;
+  onViewTags: (p: AdminProduct) => void;
 }) {
   const hasActiveFilters =
-    !!filterBrand || !!filterCategorySlug || !!filterSubcategory || !!productSearch.trim();
+    !!filterBrand || !!filterCategorySlug || !!filterSubcategory || !!filterTag || !!productSearch.trim();
 
   return (
     <>
@@ -843,6 +903,25 @@ function AdminProductListTab({
             ))}
           </select>
         </div>
+        <div className="form-group" style={{ margin: 0, minWidth: 160, flex: "1 1 140px" }}>
+          <label className="form-label" style={{ fontSize: 11, marginBottom: 4 }}>
+            Etiqueta
+          </label>
+          <select
+            className="form-select"
+            value={filterTag}
+            onChange={(e) => setFilterTag(e.target.value)}
+            aria-label="Filtrar por etiqueta"
+            disabled={tagOptions.length === 0}
+          >
+            <option value="">Todas</option>
+            {tagOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
         {hasActiveFilters && (
           <button
             type="button"
@@ -853,6 +932,7 @@ function AdminProductListTab({
               setFilterBrand("");
               setFilterCategorySlug("");
               setFilterSubcategory("");
+              setFilterTag("");
             }}
           >
             Limpiar filtros
@@ -872,6 +952,7 @@ function AdminProductListTab({
               <th style={{ padding: 16 }}>Producto</th>
               <th>Marca</th>
               <th>Categoría</th>
+              <th>Etiquetas</th>
               <th title="Orden en la sección Productos Destacados del home (sin etiqueta pública)">Prioridad home</th>
               <th>Precio</th>
               <th>Stock</th>
@@ -882,13 +963,13 @@ function AdminProductListTab({
           <tbody>
             {listLoading && filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                <td colSpan={9} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   Cargando…
                 </td>
               </tr>
             ) : filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                <td colSpan={9} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   {totalProductCount === 0
                     ? "Sin productos"
                     : "Ningún producto coincide con la búsqueda o los filtros seleccionados."}
@@ -911,6 +992,15 @@ function AdminProductListTab({
                     </td>
                     <td>{p.brand || "—"}</td>
                     <td>{categoryDisplayName(p.category, categoryTree)}</td>
+                    <td>
+                      {(p.tags ?? []).length === 0 ? (
+                        "—"
+                      ) : (
+                        <button type="button" className="btn-table" onClick={() => onViewTags(p)}>
+                          {p.tags.length === 1 ? p.tags[0] : `${p.tags.length} Etiquetas`}
+                        </button>
+                      )}
+                    </td>
                     <td style={{ textAlign: "center" }}>
                       <input
                         type="checkbox"
@@ -963,6 +1053,7 @@ function AdminAddProductForm({
   const [brand, setBrand] = useState("GinnaBeauty");
   const [category, setCategory] = useState("");
   const [subcategory, setSubcategory] = useState("");
+  const [tagsText, setTagsText] = useState("");
   const [price, setPrice] = useState("");
   const [originalPrice, setOriginalPrice] = useState("");
   const [stock, setStock] = useState("10");
@@ -1019,6 +1110,16 @@ function AdminAddProductForm({
               <option key={s.id} value={s.name}>{s.name}</option>
             ))}
           </select>
+        </div>
+        <div className="form-group full-width">
+          <label className="form-label">Etiquetas (separadas por coma)</label>
+          <input
+            type="text"
+            className="form-input"
+            value={tagsText}
+            onChange={(e) => setTagsText(e.target.value)}
+            placeholder="Ej: Base, Cobertura media, Larga duración"
+          />
         </div>
         <div className="form-group">
           <label className="form-label">Precio *</label>
@@ -1172,6 +1273,7 @@ function AdminAddProductForm({
                 brand: brand || "GinnaBeauty",
                 category,
                 subcategory: subcategory.trim(),
+                tags: parseTagsInput(tagsText),
                 price: pr,
                 originalPrice: originalPrice ? Number(originalPrice) : null,
                 stock: Number(stock) || 0,
@@ -2317,12 +2419,14 @@ function AdminReportsTab({ sales, showToast }: { sales: AdminSale[]; showToast: 
 
 function AdminCategoriesTab({
   tree,
+  products,
   loading,
   error,
   onReload,
   showToast,
 }: {
   tree: AdminCategoryTree[];
+  products: AdminProduct[];
   loading: boolean;
   error: string | null;
   onReload: () => void;
@@ -2341,8 +2445,29 @@ function AdminCategoriesTab({
   const [subDraft, setSubDraft] = useState<Record<string, string>>({});
   const [editSubId, setEditSubId] = useState<string | null>(null);
   const [editSubName, setEditSubName] = useState("");
+  const [subcategoryTagPreview, setSubcategoryTagPreview] = useState<{ title: string; tags: string[] } | null>(null);
 
   const sorted = useMemo(() => [...tree].sort((a, b) => a.sortOrder - b.sortOrder), [tree]);
+
+  const tagsByCategorySub = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const p of products) {
+      const key = `${(p.category ?? "").trim().toLowerCase()}::${(p.subcategory ?? "").trim().toLowerCase()}`;
+      if (!key || key === "::") continue;
+      const existing = map.get(key) ?? [];
+      const seen = new Set(existing.map((t) => t.toLowerCase()));
+      for (const tag of p.tags ?? []) {
+        const v = tag.trim();
+        if (!v) continue;
+        const k = v.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        existing.push(v);
+      }
+      map.set(key, existing);
+    }
+    return map;
+  }, [products]);
 
   function startEditCat(c: AdminCategoryTree) {
     setEditCatId(c.id);
@@ -2504,13 +2629,14 @@ function AdminCategoriesTab({
                 <tr>
                   <th style={{ padding: 12 }}>Nombre</th>
                   <th>Slug</th>
+                  <th>Etiqueta</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {[...cat.subcategories].sort((a, b) => a.sortOrder - b.sortOrder).length === 0 ? (
                   <tr>
-                    <td colSpan={3} style={{ padding: 16, color: "var(--text-muted)", fontSize: 13 }}>
+                    <td colSpan={4} style={{ padding: 16, color: "var(--text-muted)", fontSize: 13 }}>
                       Sin subcategorías. Añade una abajo.
                     </td>
                   </tr>
@@ -2525,6 +2651,23 @@ function AdminCategoriesTab({
                         )}
                       </td>
                       <td><code style={{ fontSize: 12 }}>{s.slug}</code></td>
+                      <td>
+                        {(() => {
+                          const key = `${cat.slug.trim().toLowerCase()}::${s.name.trim().toLowerCase()}`;
+                          const tags = tagsByCategorySub.get(key) ?? [];
+                          if (tags.length === 0) return "—";
+                          if (tags.length === 1) return tags[0];
+                          return (
+                            <button
+                              type="button"
+                              className="btn-table"
+                              onClick={() => setSubcategoryTagPreview({ title: `${cat.name} / ${s.name}`, tags })}
+                            >
+                              {tags.length} Etiquetas
+                            </button>
+                          );
+                        })()}
+                      </td>
                       <td>
                         {editSubId === s.id ? (
                           <div style={{ display: "flex", gap: 6 }}>
@@ -2627,6 +2770,39 @@ function AdminCategoriesTab({
       {!loading && sorted.length === 0 && (
         <p style={{ color: "var(--text-muted)", fontSize: 14 }}>No hay categorías. Crea la primera arriba o ejecuta el seed.</p>
       )}
+
+      <div
+        className={`admin-modal-overlay${subcategoryTagPreview ? " open" : ""}`}
+        onClick={(e) => e.target === e.currentTarget && setSubcategoryTagPreview(null)}
+        role="presentation"
+      >
+        <div className="admin-modal" style={{ maxWidth: 420 }}>
+          <button type="button" className="modal-close" onClick={() => setSubcategoryTagPreview(null)}>✕</button>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 6 }}>
+            Etiquetas
+          </div>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 0 }}>
+            {subcategoryTagPreview?.title}
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {(subcategoryTagPreview?.tags ?? []).map((t) => (
+              <span
+                key={t}
+                style={{
+                  fontSize: 12,
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: "1px solid var(--line)",
+                  background: "var(--ivory)",
+                  color: "var(--text)",
+                }}
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
     </>
   );
 }
@@ -2752,6 +2928,7 @@ function AdminEditProductModal({
   const [price, setPrice] = useState("");
   const [stock, setStock] = useState("");
   const [emoji, setEmoji] = useState("");
+  const [tagsText, setTagsText] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [uploadingMain, setUploadingMain] = useState(false);
@@ -2763,6 +2940,7 @@ function AdminEditProductModal({
       setPrice(String(product.price));
       setStock(String(product.stock));
       setEmoji(product.emoji || "");
+      setTagsText((product.tags ?? []).join(", "));
       setDescription(product.description || "");
       setImageUrl(product.imageUrl || "");
     }
@@ -2902,6 +3080,16 @@ function AdminEditProductModal({
             <input type="text" className="form-input" value={emoji} onChange={(e) => setEmoji(e.target.value)} maxLength={4} />
           </div>
           <div className="form-group full-width">
+            <label className="form-label">Etiquetas (separadas por coma)</label>
+            <input
+              type="text"
+              className="form-input"
+              value={tagsText}
+              onChange={(e) => setTagsText(e.target.value)}
+              placeholder="Ej: Sombras, Paleta, Ojos"
+            />
+          </div>
+          <div className="form-group full-width">
             <label className="form-label">Descripción</label>
             <textarea className="form-textarea" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
           </div>
@@ -2917,6 +3105,7 @@ function AdminEditProductModal({
               price: Number(price),
               stock: Number(stock),
               emoji: emoji || null,
+              tags: parseTagsInput(tagsText),
               description,
               imageUrl: imageUrl.trim() || null,
             });
@@ -3006,6 +3195,14 @@ function AdminProductDetailModal({
               <div className="admin-card" style={{ padding: 12 }}><strong>Marca:</strong> {product.brand || "—"}</div>
               <div className="admin-card" style={{ padding: 12 }}><strong>Categoría:</strong> {categoryDisplayName(product.category, categoryTree)}</div>
               <div className="admin-card" style={{ padding: 12 }}><strong>Subcategoría:</strong> {product.subcategory || "—"}</div>
+              <div className="admin-card" style={{ padding: 12 }}>
+                <strong>Etiquetas:</strong>{" "}
+                {(product.tags ?? []).length === 0
+                  ? "—"
+                  : product.tags.length === 1
+                    ? product.tags[0]
+                    : `${product.tags.length} etiquetas`}
+              </div>
               <div className="admin-card" style={{ padding: 12 }}><strong>Precio:</strong> {formatPrice(product.price)}</div>
               <div className="admin-card" style={{ padding: 12 }}><strong>Stock:</strong> {product.stock}</div>
               <div className="admin-card" style={{ padding: 12 }}><strong>Estado:</strong> {product.active ? "Activo" : "Inactivo"}</div>
@@ -3121,6 +3318,56 @@ function AdminProductDetailModal({
           <button type="button" className="btn btn-outline" onClick={() => onEdit(product)}>✏️ Editar</button>
           <button type="button" className="btn btn-rose" onClick={() => void onDelete(product.id)}>🗑️ Eliminar</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminTagsSummaryModal({
+  open,
+  product,
+  onClose,
+}: {
+  open: boolean;
+  product: AdminProduct | null;
+  onClose: () => void;
+}) {
+  if (!product) return null;
+  const tags = (product.tags ?? []).filter(Boolean);
+  return (
+    <div
+      className={`admin-modal-overlay${open ? " open" : ""}`}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      role="presentation"
+    >
+      <div className="admin-modal" style={{ maxWidth: 420 }}>
+        <button type="button" className="modal-close" onClick={onClose}>
+          ✕
+        </button>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>
+          Etiquetas
+        </div>
+        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>{product.name}</div>
+        {tags.length === 0 ? (
+          <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Este producto no tiene etiquetas.</p>
+        ) : (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {tags.map((t) => (
+              <span
+                key={t}
+                style={{
+                  fontSize: 12,
+                  border: "1px solid rgba(200,168,162,0.38)",
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  background: "var(--ivory)",
+                }}
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

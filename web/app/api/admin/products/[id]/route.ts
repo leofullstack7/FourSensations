@@ -104,6 +104,7 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
         ...(d.brand !== undefined && { brand: d.brand }),
         ...(d.category !== undefined && { category: d.category }),
         ...(d.subcategory !== undefined && { subcategory: d.subcategory }),
+        ...(d.tags !== undefined && { tags: d.tags.map((t) => t.trim()).filter(Boolean) }),
         ...(d.description !== undefined && { description: d.description }),
         ...(d.price !== undefined && { price: d.price }),
         ...(d.originalPrice !== undefined && { originalPrice: d.originalPrice }),

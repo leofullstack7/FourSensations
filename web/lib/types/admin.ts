@@ -15,6 +15,7 @@ export type AdminProduct = {
   brand: string;
   category: string;
   subcategory: string;
+  tags: string[];
   price: number;
   originalPrice: number | null;
   stock: number;

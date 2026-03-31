@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
 
     const data = parsed.data;
     const brand = data.brand?.trim() || "GinnaBeauty";
+    const tags = (data.tags ?? []).map((t) => t.trim()).filter(Boolean);
 
     const mainUrl = data.imageUrl ?? null;
     if (mainUrl && !isTrustedCdnImageUrl(mainUrl)) {
@@ -117,6 +118,7 @@ export async function POST(req: NextRequest) {
         brand,
         category: data.category,
         subcategory: data.subcategory,
+        tags,
         description: data.description,
         price: data.price,
         originalPrice: data.originalPrice ?? null,

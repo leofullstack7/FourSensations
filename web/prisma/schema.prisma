@@ -78,6 +78,8 @@ model Product {
   imageUrl      String?
   /// Código de referencia / variante (CSV, match con imágenes).
   externalRef   String?        @unique
+  /// Etiquetas comerciales del producto (ej. "Base", "Sombras", "Gloss").
+  tags          String[]       @default([])
   isNew         Boolean        @default(false)
   /// Prioridad en la grilla "Productos Destacados" del home (sin badge público).
   featuredInHome Boolean       @default(false)

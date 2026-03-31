@@ -9,6 +9,7 @@ function rowToStore(
     brand: string;
     category: string;
     subcategory: string;
+    tags: string[];
     price: number;
     originalPrice: number | null;
     rating: number;
@@ -34,6 +35,7 @@ function rowToStore(
     brand: p.brand,
     category: p.category,
     subcategory: p.subcategory,
+    tags: Array.isArray(p.tags) ? p.tags : [],
     price: p.price,
     originalPrice: p.originalPrice,
     rating: p.rating,
