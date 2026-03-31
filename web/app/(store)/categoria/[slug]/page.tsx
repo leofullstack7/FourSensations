@@ -37,6 +37,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     <CategoryLandingClient
       categoryLabel={categoryLabel}
       categorySlug={params.slug}
+      categoryIcon={menuData.icon}
       products={categoryProducts}
       subcategories={subcategories}
       defaultSubcategory={defaultSub}

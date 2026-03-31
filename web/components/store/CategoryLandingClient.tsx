@@ -5,10 +5,12 @@ import { useMemo, useState } from "react";
 import type { StoreProduct } from "@/lib/types/product";
 import { formatPrice } from "@/lib/format";
 import { isHttpImageUrl } from "@/lib/util/image-url";
+import { getCategoryLandingCopy } from "@/lib/category-landing-theme";
 
 type CategoryLandingClientProps = {
   categoryLabel: string;
   categorySlug: string;
+  categoryIcon: string;
   products: StoreProduct[];
   subcategories: string[];
   defaultSubcategory: string;
@@ -44,12 +46,14 @@ function ProductCardLite({ product }: { product: StoreProduct }) {
 export function CategoryLandingClient({
   categoryLabel,
   categorySlug,
+  categoryIcon,
   products,
   subcategories,
   defaultSubcategory,
   defaultTag,
   menuTags,
 }: CategoryLandingClientProps) {
+  const copy = useMemo(() => getCategoryLandingCopy(categoryLabel, categorySlug), [categoryLabel, categorySlug]);
   const [selectedSub, setSelectedSub] = useState(defaultSubcategory);
   const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedTag, setSelectedTag] = useState(defaultTag);
@@ -85,21 +89,29 @@ export function CategoryLandingClient({
   }, [products, selectedSub, selectedBrand, selectedTag]);
 
   return (
-    <main>
-      <section className="category-landing-hero section-pad">
-        <div className="container">
-          <div className="category-landing-eyebrow">Colección {categoryLabel}</div>
-          <h1 className="category-landing-title">{categoryLabel} que potencia tu estilo</h1>
-          <p className="category-landing-subtitle">
-            Descubre fórmulas premium, tonos tendencia y productos favoritos para comprar con confianza.
-          </p>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/" className="btn btn-outline btn-sm">
-              ← Volver al home
-            </Link>
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => setSelectedSub("")}>
-              Ver toda la categoría
-            </button>
+    <main className="category-landing-page">
+      <section
+        className="category-landing-hero section-pad"
+        data-landing-slug={categorySlug}
+        aria-label={`Categoría ${categoryLabel}`}
+      >
+        <div className="category-landing-hero-glow" aria-hidden />
+        <div className="container category-landing-hero-inner">
+          <div className="category-landing-hero-visual" aria-hidden>
+            <span className="category-landing-icon">{categoryIcon}</span>
+          </div>
+          <div className="category-landing-hero-copy">
+            <div className="category-landing-eyebrow">Colección {categoryLabel}</div>
+            <h1 className="category-landing-title">{copy.headline}</h1>
+            <p className="category-landing-subtitle">{copy.subtitle}</p>
+            <div className="category-landing-cta-row">
+              <Link href="/" className="btn btn-outline btn-sm category-landing-cta-back">
+                {copy.ctaBack}
+              </Link>
+              <button type="button" className="btn btn-primary btn-sm category-landing-cta-primary" onClick={() => setSelectedSub("")}>
+                {copy.ctaExplore}
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -190,7 +202,7 @@ export function CategoryLandingClient({
               No hay productos para estos filtros.
             </div>
           ) : (
-            <div className="products-grid">
+            <div className="products-grid category-landing-products">
               {filtered.map((p) => (
                 <ProductCardLite key={`${categorySlug}-${p.id}`} product={p} />
               ))}
