@@ -41,6 +41,21 @@ Variables `BUNNY_*` y checklist de pruebas: `docs/BUNNY_IMAGES.md`.
 | `admin.html` | `components/admin/AdminApp.tsx` + rutas `app/admin/*` |
 | `PRODUCTS_DB` | `data/mock-products.ts` → `getStorefrontProducts()` (Prisma cuando hay DB) |
 
+## Despliegue (Render)
+
+Este proyecto está desplegado en **Render**.
+
+Flujo recomendado para publicar cambios:
+
+1. Hacer cambios en local y probar (`npm run dev`).
+2. Subir cambios a Git:
+   - `git add .`
+   - `git commit -m "mensaje"`
+   - `git push origin main`
+3. En Render, desplegar el servicio web (manual o automático según la configuración del servicio).
+
+En este proyecto, la publicación al servidor se gestiona desde Render después de subir cambios a Git.
+
 ## Scripts
 
 - `npm run dev` — desarrollo

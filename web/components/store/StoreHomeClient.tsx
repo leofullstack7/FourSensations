@@ -16,6 +16,7 @@ type ToastItem = { id: number; msg: string; type: string; icon: string };
 
 function normalizeSearchText(value: string): string {
   return value
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
@@ -129,6 +130,8 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
   const [sortValue, setSortValue] = useState<string>("default");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileExpandedCat, setMobileExpandedCat] = useState<string | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
@@ -161,6 +164,17 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
     };
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth > 900) {
+        setMobileMenuOpen(false);
+        setMobileExpandedCat(null);
+      }
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   const cartCount = useMemo(() => cart.reduce((s, i) => s + i.qty, 0), [cart]);
@@ -272,6 +286,8 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
 
     return [...starts, ...contains];
   }, [products, searchQuery]);
+  const normalizedSearchQuery = useMemo(() => normalizeSearchText(searchQuery), [searchQuery]);
+  const hasSearchQuery = normalizedSearchQuery.length >= 1;
 
   const filterByCat = (cat: string) => {
     document.querySelector("#featured")?.scrollIntoView({ behavior: "smooth" });
@@ -295,6 +311,7 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
   };
 
   const openSearch = () => {
+    setSearchQuery("");
     setSearchOpen(true);
     document.body.style.overflow = "hidden";
     setTimeout(() => document.getElementById("search-input-big")?.focus(), 100);
@@ -302,8 +319,14 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
 
   const closeSearch = () => {
     setSearchOpen(false);
+    setSearchQuery("");
     document.body.style.overflow = "";
   };
+
+  const closeMobileMenu = useCallback(() => {
+    setMobileMenuOpen(false);
+    setMobileExpandedCat(null);
+  }, []);
 
   const openCart = () => {
     setCartOpen(true);
@@ -346,6 +369,18 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
               <span className="logo-tagline">Cosmética Premium</span>
             </div>
           </Link>
+
+          <button
+            type="button"
+            className={`mobile-menu-toggle${mobileMenuOpen ? " open" : ""}`}
+            aria-label="Abrir menú"
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen((v) => !v)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
 
           <nav className="main-nav" aria-label="Categorías">
             <ul className="nav-list">
@@ -477,6 +512,62 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
               </div>
             </div>
           </div>
+
+          <div className={`mobile-mega-menu${mobileMenuOpen ? " open" : ""}`}>
+            <div className="mobile-mega-menu-inner">
+              {Object.entries(menuConfig).map(([cat, data]) => {
+                const isOpen = mobileExpandedCat === cat;
+                return (
+                  <div key={cat} className="mobile-mega-group">
+                    <button
+                      type="button"
+                      className={`mobile-mega-cat${isOpen ? " open" : ""}`}
+                      onClick={() => setMobileExpandedCat((prev) => (prev === cat ? null : cat))}
+                    >
+                      <span>
+                        {data.icon} {cat}
+                      </span>
+                      <span className="mobile-mega-cat-arrow">▾</span>
+                    </button>
+                    <div className={`mobile-mega-subwrap${isOpen ? " open" : ""}`}>
+                      {Object.entries(data.subs).map(([group, items]) => (
+                        <div key={group} className="mobile-mega-subgroup">
+                          <div className="mobile-mega-subtitle">{group}</div>
+                          <div className="mobile-mega-links">
+                            {items.map((i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                className="mobile-mega-link"
+                                onClick={() => {
+                                  setManualSub(i);
+                                  setActiveCategory("__sub__");
+                                  closeMobileMenu();
+                                  document.querySelector("#featured")?.scrollIntoView({ behavior: "smooth" });
+                                }}
+                              >
+                                {i}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        className="mobile-mega-see-all"
+                        onClick={() => {
+                          filterByCat(cat);
+                          closeMobileMenu();
+                        }}
+                      >
+                        Ver todo {cat}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </header>
 
@@ -584,14 +675,7 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
               <div className="trust-icon">🚚</div>
               <div>
                 <div className="trust-title">Envío a toda Colombia</div>
-                <div className="trust-desc">Gratis en compras +$100.000</div>
-              </div>
-            </div>
-            <div className="trust-item">
-              <div className="trust-icon">💳</div>
-              <div>
-                <div className="trust-title">Pago contra entrega</div>
-                <div className="trust-desc">Paga cuando recibas tu pedido</div>
+                <div className="trust-desc">Gratis en compras superiores a $130.000</div>
               </div>
             </div>
             <div className="trust-item">
@@ -1284,31 +1368,33 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
             id="search-input-big"
             placeholder="¿Qué estás buscando?"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value.replace(/[\u200B-\u200D\uFEFF]/g, ""))}
           />
           <button type="button" onClick={() => {}}>
             →
           </button>
         </div>
-        <div className="search-results-grid" id="search-results-grid">
-          {searchQuery.trim().length >= 1 &&
-            (searchResults.length === 0 ? (
-              <p style={{ gridColumn: "1/-1", textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>Sin resultados para &quot;{searchQuery}&quot;</p>
-            ) : (
-              searchResults.map((p) => (
-                <ProductCard
-                  key={p.id}
-                  product={p}
-                  isFav={favorites.includes(p.id)}
-                  onOpen={(id) => {
-                    openProductModal(id);
-                    closeSearch();
-                  }}
-                  onToggleFav={toggleFavorite}
-                  onAddCart={addToCart}
-                />
-              ))
-            ))}
+        <div className="search-results-scroll">
+          <div className="search-results-grid" id="search-results-grid" key={normalizedSearchQuery}>
+            {hasSearchQuery &&
+              (searchResults.length === 0 ? (
+                <p style={{ gridColumn: "1/-1", textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>Sin resultados para &quot;{searchQuery}&quot;</p>
+              ) : (
+                searchResults.map((p) => (
+                  <ProductCard
+                    key={p.id}
+                    product={p}
+                    isFav={favorites.includes(p.id)}
+                    onOpen={(id) => {
+                      openProductModal(id);
+                      closeSearch();
+                    }}
+                    onToggleFav={toggleFavorite}
+                    onAddCart={addToCart}
+                  />
+                ))
+              ))}
+          </div>
         </div>
         <div id="search-suggestions" style={{ maxWidth: 680, width: "100%", marginTop: 0 }}>
           <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, letterSpacing: "0.1em", textTransform: "uppercase" }}>Búsquedas populares</p>

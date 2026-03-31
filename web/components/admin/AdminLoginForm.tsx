@@ -116,18 +116,6 @@ export function AdminLoginForm() {
             Usuario o contraseña incorrectos
           </div>
         )}
-        <div style={{ fontSize: 12, color: "var(--text)", marginTop: 18, lineHeight: 1.55, textAlign: "left" }}>
-          <strong style={{ display: "block", marginBottom: 6 }}>Acceso con base de datos</strong>
-          El panel solo acepta el usuario <strong>ADMIN</strong> creado con <code>npm run db:seed</code>: el email es el valor de{" "}
-          <code>SEED_ADMIN_EMAIL</code> (por defecto <code>admin@ginnabeauty.local</code>) y la contraseña la que definiste en{" "}
-          <code>SEED_ADMIN_PASSWORD</code> al ejecutar el seed.
-          <br />
-          <br />
-          <span style={{ color: "var(--text-muted)", fontSize: 11 }}>
-            Si no recuerdas el email, ábrelo en Prisma Studio → tabla <code>User</code> → columna <code>email</code> (rol{" "}
-            <code>ADMIN</code>).
-          </span>
-        </div>
       </div>
     </div>
   );
