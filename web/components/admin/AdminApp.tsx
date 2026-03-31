@@ -1436,6 +1436,7 @@ function AdminBulkTab({
           priceValue: r.mapped.price,
           stockValue: r.mapped.stock,
           nameValue: r.mapped.name,
+          tagsValue: r.mapped.tags ?? [],
           matchedImages: r.imageMatches,
           matchStatus: "valid" as const,
           selected: selectedRowIds.has(previewRowId),
@@ -1483,7 +1484,8 @@ function AdminBulkTab({
         <strong>Flujo:</strong> sube un <strong>CSV</strong> (encabezados en la primera fila) y un <strong>ZIP</strong> con fotos cuyo{" "}
         <strong>nombre de archivo</strong> (sin extensión) coincide con la <strong>columna de código</strong> del CSV. Pulsa{" "}
         <strong>Analizar</strong> para ver el resumen y la tabla; luego <strong>Importar seleccionados</strong> crea productos y sube
-        imágenes a Bunny. Máx. 500 filas y 2&nbsp;MB CSV / 50&nbsp;MB ZIP.
+        imágenes a Bunny. Si el CSV incluye una columna de <strong>etiquetas</strong> (p. ej. &quot;Etiquetas&quot;, &quot;Tags&quot;),
+        puedes listar varias separadas por coma, punto y coma o |. Máx. 500 filas y 2&nbsp;MB CSV / 50&nbsp;MB ZIP.
       </div>
 
       <div
@@ -1728,6 +1730,7 @@ function AdminBulkTab({
                   <th>Subcategoría</th>
                   <th>Precio</th>
                   <th>Stock</th>
+                  <th>Etiquetas</th>
                   <th>Imágenes</th>
                   <th>Estado</th>
                 </tr>
@@ -1760,6 +1763,9 @@ function AdminBulkTab({
                       <td>{r.subcategoryValue ?? "—"}</td>
                       <td>{r.priceValue != null ? formatPrice(r.priceValue) : "—"}</td>
                       <td>{r.stockValue ?? "—"}</td>
+                      <td style={{ fontSize: 11, maxWidth: 160, color: "var(--text-muted)" }} title={(r.tagsValue ?? []).join(", ")}>
+                        {(r.tagsValue ?? []).length ? (r.tagsValue ?? []).join(", ") : "—"}
+                      </td>
                       <td style={{ fontSize: 12 }}>
                         {r.matchedImages.length
                           ? r.matchedImages
@@ -1797,7 +1803,7 @@ function AdminBulkTab({
                 })}
                 {previewTableRows.length === 0 && (
                   <tr>
-                    <td colSpan={11} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>
+                    <td colSpan={12} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>
                       No hay filas con match válido para importar.
                     </td>
                   </tr>
@@ -2443,8 +2449,10 @@ function AdminCategoriesTab({
   const [editCatIcon, setEditCatIcon] = useState("");
 
   const [subDraft, setSubDraft] = useState<Record<string, string>>({});
+  const [subMenuTagDraft, setSubMenuTagDraft] = useState<Record<string, string>>({});
   const [editSubId, setEditSubId] = useState<string | null>(null);
   const [editSubName, setEditSubName] = useState("");
+  const [editSubMenuTag, setEditSubMenuTag] = useState("");
   const [subcategoryTagPreview, setSubcategoryTagPreview] = useState<{ title: string; tags: string[] } | null>(null);
 
   const sorted = useMemo(() => [...tree].sort((a, b) => a.sortOrder - b.sortOrder), [tree]);
@@ -2629,14 +2637,15 @@ function AdminCategoriesTab({
                 <tr>
                   <th style={{ padding: 12 }}>Nombre</th>
                   <th>Slug</th>
-                  <th>Etiqueta</th>
+                  <th>Grupo menú</th>
+                  <th>Etiquetas prod.</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {[...cat.subcategories].sort((a, b) => a.sortOrder - b.sortOrder).length === 0 ? (
                   <tr>
-                    <td colSpan={4} style={{ padding: 16, color: "var(--text-muted)", fontSize: 13 }}>
+                    <td colSpan={5} style={{ padding: 16, color: "var(--text-muted)", fontSize: 13 }}>
                       Sin subcategorías. Añade una abajo.
                     </td>
                   </tr>
@@ -2651,6 +2660,20 @@ function AdminCategoriesTab({
                         )}
                       </td>
                       <td><code style={{ fontSize: 12 }}>{s.slug}</code></td>
+                      <td>
+                        {editSubId === s.id ? (
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={editSubMenuTag}
+                            onChange={(e) => setEditSubMenuTag(e.target.value)}
+                            placeholder="Ej. Tratamiento"
+                            style={{ maxWidth: 160 }}
+                          />
+                        ) : (
+                          s.menuTag ?? "—"
+                        )}
+                      </td>
                       <td>
                         {(() => {
                           const key = `${cat.slug.trim().toLowerCase()}::${s.name.trim().toLowerCase()}`;
@@ -2677,7 +2700,11 @@ function AdminCategoriesTab({
                               onClick={() => {
                                 void (async () => {
                                   try {
-                                    await updateAdminSubcategory(s.id, { name: editSubName.trim() });
+                                    const mt = editSubMenuTag.trim();
+                                    await updateAdminSubcategory(s.id, {
+                                      name: editSubName.trim(),
+                                      menuTag: mt.length ? mt : null,
+                                    });
                                     showToast("Subcategoría actualizada", "success", "✅");
                                     setEditSubId(null);
                                     onReload();
@@ -2689,7 +2716,16 @@ function AdminCategoriesTab({
                             >
                               OK
                             </button>
-                            <button type="button" className="btn-table" onClick={() => setEditSubId(null)}>✕</button>
+                            <button
+                              type="button"
+                              className="btn-table"
+                              onClick={() => {
+                                setEditSubId(null);
+                                setEditSubMenuTag("");
+                              }}
+                            >
+                              ✕
+                            </button>
                           </div>
                         ) : (
                           <div style={{ display: "flex", gap: 6 }}>
@@ -2699,6 +2735,7 @@ function AdminCategoriesTab({
                               onClick={() => {
                                 setEditSubId(s.id);
                                 setEditSubName(s.name);
+                                setEditSubMenuTag(s.menuTag ?? "");
                               }}
                             >
                               ✏️
@@ -2733,10 +2770,18 @@ function AdminCategoriesTab({
               <input
                 type="text"
                 className="form-input"
-                style={{ maxWidth: 240 }}
+                style={{ maxWidth: 200 }}
                 placeholder="Nueva subcategoría"
                 value={subDraft[cat.id] ?? ""}
                 onChange={(e) => setSubDraft((d) => ({ ...d, [cat.id]: e.target.value }))}
+              />
+              <input
+                type="text"
+                className="form-input"
+                style={{ maxWidth: 160 }}
+                placeholder="Grupo menú (dorado)"
+                value={subMenuTagDraft[cat.id] ?? ""}
+                onChange={(e) => setSubMenuTagDraft((d) => ({ ...d, [cat.id]: e.target.value }))}
               />
               <button
                 type="button"
@@ -2745,12 +2790,17 @@ function AdminCategoriesTab({
                 onClick={() => {
                   const nm = (subDraft[cat.id] ?? "").trim();
                   if (!nm) return;
+                  const mt = (subMenuTagDraft[cat.id] ?? "").trim();
                   void (async () => {
                     setBusy(true);
                     try {
-                      await createAdminSubcategory(cat.id, { name: nm });
+                      await createAdminSubcategory(cat.id, {
+                        name: nm,
+                        ...(mt ? { menuTag: mt } : {}),
+                      });
                       showToast("Subcategoría creada", "success", "✅");
                       setSubDraft((d) => ({ ...d, [cat.id]: "" }));
+                      setSubMenuTagDraft((d) => ({ ...d, [cat.id]: "" }));
                       onReload();
                     } catch (e) {
                       showToast(e instanceof Error ? e.message : "Error", "danger", "⚠️");

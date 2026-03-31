@@ -17,6 +17,7 @@ function mapSub(s: {
   id: string;
   slug: string;
   name: string;
+  menuTag: string | null;
   sortOrder: number;
   categoryId: string;
 }): AdminSubcategoryRow {
@@ -24,6 +25,7 @@ function mapSub(s: {
     id: s.id,
     slug: s.slug,
     name: s.name,
+    menuTag: s.menuTag,
     sortOrder: s.sortOrder,
     categoryId: s.categoryId,
   };
@@ -76,12 +78,20 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
       sortOrder = (agg._max.sortOrder ?? -1) + 1;
     }
 
+    const menuTag =
+      data.menuTag === undefined
+        ? null
+        : data.menuTag === null
+          ? null
+          : data.menuTag.trim() || null;
+
     const row = await prisma.subcategory.create({
       data: {
         categoryId,
         name: data.name,
         slug,
         sortOrder,
+        menuTag,
       },
     });
     return noStoreJson({ subcategory: mapSub(row) }, { status: 201 });

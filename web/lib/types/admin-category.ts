@@ -3,6 +3,8 @@ export type AdminSubcategoryRow = {
   id: string;
   slug: string;
   name: string;
+  /** Etiqueta del mega menú (columna dorada). */
+  menuTag: string | null;
   sortOrder: number;
   categoryId: string;
 };

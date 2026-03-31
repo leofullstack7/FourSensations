@@ -83,6 +83,8 @@ export type BulkPreviewResult = {
   headers: string[];
   codeColumnIndex: number;
   codeColumnCandidates: CodeColumnCandidate[];
+  /** Hay al menos una columna CSV mapeada a etiquetas de producto. */
+  csvHasTagsColumn: boolean;
   /** Compat: todas las filas originales. */
   rows: BulkPreviewRow[];
   matchedRows: BulkPreviewRow[];
@@ -133,6 +135,7 @@ export function buildBulkPreview(params: {
 }): BulkPreviewResult {
   const { headers, dataRows, codeColumnIndex, zipEntries, categoryTree, defaultCategorySlug } = params;
   const headerFieldMap = buildHeaderFieldMap(headers);
+  const csvHasTagsColumn = Array.from(headerFieldMap.values()).some((f) => f === "tags");
   const candidates = topCodeColumnCandidates(headers, dataRows, 8);
   const usedImageFileNames = new Set<string>();
 
@@ -414,6 +417,7 @@ export function buildBulkPreview(params: {
     headers,
     codeColumnIndex,
     codeColumnCandidates: candidates,
+    csvHasTagsColumn,
     rows,
     matchedRows,
     unmatchedRows,

@@ -164,6 +164,8 @@ model Subcategory {
   id         String   @id @default(cuid())
   slug       String
   name       String
+  /// Etiqueta de columna del mega menú (texto dorado): p. ej. Tratamiento, Rutina.
+  menuTag    String?
   sortOrder  Int      @default(0)
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)

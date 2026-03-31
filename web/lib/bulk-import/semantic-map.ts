@@ -47,6 +47,21 @@ const GROUPS: SynonymGroup[] = [
     field: "category",
     keys: ["categoria", "categoría", "category", "rubro", "linea principal", "linea"],
   },
+  {
+    field: "tags",
+    keys: [
+      "etiquetas",
+      "etiqueta",
+      "etiquetas producto",
+      "etiqueta producto",
+      "tags",
+      "tag",
+      "keywords",
+      "palabras clave",
+      "labels",
+      "label",
+    ],
+  },
 ];
 
 export type SemanticMapped = {
@@ -58,6 +73,8 @@ export type SemanticMapped = {
   brand: string | null;
   category: string | null;
   subcategory: string | null;
+  /** Etiquetas comerciales del producto (varias columnas CSV se fusionan). */
+  tags: string[];
 };
 
 function headerToField(normalizedHeader: string): keyof SemanticMapped | null {
@@ -77,6 +94,7 @@ function headerToField(normalizedHeader: string): keyof SemanticMapped | null {
       const k = normalizeKey(kRaw);
       if (!(h.includes(k) || k.includes(h))) continue;
       if (g.field === "category" && h.includes("sub")) continue;
+      if (g.field === "tags" && h.includes("subcategor")) continue;
       if (!best || k.length > best.keyLen) {
         best = { field: g.field, keyLen: k.length };
       }
@@ -136,10 +154,47 @@ export function parseStockInt(raw: string): number | null {
   return n;
 }
 
+const MAX_TAGS = 30;
+const MAX_TAG_LEN = 60;
+
+/** Divide por coma, punto y coma o |; recorta y deduplica (orden conservado). */
+export function parseTagsFromCell(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  const parts = trimmed.split(/[,;|]/g).map((t) => t.trim()).filter(Boolean);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const p of parts) {
+    const clipped = p.length > MAX_TAG_LEN ? p.slice(0, MAX_TAG_LEN) : p;
+    const k = clipped.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(clipped);
+    if (out.length >= MAX_TAGS) break;
+  }
+  return out;
+}
+
+function mergeTagsChunks(chunks: string[][]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const chunk of chunks) {
+    for (const t of chunk) {
+      const k = t.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(t);
+      if (out.length >= MAX_TAGS) return out;
+    }
+  }
+  return out;
+}
+
 export function mapRowValues(
   values: string[],
   headerFieldMap: Map<number, keyof SemanticMapped>
 ): SemanticMapped {
+  const tagChunks: string[][] = [];
   const out: SemanticMapped = {
     name: null,
     description: null,
@@ -149,6 +204,7 @@ export function mapRowValues(
     brand: null,
     category: null,
     subcategory: null,
+    tags: [],
   };
   headerFieldMap.forEach((field, col) => {
     const raw = (values[col] ?? "").trim();
@@ -178,9 +234,13 @@ export function mapRowValues(
       case "subcategory":
         if (!out.subcategory) out.subcategory = raw;
         break;
+      case "tags":
+        tagChunks.push(parseTagsFromCell(raw));
+        break;
       default:
         break;
     }
   });
+  out.tags = mergeTagsChunks(tagChunks);
   return out;
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useReveal } from "@/hooks/useReveal";
-import { defaultMenuConfig, toCategorySlug } from "@/lib/menu-config";
+import { toCategorySlug } from "@/lib/menu-config";
 import type { MenuConfig } from "@/lib/types/admin";
 import type { CartLine, StoreProduct } from "@/lib/types/product";
 import { catKeyFromDisplayName, getCategoryLabel } from "@/lib/category-labels";
@@ -119,9 +119,23 @@ function ProductCard({
   );
 }
 
-export function StoreHomeClient({ initialProducts }: { initialProducts: StoreProduct[] }) {
+export function StoreHomeClient({
+  initialProducts,
+  initialMenuConfig,
+  categorySlugByName,
+}: {
+  initialProducts: StoreProduct[];
+  initialMenuConfig: MenuConfig;
+  categorySlugByName: Record<string, string>;
+}) {
   const [products] = useState<StoreProduct[]>(initialProducts);
-  const [menuConfig] = useState<MenuConfig>(defaultMenuConfig);
+  const [menuConfig] = useState<MenuConfig>(initialMenuConfig);
+
+  const categoryPath = useCallback(
+    (categoryDisplayName: string) =>
+      categorySlugByName[categoryDisplayName] ?? toCategorySlug(categoryDisplayName),
+    [categorySlugByName]
+  );
   const [cart, setCart] = useState<CartLine[]>([]);
   const [favorites, setFavorites] = useState<number[]>([]);
   const [user, setUser] = useState<{ name: string; email: string; provider: string } | null>(null);
@@ -392,7 +406,7 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
                     {items.map((i) => (
                       <Link
                         key={i}
-                        href={`/categoria/${toCategorySlug(cat)}?sub=${encodeURIComponent(group)}&tag=${encodeURIComponent(i)}`}
+                        href={`/categoria/${categoryPath(cat)}?grupo=${encodeURIComponent(group)}&sub=${encodeURIComponent(i)}`}
                         className="mega-link"
                       >
                         <span className="dot" />
@@ -403,7 +417,7 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
                 ));
                 return (
                   <li key={cat} className="nav-item">
-                    <Link href={`/categoria/${toCategorySlug(cat)}`} className="nav-link">
+                    <Link href={`/categoria/${categoryPath(cat)}`} className="nav-link">
                       {data.icon} {cat}
                       <svg width="10" height="10" viewBox="0 0 10 10">
                         <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
@@ -417,7 +431,7 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
                           <strong>{cat} Premium</strong>
                           Los mejores productos para ti
                         </div>
-                        <Link href={`/categoria/${toCategorySlug(cat)}`} className="mega-promo-btn">
+                        <Link href={`/categoria/${categoryPath(cat)}`} className="mega-promo-btn">
                           Ver todo
                         </Link>
                       </div>
@@ -520,7 +534,7 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
                                 type="button"
                                 className="mobile-mega-link"
                                 onClick={() => {
-                                  window.location.href = `/categoria/${toCategorySlug(cat)}?sub=${encodeURIComponent(group)}&tag=${encodeURIComponent(i)}`;
+                                  window.location.href = `/categoria/${categoryPath(cat)}?grupo=${encodeURIComponent(group)}&sub=${encodeURIComponent(i)}`;
                                   closeMobileMenu();
                                 }}
                               >
@@ -534,7 +548,7 @@ export function StoreHomeClient({ initialProducts }: { initialProducts: StorePro
                         type="button"
                         className="mobile-mega-see-all"
                         onClick={() => {
-                          window.location.href = `/categoria/${toCategorySlug(cat)}`;
+                          window.location.href = `/categoria/${categoryPath(cat)}`;
                           closeMobileMenu();
                         }}
                       >

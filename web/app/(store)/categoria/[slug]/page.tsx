@@ -1,48 +1,84 @@
 import { notFound } from "next/navigation";
 import { CategoryLandingClient } from "@/components/store/CategoryLandingClient";
 import { getStorefrontProducts } from "@/lib/products";
+import { getStorefrontCategoryBySlug, type StoreCategoryWithSubs } from "@/lib/store-categories";
 import { getMenuCategoryBySlug } from "@/lib/menu-config";
-import { catKeyFromDisplayName } from "@/lib/category-labels";
+import { slugify } from "@/lib/slugify";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type Props = {
   params: { slug: string };
-  searchParams?: { sub?: string; tag?: string };
+  searchParams?: { sub?: string; grupo?: string; tag?: string };
 };
 
-export default async function CategoryPage({ params, searchParams }: Props) {
-  const match = getMenuCategoryBySlug(params.slug);
-  if (!match) return notFound();
-
-  const [categoryLabel, menuData] = match;
-  const categoryKey = catKeyFromDisplayName(categoryLabel);
-  const allProducts = await getStorefrontProducts();
-  const categoryProducts = allProducts.filter((p) => p.category === categoryKey);
-
-  const menuSubcategories = Object.keys(menuData.subs);
-  const dataSubcategories = Array.from(
-    new Set(categoryProducts.map((p) => p.subcategory).filter(Boolean))
+function categoryFromStaticMenu(slug: string): StoreCategoryWithSubs | null {
+  const m = getMenuCategoryBySlug(slug);
+  if (!m) return null;
+  const [name, data] = m;
+  let sortOrder = 0;
+  const subcategories = Object.entries(data.subs).flatMap(([menuTag, names]) =>
+    names.map((subName) => ({
+      name: subName,
+      menuTag,
+      slug: slugify(`${menuTag}-${subName}`),
+      sortOrder: sortOrder++,
+    }))
   );
-  const subcategories = Array.from(new Set([...menuSubcategories, ...dataSubcategories]));
+  return {
+    id: "static",
+    slug,
+    name,
+    icon: data.icon,
+    sortOrder: 0,
+    subcategories,
+  };
+}
 
-  const menuTags = Object.values(menuData.subs).flatMap((tags) => tags);
-  const productTags = Array.from(new Set(categoryProducts.flatMap((p) => p.tags ?? [])));
-  const allTags = Array.from(new Set([...menuTags, ...productTags]));
-  const defaultSub = searchParams?.sub && subcategories.includes(searchParams.sub) ? searchParams.sub : "";
-  const defaultTag = searchParams?.tag && allTags.includes(searchParams.tag) ? searchParams.tag : "";
+export default async function CategoryPage({ params, searchParams }: Props) {
+  let cat = await getStorefrontCategoryBySlug(params.slug);
+  if (!cat && !process.env.DATABASE_URL) {
+    cat = categoryFromStaticMenu(params.slug);
+  }
+  if (!cat) return notFound();
+
+  const allProducts = await getStorefrontProducts();
+  const categoryProducts = allProducts.filter((p) => p.category === cat.slug);
+
+  const dbSubNames = cat.subcategories.map((s) => s.name);
+  const grupoLabels = Array.from(
+    new Set(
+      cat.subcategories.map((s) => (s.menuTag?.trim() ? s.menuTag.trim() : "General"))
+    )
+  ).sort((a, b) => a.localeCompare(b, "es"));
+
+  const defaultGrupo =
+    searchParams?.grupo && grupoLabels.includes(searchParams.grupo) ? searchParams.grupo : "";
+  const defaultSub =
+    searchParams?.sub && dbSubNames.includes(searchParams.sub) ? searchParams.sub : "";
+
+  const productTags = Array.from(new Set(categoryProducts.flatMap((p) => p.tags ?? []))).sort((a, b) =>
+    a.localeCompare(b, "es")
+  );
+  const defaultProductTag =
+    searchParams?.tag && productTags.includes(searchParams.tag) ? searchParams.tag : "";
 
   return (
     <CategoryLandingClient
-      categoryLabel={categoryLabel}
-      categorySlug={params.slug}
-      categoryIcon={menuData.icon}
+      categoryLabel={cat.name}
+      categorySlug={cat.slug}
+      categoryIcon={cat.icon ?? "📦"}
       products={categoryProducts}
-      subcategories={subcategories}
+      subcategoriesFromDb={cat.subcategories.map((s) => ({
+        name: s.name,
+        menuTag: s.menuTag,
+      }))}
+      grupoLabels={grupoLabels}
+      defaultGrupo={defaultGrupo}
       defaultSubcategory={defaultSub}
-      defaultTag={defaultTag}
-      menuTags={allTags}
+      productTagOptions={productTags}
+      defaultProductTag={defaultProductTag}
     />
   );
 }

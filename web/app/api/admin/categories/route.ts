@@ -23,6 +23,7 @@ function mapCategory(row: {
     id: string;
     slug: string;
     name: string;
+    menuTag: string | null;
     sortOrder: number;
     categoryId: string;
   }[];
@@ -37,6 +38,7 @@ function mapCategory(row: {
       id: s.id,
       slug: s.slug,
       name: s.name,
+      menuTag: s.menuTag,
       sortOrder: s.sortOrder,
       categoryId: s.categoryId,
     })),

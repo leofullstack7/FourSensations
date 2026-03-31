@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { Prisma, PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { slugify } from "../lib/slugify";
+import { defaultMenuConfig } from "../lib/menu-config";
 
 // Prisma CLI solo carga `.env`; Next usa `.env.local` — cargamos ambos (local gana).
 loadEnv({ path: resolve(process.cwd(), ".env") });
@@ -120,69 +121,38 @@ async function main() {
 
   const passwordHash = await bcrypt.hash(plainPassword, 12);
 
-  const categoriesSeed = [
-    {
-      slug: "maquillaje",
-      name: "Maquillaje",
-      icon: "💄",
-      sortOrder: 0,
-      subs: [
-        { slug: "labios", name: "Labios" },
-        { slug: "ojos", name: "Ojos" },
-        { slug: "rostro", name: "Rostro" },
-      ],
-    },
-    {
-      slug: "cuidado-piel",
-      name: "Cuidado piel",
-      icon: "🌿",
-      sortOrder: 1,
-      subs: [
-        { slug: "serum", name: "Sérum" },
-        { slug: "hidratacion", name: "Hidratación" },
-        { slug: "mascarillas", name: "Mascarillas" },
-      ],
-    },
-    {
-      slug: "cuidado-capilar",
-      name: "Cuidado capilar",
-      icon: "💇",
-      sortOrder: 2,
-      subs: [
-        { slug: "reparacion", name: "Reparación" },
-        { slug: "hidratacion-capilar", name: "Hidratación" },
-        { slug: "finalizadores", name: "Finalizadores" },
-      ],
-    },
-    {
-      slug: "unas",
-      name: "Uñas",
-      icon: "💅",
-      sortOrder: 3,
-      subs: [
-        { slug: "esmaltes", name: "Esmaltes" },
-        { slug: "cuidado-unas", name: "Cuidado" },
-        { slug: "herramientas-unas", name: "Herramientas" },
-      ],
-    },
-    {
-      slug: "hombres",
-      name: "Hombres",
-      icon: "🧔",
-      sortOrder: 4,
-      subs: [
-        { slug: "piel-hombre", name: "Piel" },
-        { slug: "barba", name: "Barba" },
-        { slug: "kits-hombre", name: "Kits" },
-      ],
-    },
-  ] as const;
+  type SubSeed = { slug: string; name: string; menuTag: string | null; sortOrder: number };
+
+  const categoriesSeed: { slug: string; name: string; icon: string; sortOrder: number; subs: SubSeed[] }[] = [];
+  let catOrder = 0;
+  for (const [catName, cfg] of Object.entries(defaultMenuConfig)) {
+    const slug = slugify(catName);
+    let subOrder = 0;
+    const subs: SubSeed[] = [];
+    for (const [menuTag, names] of Object.entries(cfg.subs)) {
+      for (const name of names) {
+        subs.push({
+          slug: slugify(`${menuTag}-${name}`),
+          name,
+          menuTag,
+          sortOrder: subOrder++,
+        });
+      }
+    }
+    categoriesSeed.push({
+      slug,
+      name: catName,
+      icon: cfg.icon,
+      sortOrder: catOrder++,
+      subs,
+    });
+  }
 
   const productsSeed = [
     {
       name: "Labial Velvet Nude",
       category: "maquillaje",
-      subcategory: "Labios",
+      subcategory: "Labial",
       description:
         "Labial líquido de larga duración con acabado aterciopelado. No reseca y deja un nude rosado favorecedor.",
       price: 28_900,
@@ -211,7 +181,7 @@ async function main() {
     {
       name: "Delineador Precision Ink",
       category: "maquillaje",
-      subcategory: "Ojos",
+      subcategory: "Delineador",
       description: "Delineador de punta extra fina, resistente al agua y al calor. Negro intenso.",
       price: 19_500,
       originalPrice: 25_000,
@@ -225,7 +195,7 @@ async function main() {
     {
       name: "Paleta Sombras Bloom",
       category: "maquillaje",
-      subcategory: "Ojos",
+      subcategory: "Sombras",
       description: "Doce tonos mate y satinados en familia rosa y malva. Pigmentación alta y difuminado fácil.",
       price: 65_000,
       originalPrice: 82_000,
@@ -253,7 +223,7 @@ async function main() {
     {
       name: "Crema Hidratante Calm Rose",
       category: "cuidado-piel",
-      subcategory: "Hidratación",
+      subcategory: "Hidratante",
       description: "Textura gel-crema con niacinamida y extracto de rosa mosqueta. Ideal para piel mixta.",
       price: 54_000,
       originalPrice: null,
@@ -323,7 +293,7 @@ async function main() {
     {
       name: "Kit Barba & Piel Daily",
       category: "hombres",
-      subcategory: "Kits",
+      subcategory: "Kit básico",
       description: "Limpiador facial + hidratante ligero + aceite de barba en formato viaje. Presentación regalo.",
       price: 72_000,
       originalPrice: 89_000,
@@ -337,7 +307,7 @@ async function main() {
     {
       name: "Protector solar fluido SPF 50",
       category: "cuidado-piel",
-      subcategory: "Hidratación",
+      subcategory: "Hidratante",
       description: "Toque seco, sin efecto blanco. Protección UVA/UVB amplia espectro para uso diario bajo maquillaje.",
       price: 48_000,
       originalPrice: null,
@@ -381,10 +351,11 @@ async function main() {
         icon: c.icon,
         sortOrder: c.sortOrder,
         subcategories: {
-          create: c.subs.map((s, i) => ({
+          create: c.subs.map((s) => ({
             slug: s.slug,
             name: s.name,
-            sortOrder: i,
+            menuTag: s.menuTag,
+            sortOrder: s.sortOrder,
           })),
         },
       },

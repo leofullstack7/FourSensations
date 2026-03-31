@@ -17,12 +17,14 @@ export const adminCategoryUpdateSchema = z.object({
 export const adminSubcategoryCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
   slug: z.string().trim().min(1).max(80).optional(),
+  menuTag: z.string().trim().min(1).max(80).nullable().optional(),
   sortOrder: z.coerce.number().int().optional(),
 });
 
 export const adminSubcategoryUpdateSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   slug: z.string().trim().min(1).max(80).optional(),
+  menuTag: z.string().trim().min(1).max(80).nullable().optional(),
   sortOrder: z.coerce.number().int().optional(),
 });
 

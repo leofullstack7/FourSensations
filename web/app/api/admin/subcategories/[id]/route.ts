@@ -17,6 +17,7 @@ function mapSub(s: {
   id: string;
   slug: string;
   name: string;
+  menuTag: string | null;
   sortOrder: number;
   categoryId: string;
 }): AdminSubcategoryRow {
@@ -24,6 +25,7 @@ function mapSub(s: {
     id: s.id,
     slug: s.slug,
     name: s.name,
+    menuTag: s.menuTag,
     sortOrder: s.sortOrder,
     categoryId: s.categoryId,
   };
@@ -95,6 +97,10 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
         data: {
           ...(d.name !== undefined && { name: d.name }),
           ...(d.sortOrder !== undefined && { sortOrder: d.sortOrder }),
+          ...(d.menuTag !== undefined && {
+            menuTag:
+              d.menuTag === null ? null : d.menuTag.trim() ? d.menuTag.trim() : null,
+          }),
           slug: nextSlug,
         },
       });

@@ -148,6 +148,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
         const description =
           row.mapped.description?.trim() || `Producto: ${name}`;
         const brand = row.mapped.brand?.trim() || "GinnaBeauty";
+        const tags = (row.mapped.tags ?? []).map((t) => t.trim()).filter(Boolean);
+        const applyTags = preview.csvHasTagsColumn === true;
 
         const productRow = clash
           ? await prisma.product.update({
@@ -161,6 +163,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
                 price: row.mapped.price!,
                 originalPrice: row.mapped.originalPrice ?? null,
                 stock: row.mapped.stock ?? 0,
+                ...(applyTags ? { tags } : {}),
                 imageUrl: mainUrl,
                 active: true,
                 images: {
@@ -183,6 +186,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
                 price: row.mapped.price!,
                 originalPrice: row.mapped.originalPrice ?? null,
                 stock: row.mapped.stock ?? 0,
+                tags: applyTags ? tags : [],
                 rating: 5,
                 reviews: 0,
                 badge: null,
