@@ -31,7 +31,11 @@ import {
   postBulkImportCommit,
   postBulkImportPreview,
 } from "@/lib/api/admin-bulk-import";
-import type { BulkPreviewNewTaxonomyItem, BulkPreviewResult } from "@/lib/bulk-import/build-preview";
+import type {
+  BulkPreviewNewTaxonomyItem,
+  BulkPreviewResult,
+  BulkTaxonomyRehomeHint,
+} from "@/lib/bulk-import/build-preview";
 import { isHttpImageUrl } from "@/lib/util/image-url";
 import { getDefaultAdminMenu } from "@/data/admin-initial";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
@@ -1343,6 +1347,7 @@ function AdminBulkTab({
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [showNewCategoriesModal, setShowNewCategoriesModal] = useState(false);
   const [applyingNewCategories, setApplyingNewCategories] = useState(false);
+  const [showTaxonomyHintsModal, setShowTaxonomyHintsModal] = useState(false);
 
   const sortedCats = useMemo(
     () => [...categories].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -1379,6 +1384,7 @@ function AdminBulkTab({
     setExistingPolicy("skip");
     setShowNewCategoriesModal(false);
     setApplyingNewCategories(false);
+    setShowTaxonomyHintsModal(false);
   };
 
   const pendingNewCategories = useMemo((): BulkPreviewNewTaxonomyItem[] => {
@@ -1402,11 +1408,24 @@ function AdminBulkTab({
       .filter((x): x is BulkPreviewNewTaxonomyItem => x != null);
   }, [preview]);
 
+  const taxonomyRehomeHints = useMemo((): BulkTaxonomyRehomeHint[] => {
+    const raw = preview?.taxonomyRehomeHints;
+    return Array.isArray(raw) ? raw : [];
+  }, [preview]);
+
   useEffect(() => {
     if (!preview) {
       setShowNewCategoriesModal(false);
+      setShowTaxonomyHintsModal(false);
       return;
     }
+    const hints = preview.taxonomyRehomeHints?.length ?? 0;
+    if (hints > 0) {
+      setShowTaxonomyHintsModal(true);
+      setShowNewCategoriesModal(false);
+      return;
+    }
+    setShowTaxonomyHintsModal(false);
     setShowNewCategoriesModal((preview.newCategories?.length ?? 0) > 0);
   }, [preview]);
 
@@ -1579,7 +1598,15 @@ function AdminBulkTab({
                 setJobId(res.jobId);
                 setPreview(res.preview);
                 setExpiresAt(res.expiresAt);
-                if ((res.preview.newCategories?.length ?? 0) > 0) {
+                const hintN = res.preview.taxonomyRehomeHints?.length ?? 0;
+                const newN = res.preview.newCategories?.length ?? 0;
+                if (hintN > 0) {
+                  showToast(
+                    `Hay ${hintN} sugerencia(s) de reubicación de categoría/subcategoría. Revísalas en el modal.`,
+                    "default",
+                    "💡"
+                  );
+                } else if (newN > 0) {
                   showToast("Se detectaron categorías o subcategorías nuevas. Revísalas antes de importar.", "default", "🆕");
                 } else {
                   showToast("Vista previa lista. Revisa columnas y filas.", "success", "🔍");
@@ -1634,6 +1661,7 @@ function AdminBulkTab({
                 ["Filas ambiguas", preview.stats.ambiguousRows],
                 ["Imágenes sin fila", preview.stats.unmatchedImages],
                 ["Con errores", preview.stats.rowsWithErrors],
+                ["Ya en tienda (código)", preview.stats.existingProductRows ?? 0],
               ] as const
             ).map(([label, n]) => (
               <div
@@ -1877,7 +1905,12 @@ function AdminBulkTab({
           <button
             type="button"
             className="btn btn-primary"
-            disabled={saving || selectedRowIds.size === 0 || pendingNewCategories.length > 0}
+            disabled={
+              saving ||
+              selectedRowIds.size === 0 ||
+              pendingNewCategories.length > 0 ||
+              taxonomyRehomeHints.length > 0
+            }
             onClick={() => {
               void (async () => {
                 setMutation("bulk");
@@ -1885,6 +1918,14 @@ function AdminBulkTab({
                   const res = await postBulkImportCommit(jobId, Array.from(selectedRowIds).sort(), existingPolicy);
                   if (res.imported > 0) {
                     showToast(`Importados ${res.imported} producto(s)`, "success", "🎉");
+                  }
+                  const skipped = res.skippedExistingDuplicates ?? 0;
+                  if (skipped > 0) {
+                    showToast(
+                      `${skipped} fila(s) omitida(s): el código ya estaba registrado (modo «no reemplazar»).`,
+                      "default",
+                      "⏭️"
+                    );
                   }
                   if (res.failed > 0) {
                     showToast(`${res.failed} error(es). Revisa consola o mensajes.`, "danger", "⚠️");
@@ -1901,6 +1942,12 @@ function AdminBulkTab({
           >
             {saving ? "Importando…" : `⬆️ Importar ${selectedRowIds.size} producto(s) seleccionado(s)`}
           </button>
+          {taxonomyRehomeHints.length > 0 && (
+            <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
+              Hay sugerencias de reubicación de categoría/subcategoría: revísalas en el modal. Si las rechazas, podrás
+              crear categorías nuevas como antes.
+            </p>
+          )}
           {pendingNewCategories.length > 0 && (
             <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
               Debes resolver primero las categorías o subcategorías nuevas detectadas en el CSV.
@@ -1908,6 +1955,53 @@ function AdminBulkTab({
           )}
         </>
       )}
+      <AdminBulkTaxonomyHintsModal
+        open={showTaxonomyHintsModal && taxonomyRehomeHints.length > 0}
+        hints={taxonomyRehomeHints}
+        saving={saving}
+        onClose={() => setShowTaxonomyHintsModal(false)}
+        onAccept={(hint) => {
+          if (!jobId) return;
+          void (async () => {
+            setMutation("bulk");
+            try {
+              const { preview: p } = await patchBulkImportJob(jobId, {
+                taxonomyOverrides: {
+                  [hint.pairKey]: {
+                    categorySlug: hint.suggestedCategorySlug,
+                    subcategoryName: hint.suggestedSubcategoryName,
+                  },
+                },
+                selectedRowIds: Array.from(selectedRowIds),
+              });
+              setPreview(p);
+              showToast("Sugerencia aplicada al preview", "success", "📂");
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : "Error al aplicar", "danger", "⚠️");
+            } finally {
+              setMutation(null);
+            }
+          })();
+        }}
+        onReject={(hint) => {
+          if (!jobId) return;
+          void (async () => {
+            setMutation("bulk");
+            try {
+              const { preview: p } = await patchBulkImportJob(jobId, {
+                taxonomyRehomeDismissed: { [hint.pairKey]: true },
+                selectedRowIds: Array.from(selectedRowIds),
+              });
+              setPreview(p);
+              showToast("Entendido: se usará tu texto del CSV para este par (p. ej. crear categoría nueva).", "default", "ℹ️");
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : "Error", "danger", "⚠️");
+            } finally {
+              setMutation(null);
+            }
+          })();
+        }}
+      />
       <AdminBulkNewCategoriesModal
         open={showNewCategoriesModal && pendingNewCategories.length > 0}
         items={pendingNewCategories}
@@ -2000,6 +2094,100 @@ function AdminBulkTab({
           })();
         }}
       />
+    </div>
+  );
+}
+
+function AdminBulkTaxonomyHintsModal({
+  open,
+  hints,
+  saving,
+  onClose,
+  onAccept,
+  onReject,
+}: {
+  open: boolean;
+  hints: BulkTaxonomyRehomeHint[];
+  saving: boolean;
+  onClose: () => void;
+  onAccept: (hint: BulkTaxonomyRehomeHint) => void;
+  onReject: (hint: BulkTaxonomyRehomeHint) => void;
+}) {
+  return (
+    <div
+      className={`admin-modal-overlay${open ? " open" : ""}`}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      role="presentation"
+    >
+      <div className="admin-modal" style={{ maxWidth: 720 }}>
+        <button type="button" className="modal-close" onClick={onClose}>
+          ✕
+        </button>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>
+          Revisar categorías del CSV
+        </div>
+        <p style={{ marginTop: 0, marginBottom: 14, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
+          Detectamos texto en el CSV que coincide mejor con una <strong>categoría y subcategoría que ya tienes</strong> (a veces
+          el archivo pone en «categoría» lo que en la tienda es una subcategoría, p. ej. Labios dentro de Maquillaje). Elige si
+          quieres usar la ubicación sugerida o mantener tu texto para crear taxonomía nueva.
+        </p>
+        <div
+          style={{
+            border: "1px solid var(--line, #e7d9d4)",
+            borderRadius: "var(--radius-md)",
+            maxHeight: 360,
+            overflow: "auto",
+            marginBottom: 16,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            padding: 12,
+          }}
+        >
+          {hints.map((h) => (
+            <div
+              key={h.id}
+              style={{
+                padding: 12,
+                borderRadius: "var(--radius-md)",
+                background: "var(--ivory, #fffaf8)",
+                border: "1px solid rgba(199, 165, 178, 0.45)",
+              }}
+            >
+              <p style={{ margin: "0 0 10px", fontSize: 13, lineHeight: 1.55 }}>
+                ¿No crees que los productos con categoría <strong>«{h.csvCategoryDisplay}»</strong> y subcategoría{" "}
+                <strong>«{h.csvSubcategoryDisplay}»</strong> encajan mejor en{" "}
+                <strong>
+                  {h.suggestedCategoryName} → {h.suggestedSubcategoryName}
+                </strong>{" "}
+                (ya registrados)?
+                <span style={{ display: "block", fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
+                  {h.rowCount} fila(s) con este par ·{" "}
+                  {h.kind === "category_column_looks_like_subcategory"
+                    ? "La columna categoría parece un nombre de subcategoría existente."
+                    : "La subcategoría encaja mejor en otra categoría del sistema."}
+                </span>
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={saving}
+                  onClick={() => onAccept(h)}
+                >
+                  Sí, usar esa ubicación
+                </button>
+                <button type="button" className="btn btn-outline btn-sm" disabled={saving} onClick={() => onReject(h)}>
+                  No, prefiero mi texto del CSV
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+          Si respondes <strong>No</strong>, podrás confirmar después la creación de categorías nuevas como hasta ahora.
+        </p>
+      </div>
     </div>
   );
 }

@@ -9,6 +9,8 @@ export function rebuildBulkPreview(params: {
   zipBuffer: Buffer;
   defaultCategorySlug: string | null;
   categoryTree: CategoryRow[];
+  taxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
+  taxonomyRehomeDismissed?: Record<string, boolean>;
 }): BulkPreviewResult {
   const { entries } = listZipImages(params.zipBuffer);
   return buildBulkPreview({
@@ -18,5 +20,7 @@ export function rebuildBulkPreview(params: {
     zipEntries: entries,
     categoryTree: params.categoryTree,
     defaultCategorySlug: params.defaultCategorySlug,
+    taxonomyOverrides: params.taxonomyOverrides,
+    taxonomyRehomeDismissed: params.taxonomyRehomeDismissed,
   });
 }

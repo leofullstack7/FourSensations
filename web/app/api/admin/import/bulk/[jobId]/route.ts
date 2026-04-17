@@ -6,41 +6,48 @@ import { noStoreJson } from "@/lib/server/no-store-json";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { fetchCategoryTreeForImport } from "@/lib/server/admin-category-tree";
 import { rebuildBulkPreview } from "@/lib/bulk-import/rebuild";
+import type { BulkPreviewResult } from "@/lib/bulk-import/build-preview";
+import { markBulkPreviewExistingByExternalRef } from "@/lib/server/bulk-import-mark-existing";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-async function markExistingRows(preview: { matchedRows: Array<{ normalizedCode: string | null; issues: string[]; selected: boolean; isExistingProduct: boolean; existingProductId: string | null; existingProductName: string | null }> }) {
-  const codes = Array.from(
-    new Set(preview.matchedRows.map((r) => r.normalizedCode).filter((x): x is string => !!x))
-  );
-  if (!codes.length) return;
-  const existing = await prisma.product.findMany({
-    where: { externalRef: { in: codes } },
-    select: { id: true, name: true, externalRef: true },
-  });
-  const byRef = new Map(existing.map((p) => [p.externalRef!, p] as const));
-  for (const row of preview.matchedRows) {
-    if (!row.normalizedCode) continue;
-    const hit = byRef.get(row.normalizedCode);
-    if (!hit) continue;
-    row.isExistingProduct = true;
-    row.existingProductId = hit.id;
-    row.existingProductName = hit.name;
-    if (!row.issues.includes("Producto ya registrado")) {
-      row.issues.push("Producto ya registrado");
-    }
-    row.selected = false;
-  }
-}
-
 type Ctx = { params: { jobId: string } };
+
+const taxonomyOverrideEntry = z.object({
+  categorySlug: z.string().min(1),
+  subcategoryName: z.string().min(1),
+});
 
 const patchSchema = z.object({
   codeColumnIndex: z.number().int().min(0).optional(),
   selection: z.array(z.boolean()).optional(),
   selectedRowIds: z.array(z.string().min(1)).optional(),
+  /** Clave `taxonomyPairKey(cat, sub)` → destino en el sistema. */
+  taxonomyOverrides: z.record(z.string(), taxonomyOverrideEntry).optional(),
+  /** Pares CSV para los que el usuario rechazó la sugerencia de reubicación. */
+  taxonomyRehomeDismissed: z.record(z.string(), z.boolean()).optional(),
 });
+
+function readTaxonomyStateFromJob(jobPreview: unknown): {
+  overrides: Record<string, { categorySlug: string; subcategoryName: string }>;
+  dismissed: Record<string, boolean>;
+} {
+  const p = jobPreview as BulkPreviewResult | null;
+  if (!p || typeof p !== "object") {
+    return { overrides: {}, dismissed: {} };
+  }
+  return {
+    overrides:
+      p.taxonomyOverrides && typeof p.taxonomyOverrides === "object"
+        ? p.taxonomyOverrides
+        : {},
+    dismissed:
+      p.taxonomyRehomeDismissed && typeof p.taxonomyRehomeDismissed === "object"
+        ? p.taxonomyRehomeDismissed
+        : {},
+  };
+}
 
 function parseHeadersRows(job: { headers: unknown; rows: unknown }): {
   headers: string[];
@@ -96,6 +103,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   }
 
   const categoryTree = await fetchCategoryTreeForImport();
+  const prevTax = readTaxonomyStateFromJob(job.previewPayload);
+  const taxonomyOverrides = {
+    ...prevTax.overrides,
+    ...(parsed.data.taxonomyOverrides ?? {}),
+  };
+  const taxonomyRehomeDismissed = {
+    ...prevTax.dismissed,
+    ...(parsed.data.taxonomyRehomeDismissed ?? {}),
+  };
   const preview = rebuildBulkPreview({
     headers,
     rows,
@@ -103,8 +119,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     zipBuffer: Buffer.from(job.zipBlob),
     defaultCategorySlug: null,
     categoryTree,
+    taxonomyOverrides,
+    taxonomyRehomeDismissed,
   });
-  await markExistingRows(preview);
+  await markBulkPreviewExistingByExternalRef(prisma, preview);
 
   const statsStored = {
     ...preview.stats,

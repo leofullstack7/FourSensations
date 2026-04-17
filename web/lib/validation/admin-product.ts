@@ -7,6 +7,20 @@ const optionalUrlOrEmpty = z
   .optional()
   .transform((v) => (v === "" || v === undefined ? null : v));
 
+/**
+ * Actualización parcial: si `imageUrl` no viene en el JSON, debe seguir siendo `undefined`
+ * para no pisar la imagen existente. (El helper de creación convierte omitido → `null`, lo cual
+ * aquí borraría la foto al guardar solo categoría u otros campos.)
+ */
+const optionalUrlOrEmptyForUpdate = z
+  .union([z.string().url(), z.literal(""), z.null()])
+  .optional()
+  .transform((v) => {
+    if (v === undefined) return undefined;
+    if (v === "" || v === null) return null;
+    return v;
+  });
+
 export const adminProductCreateSchema = z.object({
   name: z.string().trim().min(1, "Nombre requerido").max(200),
   brand: z.string().trim().min(1).max(120).optional(),
@@ -50,7 +64,7 @@ export const adminProductUpdateSchema = z
     reviews: z.coerce.number().int().min(0).optional(),
     badge: z.enum(badgeValues).nullable().optional(),
     emoji: z.string().trim().max(8).nullable().optional(),
-    imageUrl: optionalUrlOrEmpty,
+    imageUrl: optionalUrlOrEmptyForUpdate,
     isNew: z.boolean().optional(),
     featuredInHome: z.boolean().optional(),
     active: z.boolean().optional(),

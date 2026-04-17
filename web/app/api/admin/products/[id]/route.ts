@@ -97,6 +97,9 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
       nextExternalRef = ref;
     }
 
+    // Solo columnas escalares; `ProductImage` (galería) no se toca aquí.
+    // `imageUrl`: el esquema deja `undefined` si el cliente no envía la clave (no borrar foto);
+    // `null` o `""` parseados borran la imagen a propósito.
     const row = await prisma.product.update({
       where: { id },
       data: {

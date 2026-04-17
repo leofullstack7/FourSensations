@@ -7,8 +7,10 @@ import type { CategoryRow } from "./category-resolve";
 import {
   resolveCategorySlug,
   resolveSubcategoryName,
-  resolveCategoryBySubcategory,
   resolveSubcategoryGlobal,
+  taxonomyPairKey,
+  computeTaxonomyRehomeSuggestion,
+  type TaxonomyRehomeKind,
 } from "./category-resolve";
 
 export type BulkPreviewImageMatch = {
@@ -48,6 +50,8 @@ export type BulkPreviewRow = {
   existingProductName: string | null;
   issues: string[];
   selected: boolean;
+  /** Resolución antes de aplicar override manual (CSV + inferencia). */
+  taxonomyBeforeOverride: { categorySlug: string | null; subcategoryName: string | null };
 };
 
 export type BulkPreviewStats = {
@@ -61,6 +65,8 @@ export type BulkPreviewStats = {
   unmatchedRows: number;
   ambiguousRows: number;
   unmatchedImages: number;
+  /** Coincidencias con `Product.externalRef` (se rellena tras `markBulkPreviewExistingByExternalRef`). */
+  existingProductRows: number;
 };
 
 /** Categoría nueva desde CSV o solo subcategorías nuevas bajo categoría ya existente. */
@@ -71,13 +77,26 @@ export type BulkPreviewNewTaxonomyItem =
       subcategories: string[];
       rowCount: number;
     }
-  | {
+    | {
       kind: "newSubcategoriesOnly";
       parentCategorySlug: string;
       parentCategoryName: string;
       subcategories: string[];
       rowCount: number;
     };
+
+/** Sugerencia: el CSV parece confundir categoría/sub con otra rama ya registrada. */
+export type BulkTaxonomyRehomeHint = {
+  id: string;
+  pairKey: string;
+  csvCategoryDisplay: string;
+  csvSubcategoryDisplay: string;
+  rowCount: number;
+  kind: TaxonomyRehomeKind;
+  suggestedCategorySlug: string;
+  suggestedCategoryName: string;
+  suggestedSubcategoryName: string;
+};
 
 export type BulkPreviewResult = {
   headers: string[];
@@ -93,6 +112,11 @@ export type BulkPreviewResult = {
   imageMatches: BulkPreviewImageMatch[];
   unmatchedImages: BulkPreviewImageMatch[];
   newCategories: BulkPreviewNewTaxonomyItem[];
+  /** Overrides desde la UI: reubicar (categoría CSV, sub CSV) → slug + sub del sistema. */
+  taxonomyOverrides: Record<string, { categorySlug: string; subcategoryName: string }>;
+  /** Pares CSV para los que el usuario rechazó la sugerencia (no volver a mostrar). */
+  taxonomyRehomeDismissed: Record<string, boolean>;
+  taxonomyRehomeHints: BulkTaxonomyRehomeHint[];
   stats: BulkPreviewStats;
   orphanFileNames: string[];
 };
@@ -132,8 +156,19 @@ export function buildBulkPreview(params: {
   zipEntries: ZipImageEntry[];
   categoryTree: CategoryRow[];
   defaultCategorySlug: string | null;
+  taxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
+  taxonomyRehomeDismissed?: Record<string, boolean>;
 }): BulkPreviewResult {
-  const { headers, dataRows, codeColumnIndex, zipEntries, categoryTree, defaultCategorySlug } = params;
+  const {
+    headers,
+    dataRows,
+    codeColumnIndex,
+    zipEntries,
+    categoryTree,
+    defaultCategorySlug,
+    taxonomyOverrides = {},
+    taxonomyRehomeDismissed = {},
+  } = params;
   const headerFieldMap = buildHeaderFieldMap(headers);
   const csvHasTagsColumn = Array.from(headerFieldMap.values()).some((f) => f === "tags");
   const candidates = topCodeColumnCandidates(headers, dataRows, 8);
@@ -156,6 +191,7 @@ export function buildBulkPreview(params: {
       stock: !hasStockInput && mappedRaw.stock == null ? 0 : mappedRaw.stock,
     };
 
+    const pairKey = taxonomyPairKey(mappedBase.category, mappedBase.subcategory);
     const resolvedCategoryFromCsv = resolveCategorySlug(mappedBase.category, categoryTree);
     let categorySlug = resolvedCategoryFromCsv;
     let subcategoryName: string | null = null;
@@ -178,8 +214,22 @@ export function buildBulkPreview(params: {
     }
 
     // 3) Fallback: categoría por defecto solo si no hubo categoría desde CSV/inferencia.
-    const effectiveCat = categorySlug ?? defaultCategorySlug;
-    const catRow = categoryTree.find((c) => c.slug === effectiveCat);
+    let effectiveCat = categorySlug ?? defaultCategorySlug;
+    let categoryFromCsvResolvedFlag = !!resolvedCategoryFromCsv;
+    let subFromCsvResolvedFlag = subcategoryFromCsvResolved;
+
+    const taxonomyBeforeOverride: { categorySlug: string | null; subcategoryName: string | null } = {
+      categorySlug: effectiveCat ?? null,
+      subcategoryName,
+    };
+
+    const ov = taxonomyOverrides[pairKey];
+    if (ov) {
+      effectiveCat = ov.categorySlug;
+      subcategoryName = ov.subcategoryName;
+      categoryFromCsvResolvedFlag = true;
+      subFromCsvResolvedFlag = true;
+    }
 
     const issues = collectBaseRowIssues(
       mappedBase,
@@ -187,8 +237,8 @@ export function buildBulkPreview(params: {
       subcategoryName,
       categoryTree,
       codeRaw,
-      !!resolvedCategoryFromCsv,
-      subcategoryFromCsvResolved
+      categoryFromCsvResolvedFlag,
+      subFromCsvResolvedFlag
     );
 
     return {
@@ -210,6 +260,7 @@ export function buildBulkPreview(params: {
       existingProductName: null,
       issues,
       selected: false,
+      taxonomyBeforeOverride,
     };
   });
 
@@ -411,6 +462,54 @@ export function buildBulkPreview(params: {
     (a, b) => b.rowCount - a.rowCount || taxonomySortLabel(a).localeCompare(taxonomySortLabel(b))
   );
 
+  const hintAgg = new Map<
+    string,
+    {
+      pairKey: string;
+      csvCategoryDisplay: string;
+      csvSubcategoryDisplay: string;
+      kind: TaxonomyRehomeKind;
+      suggestedCategorySlug: string;
+      suggestedCategoryName: string;
+      suggestedSubcategoryName: string;
+      rowCount: number;
+    }
+  >();
+
+  for (const r of rows) {
+    const pk = taxonomyPairKey(r.mapped.category, r.mapped.subcategory);
+    if (taxonomyRehomeDismissed[pk]) continue;
+    if (taxonomyOverrides[pk]) continue;
+    const sug = computeTaxonomyRehomeSuggestion({
+      csvCategory: r.mapped.category,
+      csvSubcategory: r.mapped.subcategory,
+      tree: categoryTree,
+      resolvedCategorySlug: r.taxonomyBeforeOverride.categorySlug,
+      resolvedSubcategoryName: r.taxonomyBeforeOverride.subcategoryName,
+    });
+    if (!sug) continue;
+    const hid = `${pk}:::${sug.suggestedCategorySlug}:::${sug.suggestedSubcategoryName}:::${sug.kind}`;
+    const cur = hintAgg.get(hid);
+    if (cur) {
+      cur.rowCount += 1;
+    } else {
+      hintAgg.set(hid, {
+        pairKey: pk,
+        csvCategoryDisplay: (r.mapped.category ?? "").trim() || "—",
+        csvSubcategoryDisplay: (r.mapped.subcategory ?? "").trim() || "—",
+        kind: sug.kind,
+        suggestedCategorySlug: sug.suggestedCategorySlug,
+        suggestedCategoryName: sug.suggestedCategoryName,
+        suggestedSubcategoryName: sug.suggestedSubcategoryName,
+        rowCount: 1,
+      });
+    }
+  }
+
+  const taxonomyRehomeHints: BulkTaxonomyRehomeHint[] = Array.from(hintAgg.entries())
+    .map(([id, h]) => ({ id, ...h }))
+    .sort((a, b) => b.rowCount - a.rowCount || a.csvCategoryDisplay.localeCompare(b.csvCategoryDisplay));
+
   const rowsWithErrors = rows.filter((r) => r.issues.filter(isBlockingIssue).length > 0).length;
 
   return {
@@ -425,6 +524,9 @@ export function buildBulkPreview(params: {
     imageMatches: imageMatches.sort((a, b) => a.imageFilename.localeCompare(b.imageFilename)),
     unmatchedImages,
     newCategories,
+    taxonomyOverrides: { ...taxonomyOverrides },
+    taxonomyRehomeDismissed: { ...taxonomyRehomeDismissed },
+    taxonomyRehomeHints,
     orphanFileNames,
     stats: {
       totalRows: rows.length,
@@ -437,6 +539,7 @@ export function buildBulkPreview(params: {
       unmatchedRows: unmatchedRows.length,
       ambiguousRows: ambiguousRows.length,
       unmatchedImages: unmatchedImages.length,
+      existingProductRows: 0,
     },
   };
 }

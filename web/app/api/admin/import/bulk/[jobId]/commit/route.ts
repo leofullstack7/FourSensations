@@ -80,8 +80,10 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const idSet = new Set(parsed.data.rowIds ?? []);
   const indexSet = new Set(parsed.data.rowIndexes ?? []);
   const existingPolicy = parsed.data.existingPolicy ?? "skip";
+  const sourceRows = preview.matchedRows?.length ? preview.matchedRows : preview.rows;
   const toImport: BulkPreviewRow[] = [];
-  for (const row of (preview.matchedRows?.length ? preview.matchedRows : preview.rows)) {
+  const seenRefInSelection = new Set<string>();
+  for (const row of sourceRows) {
     const chosen =
       idSet.size > 0 ? idSet.has(row.previewRowId ?? row.rowId) : indexSet.has(row.rowIndex);
     if (!chosen) continue;
@@ -95,12 +97,29 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     if (!row.normalizedCode || !row.mapped.name || row.mapped.price == null || !row.mapped.categorySlug || !row.mapped.subcategoryName) {
       return noStoreJson({ error: `Fila ${row.rowIndex + 1}: datos incompletos` }, { status: 400 });
     }
+    const ref = row.normalizedCode;
+    if (seenRefInSelection.has(ref)) {
+      return noStoreJson(
+        {
+          error: `El código «${ref}» aparece en más de una fila seleccionada. Solo puede haber una fila por código de referencia.`,
+        },
+        { status: 400 }
+      );
+    }
+    seenRefInSelection.add(ref);
     toImport.push(row);
   }
 
   if (toImport.length === 0) {
     return noStoreJson({ error: "Ninguna fila vÃ¡lida para importar" }, { status: 400 });
   }
+
+  const refsBatch = toImport.map((r) => r.normalizedCode!);
+  const existingAtCommit = await prisma.product.findMany({
+    where: { externalRef: { in: refsBatch } },
+    select: { id: true, name: true, externalRef: true },
+  });
+  const clashByRef = new Map(existingAtCommit.map((p) => [p.externalRef!, p] as const));
 
   await prisma.bulkImportJob.update({
     where: { id: jobId },
@@ -110,14 +129,16 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const { byFileName } = listZipImages(Buffer.from(job.zipBlob));
   const createdProducts: ReturnType<typeof prismaProductToAdmin>[] = [];
   const errors: string[] = [];
+  let skippedExistingDuplicates = 0;
 
   try {
     for (const row of toImport) {
       const ref = row.normalizedCode!;
       try {
-        const clash = await prisma.product.findUnique({ where: { externalRef: ref } });
+        const clash = clashByRef.get(ref) ?? null;
         if (clash) {
           if (existingPolicy === "skip") {
+            skippedExistingDuplicates += 1;
             continue;
           }
         }
@@ -205,7 +226,17 @@ export async function POST(req: NextRequest, { params }: Ctx) {
               include: { images: true },
             });
         createdProducts.push(prismaProductToAdmin(productRow));
+        if (!clash) {
+          clashByRef.set(ref, { id: productRow.id, name: productRow.name, externalRef: ref });
+        }
       } catch (e) {
+        const code = (e as { code?: string })?.code;
+        if (code === "P2002") {
+          errors.push(
+            `Fila ${row.rowIndex + 1} (${ref}): el código ya está registrado (referencia duplicada).`
+          );
+          continue;
+        }
         const msg = e instanceof Error ? e.message : "Error desconocido";
         errors.push(`Fila ${row.rowIndex + 1} (${ref}): ${msg}`);
       }
@@ -214,6 +245,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const finalStats = {
       imported: createdProducts.length,
       failed: errors.length,
+      skippedExistingDuplicates,
       errors,
     };
 
@@ -246,6 +278,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       failed: errors.length,
       errors,
       products: createdProducts,
+      skippedExistingDuplicates,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error en importaciÃ³n";

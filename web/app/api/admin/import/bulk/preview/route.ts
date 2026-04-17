@@ -7,6 +7,7 @@ import { fetchCategoryTreeForImport } from "@/lib/server/admin-category-tree";
 import { parseCsv, pickCodeColumnIndex } from "@/lib/bulk-import/csv";
 import { listZipImages } from "@/lib/bulk-import/zip-manifest";
 import { buildBulkPreview } from "@/lib/bulk-import/build-preview";
+import { markBulkPreviewExistingByExternalRef } from "@/lib/server/bulk-import-mark-existing";
 import {
   BULK_CSV_MAX_BYTES,
   BULK_JOB_TTL_HOURS,
@@ -18,30 +19,6 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-async function markExistingRows(preview: { matchedRows: Array<{ normalizedCode: string | null; issues: string[]; selected: boolean; isExistingProduct: boolean; existingProductId: string | null; existingProductName: string | null }> }) {
-  const codes = Array.from(
-    new Set(preview.matchedRows.map((r) => r.normalizedCode).filter((x): x is string => !!x))
-  );
-  if (!codes.length) return;
-  const existing = await prisma.product.findMany({
-    where: { externalRef: { in: codes } },
-    select: { id: true, name: true, externalRef: true },
-  });
-  const byRef = new Map(existing.map((p) => [p.externalRef!, p] as const));
-  for (const row of preview.matchedRows) {
-    if (!row.normalizedCode) continue;
-    const hit = byRef.get(row.normalizedCode);
-    if (!hit) continue;
-    row.isExistingProduct = true;
-    row.existingProductId = hit.id;
-    row.existingProductName = hit.name;
-    if (!row.issues.includes("Producto ya registrado")) {
-      row.issues.push("Producto ya registrado");
-    }
-    row.selected = false;
-  }
-}
 
 export async function POST(req: NextRequest) {
   const denied = await requireAdminApi();
@@ -94,7 +71,7 @@ export async function POST(req: NextRequest) {
       categoryTree,
       defaultCategorySlug: null,
     });
-    await markExistingRows(preview);
+    await markBulkPreviewExistingByExternalRef(prisma, preview);
 
     const statsStored = {
       ...preview.stats,

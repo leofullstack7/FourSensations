@@ -23,6 +23,7 @@ model User {
   role          UserRole  @default(CUSTOMER)
   accounts      Account[]
   sessions      Session[]
+  orders        Order[]
 }
 
 model Account {
@@ -142,6 +143,79 @@ model Sale {
   status      String
   notes       String?
   createdAt   DateTime @default(now())
+}
+
+/// Estado del pedido en el flujo de compra (fulfillment).
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  CANCELLED
+  FAILED
+}
+
+/// Estado del cobro según proveedor (ePayco u otros).
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  APPROVED
+  DECLINED
+  EXPIRED
+}
+
+/// Pedido de tienda (checkout). La verdad del pago es `confirmationData` + `paymentStatus`, no la página de respuesta.
+model Order {
+  id                    String        @id @default(cuid())
+  /// Referencia única (p. ej. enviada a ePayco como `invoice`).
+  reference             String        @unique
+  status                OrderStatus   @default(PENDING_PAYMENT)
+  /// Identificador del proveedor: "EPAYCO", etc.
+  paymentProvider       String?
+  paymentStatus         PaymentStatus @default(PENDING)
+  /// ID de transacción en el proveedor (p. ej. ref_payco / x_ref_payco).
+  providerTransactionId String?       @unique
+  /// Última sesión Smart Checkout (debug / correlación).
+  epaycoSessionId       String?
+  /// Payload enviado al crear sesión u onboarding Standard (sin secretos).
+  providerPayload       Json?
+  /// Parámetros de la URL de respuesta (no autoritativo; auditoría y UX).
+  responseData          Json?
+  /// Cuerpo del webhook de confirmación (fuente de verdad del pago).
+  confirmationData      Json?
+  /// Montos en COP (misma unidad que `Product.price`).
+  subtotal              Int
+  shipping              Int           @default(0)
+  total                 Int
+  currency              String        @default("COP")
+  /// Datos de contacto y envío (estructura estable acordada con el checkout).
+  customerEmail         String
+  customerName          String
+  customerPhone         String?
+  shippingAddress       Json
+  customerNote          String?
+  userId                String?
+  user                  User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  items                 OrderItem[]
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([paymentStatus])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String?
+  name        String
+  imageUrl    String?
+  unitPrice   Int
+  quantity    Int
+  lineTotal   Int
+
+  @@index([orderId])
+  @@index([productId])
 }
 
 model SiteMenu {

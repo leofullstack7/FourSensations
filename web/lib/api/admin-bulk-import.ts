@@ -38,6 +38,8 @@ export async function patchBulkImportJob(
     defaultCategorySlug?: string | null;
     selection?: boolean[];
     selectedRowIds?: string[];
+    taxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
+    taxonomyRehomeDismissed?: Record<string, boolean>;
   }
 ): Promise<{ preview: BulkPreviewResult }> {
   const res = await fetch(`/api/admin/import/bulk/${jobId}`, {
@@ -62,6 +64,8 @@ export type BulkCommitResponse = {
   ok: boolean;
   imported: number;
   failed: number;
+  /** Filas con código ya existente omitidas (política «no reemplazar»). */
+  skippedExistingDuplicates?: number;
   errors: string[];
   products: AdminProduct[];
 };

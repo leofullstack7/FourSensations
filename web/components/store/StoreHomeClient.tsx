@@ -8,9 +8,8 @@ import type { MenuConfig } from "@/lib/types/admin";
 import type { CartLine, StoreProduct } from "@/lib/types/product";
 import { catKeyFromDisplayName, getCategoryLabel } from "@/lib/category-labels";
 import { formatPrice } from "@/lib/format";
+import { computeShippingCop, loadCart, saveCart } from "@/lib/cart-storage";
 import { isHttpImageUrl } from "@/lib/util/image-url";
-
-const CART_KEY = "gb_cart";
 
 type ToastItem = { id: number; msg: string; type: string; icon: string };
 
@@ -21,20 +20,6 @@ function normalizeSearchText(value: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
-}
-
-function loadCart(): CartLine[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(CART_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as CartLine[];
-    if (!Array.isArray(parsed)) return [];
-    // IDs históricos en localStorage pueden ser number; unificar a string para igualar catálogo.
-    return parsed.map((line) => ({ ...line, id: String(line.id) }));
-  } catch {
-    return [];
-  }
 }
 
 function ProductCard({
@@ -150,7 +135,6 @@ export function StoreHomeClient({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileExpandedCat, setMobileExpandedCat] = useState<string | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "fav-warning">("login");
   const [selectedProduct, setSelectedProduct] = useState<StoreProduct | null>(null);
@@ -165,7 +149,7 @@ export function StoreHomeClient({
 
   const persistCart = useCallback((next: CartLine[]) => {
     setCart(next);
-    localStorage.setItem(CART_KEY, JSON.stringify(next));
+    saveCart(next);
   }, []);
 
   const showToast = useCallback((msg: string, type = "default", icon = "🛍️") => {
@@ -355,19 +339,8 @@ export function StoreHomeClient({
     document.body.style.overflow = "";
   };
 
-  const openCheckout = () => {
-    closeCart();
-    setCheckoutOpen(true);
-    document.body.style.overflow = "hidden";
-  };
-
-  const closeCheckout = () => {
-    setCheckoutOpen(false);
-    document.body.style.overflow = "";
-  };
-
   const subtotal = getCartTotal();
-  const shipping = subtotal >= 100000 ? 0 : 9000;
+  const shipping = computeShippingCop(subtotal);
 
   return (
     <>
@@ -1018,9 +991,16 @@ export function StoreHomeClient({
               <span id="cart-total">{formatPrice(subtotal + shipping)}</span>
             </div>
           </div>
-          <button type="button" className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={openCheckout}>
+          <Link
+            href="/checkout"
+            className="btn btn-primary"
+            style={{ width: "100%", justifyContent: "center" }}
+            onClick={() => {
+              closeCart();
+            }}
+          >
             💳 Proceder al pago
-          </button>
+          </Link>
           <button type="button" className="btn btn-outline" style={{ width: "100%", justifyContent: "center", marginTop: 8 }} onClick={closeCart}>
             Seguir comprando
           </button>
@@ -1223,124 +1203,6 @@ export function StoreHomeClient({
               Crear cuenta gratis
             </a>
           </p>
-        </div>
-      </div>
-
-      <div
-        className={`modal-overlay${checkoutOpen ? " open" : ""}`}
-        id="checkout-overlay"
-        onClick={(e) => e.target === e.currentTarget && (closeCheckout(), (document.body.style.overflow = ""))}
-        role="presentation"
-      >
-        <div className="modal checkout-modal">
-          <button type="button" className="modal-close" onClick={closeCheckout}>
-            ✕
-          </button>
-          <div className="checkout-layout">
-            <div className="checkout-form-side">
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20, display: "flex", gap: 8, alignItems: "center" }}>
-                <span style={{ background: "var(--dark)", color: "white", width: 20, height: 20, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10 }}>1</span>
-                Datos <span style={{ opacity: 0.4 }}>›</span>
-                <span style={{ opacity: 0.4 }}>2 Envío</span>
-                <span style={{ opacity: 0.4 }}>›</span>
-                <span style={{ opacity: 0.4 }}>3 Pago</span>
-              </div>
-              <div className="checkout-step-title">Dirección de envío</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-                <div className="form-group">
-                  <label className="form-label">Nombre</label>
-                  <input type="text" className="form-input" placeholder="Tu nombre" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Apellido</label>
-                  <input type="text" className="form-input" placeholder="Tu apellido" />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Ciudad</label>
-                <input type="text" className="form-input" placeholder="Bogotá, Medellín, Cali..." />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Dirección</label>
-                <input type="text" className="form-input" placeholder="Calle, carrera, número" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Teléfono</label>
-                <input type="tel" className="form-input" placeholder="+57 300..." />
-              </div>
-              <div className="checkout-step-title" style={{ marginTop: 24 }}>
-                Método de pago
-              </div>
-              <div className="payment-grid">
-                <div className="payment-option soon">
-                  <div className="payment-option-icon">🟢</div>
-                  <div className="payment-option-name">ePayco</div>
-                </div>
-                <div className="payment-option soon">
-                  <div className="payment-option-icon">🔷</div>
-                  <div className="payment-option-name">Bold</div>
-                </div>
-                <div className="payment-option soon">
-                  <div className="payment-option-icon">🏦</div>
-                  <div className="payment-option-name">PSE</div>
-                </div>
-                <div className="payment-option">
-                  <div className="payment-option-icon">🚚</div>
-                  <div className="payment-option-name">Contra entrega</div>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ width: "100%", justifyContent: "center", marginTop: 20 }}
-                onClick={() => {
-                  showToast("¡Pedido enviado! Te contactaremos pronto", "success", "🎉");
-                  closeCheckout();
-                }}
-              >
-                ✅ Confirmar pedido
-              </button>
-            </div>
-            <div className="checkout-summary-side">
-              <div className="checkout-step-title">Resumen</div>
-              <div className="checkout-order-items" id="checkout-order-items">
-                {cart.map((item) => (
-                  <div key={item.id} className="co-item">
-                    <div className="co-item-img">
-                      {isHttpImageUrl(item.img) ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={item.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      ) : (
-                        item.emoji
-                      )}
-                    </div>
-                    <div>
-                      <div className="co-item-name">{item.name}</div>
-                      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>×{item.qty}</div>
-                    </div>
-                    <div className="co-item-price">{formatPrice(item.price * item.qty)}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ borderTop: "1px solid var(--cream)", marginTop: 20, paddingTop: 16 }}>
-                <div className="cart-summary-row">
-                  <span>Subtotal</span>
-                  <span id="co-subtotal">{formatPrice(subtotal)}</span>
-                </div>
-                <div className="cart-summary-row">
-                  <span>Envío</span>
-                  <span id="co-shipping">{shipping === 0 ? "Gratis" : formatPrice(shipping)}</span>
-                </div>
-                <div className="cart-summary-row total">
-                  <span>Total</span>
-                  <span id="co-total">{formatPrice(subtotal + shipping)}</span>
-                </div>
-              </div>
-              <div style={{ background: "var(--ivory)", borderRadius: "var(--radius-md)", padding: 12, marginTop: 16, fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
-                🔒 Compra 100% segura · Datos protegidos · Envío rastreado
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
