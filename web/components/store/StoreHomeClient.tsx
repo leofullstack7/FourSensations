@@ -28,7 +28,10 @@ function loadCart(): CartLine[] {
   try {
     const raw = localStorage.getItem(CART_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as CartLine[];
+    const parsed = JSON.parse(raw) as CartLine[];
+    if (!Array.isArray(parsed)) return [];
+    // IDs históricos en localStorage pueden ser number; unificar a string para igualar catálogo.
+    return parsed.map((line) => ({ ...line, id: String(line.id) }));
   } catch {
     return [];
   }
@@ -43,9 +46,9 @@ function ProductCard({
 }: {
   product: StoreProduct;
   isFav: boolean;
-  onOpen: (id: number) => void;
-  onToggleFav: (id: number) => void;
-  onAddCart: (id: number) => void;
+  onOpen: (id: string) => void;
+  onToggleFav: (id: string) => void;
+  onAddCart: (id: string) => void;
 }) {
   const discount = product.originalPrice
     ? Math.round((1 - product.price / product.originalPrice) * 100)
@@ -137,7 +140,7 @@ export function StoreHomeClient({
     [categorySlugByName]
   );
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [favorites, setFavorites] = useState<number[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
   const [user, setUser] = useState<{ name: string; email: string; provider: string } | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [manualSub, setManualSub] = useState<string | null>(null);
@@ -194,7 +197,7 @@ export function StoreHomeClient({
   const cartCount = useMemo(() => cart.reduce((s, i) => s + i.qty, 0), [cart]);
 
   const addToCart = useCallback(
-    (productId: number) => {
+    (productId: string) => {
       const product = products.find((p) => p.id === productId);
       if (!product) return;
       const existing = cart.find((i) => i.id === productId);
@@ -209,14 +212,14 @@ export function StoreHomeClient({
   );
 
   const removeFromCart = useCallback(
-    (productId: number) => {
+    (productId: string) => {
       persistCart(cart.filter((i) => i.id !== productId));
     },
     [cart, persistCart],
   );
 
   const changeQty = useCallback(
-    (productId: number, delta: number) => {
+    (productId: string, delta: number) => {
       const item = cart.find((i) => i.id === productId);
       if (!item) return;
       const nextQty = item.qty + delta;
@@ -229,7 +232,7 @@ export function StoreHomeClient({
   const getCartTotal = useCallback(() => cart.reduce((s, i) => s + i.price * i.qty, 0), [cart]);
 
   const toggleFavorite = useCallback(
-    (productId: number) => {
+    (productId: string) => {
       if (!user) {
         setAuthMode("fav-warning");
         setAuthOpen(true);
@@ -310,7 +313,7 @@ export function StoreHomeClient({
     setManualSub(null);
   };
 
-  const openProductModal = (id: number) => {
+  const openProductModal = (id: string) => {
     const p = products.find((x) => x.id === id);
     if (!p) return;
     setSelectedProduct(p);

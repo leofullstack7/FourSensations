@@ -23,14 +23,12 @@ function rowToStore(
   },
   galleryRows: { url: string }[] = []
 ): StoreProduct {
-  let hash = 0;
-  for (let i = 0; i < p.id.length; i++) hash = (hash + p.id.charCodeAt(i)) | 0;
   const main = p.imageUrl?.trim() || "";
   const extras = galleryRows.map((g) => g.url).filter(Boolean);
   const primary = main || extras[0] || "";
   const gallery = main ? extras : extras.slice(1);
   return {
-    id: Math.abs(hash) % 2147483647 || 1,
+    id: p.id,
     name: p.name,
     brand: p.brand,
     category: p.category,

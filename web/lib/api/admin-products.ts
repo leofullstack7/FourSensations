@@ -79,3 +79,14 @@ export async function deleteAdminProduct(id: string): Promise<void> {
   const res = await fetch(`/api/admin/products/${id}`, { method: "DELETE", credentials: "include" });
   if (!res.ok) throw new Error(await parseError(res));
 }
+
+/** Asigna a cada producto la etiqueta de menú (`Subcategory.menuTag`) de su subcategoría. */
+export async function postSyncProductTagsFromMenu(): Promise<{ updated: number; total: number }> {
+  const res = await fetch("/api/admin/products/sync-menu-tags", {
+    method: "POST",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as { updated: number; total: number };
+}

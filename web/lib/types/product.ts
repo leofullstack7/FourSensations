@@ -2,7 +2,8 @@
 export type StoreBadge = "new" | "sale" | "hot" | "best" | null;
 
 export type StoreProduct = {
-  id: number;
+  /** Cuid/UUID en DB; string en mocks. Nunca derivar de un hash (colisiona). */
+  id: string;
   name: string;
   brand: string;
   category: string;

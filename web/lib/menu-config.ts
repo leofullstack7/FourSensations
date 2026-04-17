@@ -45,3 +45,36 @@ export function toCategorySlug(label: string): string {
 export function getMenuCategoryBySlug(slug: string) {
   return Object.entries(defaultMenuConfig).find(([label]) => toCategorySlug(label) === slug) ?? null;
 }
+
+function normalizeCategoryLabel(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Etiquetas de columna del mega menú (texto dorado) para una categoría de tienda.
+ * Coincide por nombre de categoría en BD o por slug URL (`Category.slug`).
+ * Si la categoría no está en `defaultMenuConfig`, devuelve `[]` (solo entrada manual en admin).
+ */
+export function getMenuGroupLabelsForStoreCategory(params: { name: string; slug: string }): string[] {
+  const slugNorm = params.slug.trim().toLowerCase();
+  const nameNorm = normalizeCategoryLabel(params.name);
+
+  const collectKeys = (cfg: (typeof defaultMenuConfig)[string]) =>
+    Object.keys(cfg.subs).sort((a, b) => a.localeCompare(b, "es"));
+
+  for (const [label, cfg] of Object.entries(defaultMenuConfig)) {
+    if (label === params.name) return collectKeys(cfg);
+  }
+  for (const [label, cfg] of Object.entries(defaultMenuConfig)) {
+    if (toCategorySlug(label) === slugNorm) return collectKeys(cfg);
+  }
+  for (const [label, cfg] of Object.entries(defaultMenuConfig)) {
+    if (normalizeCategoryLabel(label) === nameNorm) return collectKeys(cfg);
+  }
+  return [];
+}
