@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useReveal } from "@/hooks/useReveal";
@@ -9,6 +10,7 @@ import type { CartLine, StoreProduct } from "@/lib/types/product";
 import { catKeyFromDisplayName, getCategoryLabel } from "@/lib/category-labels";
 import { formatPrice } from "@/lib/format";
 import { computeShippingCop, loadCart, saveCart } from "@/lib/cart-storage";
+import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
 import { isHttpImageUrl } from "@/lib/util/image-url";
 
 type ToastItem = { id: number; msg: string; type: string; icon: string };
@@ -136,6 +138,7 @@ export function StoreHomeClient({
   const [mobileExpandedCat, setMobileExpandedCat] = useState<string | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const [topbarIndex, setTopbarIndex] = useState(0);
   const [authMode, setAuthMode] = useState<"login" | "fav-warning">("login");
   const [selectedProduct, setSelectedProduct] = useState<StoreProduct | null>(null);
   const [modalImgIdx, setModalImgIdx] = useState(0);
@@ -145,6 +148,13 @@ export function StoreHomeClient({
 
   useEffect(() => {
     setCart(loadCart());
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setTopbarIndex((i) => (i + 1) % STOREFRONT_TOPBAR_MESSAGES.length);
+    }, 7500);
+    return () => window.clearInterval(id);
   }, []);
 
   const persistCart = useCallback((next: CartLine[]) => {
@@ -344,8 +354,16 @@ export function StoreHomeClient({
 
   return (
     <>
-      <div className="topbar">
-        ✨ <span>ENVÍO GRATIS</span> en compras superiores a $100.000 · Pago contra entrega disponible 🇨🇴
+      <div className="topbar" aria-live="polite">
+        <motion.span
+          key={topbarIndex}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+          style={{ display: "inline-block" }}
+        >
+          {STOREFRONT_TOPBAR_MESSAGES[topbarIndex]}
+        </motion.span>
       </div>
 
       <header className="header" id="main-header">
@@ -1160,7 +1178,7 @@ export function StoreHomeClient({
               💝 ¡Guarda tus productos favoritos! <strong>Inicia sesión</strong> para que tu lista se conserve incluso si cierras la página.
             </p>
           </div>
-          <div className="auth-title">Bienvenida</div>
+          <div className="auth-title">Bienvenido/a</div>
           <p className="auth-sub">Inicia sesión para una experiencia de compra personalizada</p>
           <div className="auth-social-btns">
             <button

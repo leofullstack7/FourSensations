@@ -41,6 +41,8 @@ import { getDefaultAdminMenu } from "@/data/admin-initial";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import type { AdminProduct, AdminSale, MenuConfig } from "@/lib/types/admin";
 import { formatPrice } from "@/lib/format";
+import { BulkImportProgressOverlay } from "@/components/admin/BulkImportProgressOverlay";
+import { useBufferedProgress } from "@/hooks/useBufferedProgress";
 import { getMenuGroupLabelsForStoreCategory } from "@/lib/menu-config";
 
 type AdminPageId = "dashboard" | "products" | "sales" | "stock" | "categories" | "menu" | "reports";
@@ -1348,6 +1350,8 @@ function AdminBulkTab({
   const [showNewCategoriesModal, setShowNewCategoriesModal] = useState(false);
   const [applyingNewCategories, setApplyingNewCategories] = useState(false);
   const [showTaxonomyHintsModal, setShowTaxonomyHintsModal] = useState(false);
+  const bulkProgress = useBufferedProgress(93);
+  const [bulkProgressLabel, setBulkProgressLabel] = useState("");
 
   const sortedCats = useMemo(
     () => [...categories].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -1490,6 +1494,7 @@ function AdminBulkTab({
 
   return (
     <div className="admin-card">
+      <BulkImportProgressOverlay open={bulkProgress.active} percent={bulkProgress.percent} label={bulkProgressLabel} />
       <div className="admin-card-title" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span>📦 Carga masiva CSV + ZIP</span>
         <span
@@ -1590,11 +1595,14 @@ function AdminBulkTab({
             void (async () => {
               if (!csvFile || !zipFile) return;
               setMutation("bulk");
+              setBulkProgressLabel("Analizando CSV y ZIP en el servidor…");
+              bulkProgress.start();
               try {
                 const fd = new FormData();
                 fd.append("csv", csvFile);
                 fd.append("zip", zipFile);
                 const res = await postBulkImportPreview(fd);
+                bulkProgress.finish();
                 setJobId(res.jobId);
                 setPreview(res.preview);
                 setExpiresAt(res.expiresAt);
@@ -1612,6 +1620,7 @@ function AdminBulkTab({
                   showToast("Vista previa lista. Revisa columnas y filas.", "success", "🔍");
                 }
               } catch (e) {
+                bulkProgress.reset();
                 showToast(e instanceof Error ? e.message : "Error al analizar", "danger", "⚠️");
               } finally {
                 setMutation(null);
@@ -1914,8 +1923,11 @@ function AdminBulkTab({
             onClick={() => {
               void (async () => {
                 setMutation("bulk");
+                setBulkProgressLabel("Importando productos y subiendo imágenes…");
+                bulkProgress.start();
                 try {
                   const res = await postBulkImportCommit(jobId, Array.from(selectedRowIds).sort(), existingPolicy);
+                  bulkProgress.finish();
                   if (res.imported > 0) {
                     showToast(`Importados ${res.imported} producto(s)`, "success", "🎉");
                   }
@@ -1933,6 +1945,7 @@ function AdminBulkTab({
                   await onImported();
                   resetSession();
                 } catch (e) {
+                  bulkProgress.reset();
                   showToast(e instanceof Error ? e.message : "Error al importar", "danger", "⚠️");
                 } finally {
                   setMutation(null);
