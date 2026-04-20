@@ -116,6 +116,13 @@ export async function POST(req: Request) {
     },
   });
 
+  console.info("[epayco] session creada", {
+    test,
+    reference: order.reference,
+    amount: order.total,
+    sessionIdPrefix: sessionId.slice(0, 8),
+  });
+
   return NextResponse.json({
     sessionId,
     sessionToken,

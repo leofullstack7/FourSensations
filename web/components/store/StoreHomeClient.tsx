@@ -2,7 +2,8 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useReveal } from "@/hooks/useReveal";
 import { toCategorySlug } from "@/lib/menu-config";
 import type { MenuConfig } from "@/lib/types/admin";
@@ -138,6 +139,9 @@ export function StoreHomeClient({
   const [mobileExpandedCat, setMobileExpandedCat] = useState<string | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const [adminOpening, setAdminOpening] = useState(false);
+  const adminNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const router = useRouter();
   const [topbarIndex, setTopbarIndex] = useState(0);
   const [authMode, setAuthMode] = useState<"login" | "fav-warning">("login");
   const [selectedProduct, setSelectedProduct] = useState<StoreProduct | null>(null);
@@ -155,6 +159,12 @@ export function StoreHomeClient({
       setTopbarIndex((i) => (i + 1) % STOREFRONT_TOPBAR_MESSAGES.length);
     }, 7500);
     return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (adminNavTimerRef.current) clearTimeout(adminNavTimerRef.current);
+    };
   }, []);
 
   const persistCart = useCallback((next: CartLine[]) => {
@@ -494,9 +504,23 @@ export function StoreHomeClient({
                     {cartCount}
                   </span>
                 </button>
-                <Link href="/admin" className="icon-btn icon-btn--admin" title="Panel Admin">
+                <button
+                  type="button"
+                  className="icon-btn icon-btn--admin"
+                  title="Panel Admin"
+                  disabled={adminOpening}
+                  aria-busy={adminOpening}
+                  onClick={() => {
+                    if (adminOpening) return;
+                    setAdminOpening(true);
+                    adminNavTimerRef.current = setTimeout(() => {
+                      adminNavTimerRef.current = null;
+                      router.push("/admin");
+                    }, 2000);
+                  }}
+                >
                   ⚙️
-                </Link>
+                </button>
               </div>
             </div>
           </div>
@@ -667,7 +691,7 @@ export function StoreHomeClient({
             <div className="trust-item">
               <div className="trust-icon">🔄</div>
               <div>
-                <div className="trust-title">Devoluciones 30 días</div>
+                <div className="trust-title">Devoluciones 7 días</div>
                 <div className="trust-desc">Satisfacción o te devolvemos</div>
               </div>
             </div>
@@ -1143,7 +1167,7 @@ export function StoreHomeClient({
                     </button>
                   </div>
                   <div style={{ background: "var(--ivory)", borderRadius: "var(--radius-md)", padding: 14, marginTop: 16, fontSize: 13, color: "var(--text-light)" }}>
-                    🚚 Envío a todo el país · 🔄 Devoluciones 30 días · ✅ Pago seguro
+                    🚚 Envío a todo el país · 🔄 Devoluciones 7 días · ✅ Pago seguro
                   </div>
                 </div>
               </div>
@@ -1282,6 +1306,51 @@ export function StoreHomeClient({
           </div>
         </div>
       </div>
+
+      {adminOpening && (
+        <div
+          role="status"
+          aria-live="polite"
+          aria-label="Cargando panel de administración"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1100,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(45,31,26,0.45)",
+            backdropFilter: "blur(6px)",
+          }}
+        >
+          <div
+            style={{
+              textAlign: "center",
+              padding: "28px 36px",
+              borderRadius: "var(--radius-lg)",
+              background: "var(--white)",
+              boxShadow: "var(--shadow-lg)",
+              minWidth: 220,
+            }}
+          >
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 0.85, ease: "linear" }}
+              style={{
+                width: 44,
+                height: 44,
+                margin: "0 auto 14px",
+                border: "3px solid var(--cream)",
+                borderTopColor: "var(--dusty-rose)",
+                borderRadius: "50%",
+                boxSizing: "border-box",
+              }}
+            />
+            <div style={{ fontWeight: 600, color: "var(--dark)", fontSize: 15 }}>Abriendo panel…</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>Redirigiendo al admin</div>
+          </div>
+        </div>
+      )}
 
       <div className="toast-container" id="toast-container">
         {toasts.map((t) => (
