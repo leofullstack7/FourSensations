@@ -6,6 +6,7 @@ import { noStoreJson } from "@/lib/server/no-store-json";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { fetchCategoryTreeForImport } from "@/lib/server/admin-category-tree";
 import { rebuildBulkPreview } from "@/lib/bulk-import/rebuild";
+import { bulkImportStableRowId } from "@/lib/bulk-import/bulk-import-row-id";
 import type { BulkPreviewResult } from "@/lib/bulk-import/build-preview";
 import { markBulkPreviewExistingByExternalRef } from "@/lib/server/bulk-import-mark-existing";
 export const runtime = "nodejs";
@@ -140,10 +141,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (parsed.data.selectedRowIds && Array.isArray(parsed.data.selectedRowIds)) {
     const idSet = new Set(parsed.data.selectedRowIds);
     for (const r of preview.rows) {
-      r.selected = idSet.has(r.previewRowId ?? r.rowId);
+      r.selected = idSet.has(bulkImportStableRowId(r));
     }
     for (const r of preview.matchedRows) {
-      r.selected = idSet.has(r.previewRowId ?? r.rowId);
+      r.selected = idSet.has(bulkImportStableRowId(r));
     }
     for (const r of preview.unmatchedRows) {
       r.selected = false;

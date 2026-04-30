@@ -10,7 +10,9 @@ import { allocateUniqueProductSlug } from "@/lib/server/product-slug";
 import { prismaProductToAdmin } from "@/lib/mappers/admin-product";
 import { listZipImages } from "@/lib/bulk-import/zip-manifest";
 import { mimeFromImagePath } from "@/lib/bulk-import/mime";
+import { bulkImportStableRowId } from "@/lib/bulk-import/bulk-import-row-id";
 import type { BulkPreviewResult, BulkPreviewRow } from "@/lib/bulk-import/build-preview";
+import { effectiveProductTitle } from "@/lib/bulk-import/semantic-map";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,7 +87,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const seenRefInSelection = new Set<string>();
   for (const row of sourceRows) {
     const chosen =
-      idSet.size > 0 ? idSet.has(row.previewRowId ?? row.rowId) : indexSet.has(row.rowIndex);
+      idSet.size > 0 ? idSet.has(bulkImportStableRowId(row)) : indexSet.has(row.rowIndex);
     if (!chosen) continue;
     const blocking = row.issues.filter((x) => BLOCKING_FILTER(x));
     if (blocking.length > 0) {
@@ -94,7 +96,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
         { status: 400 }
       );
     }
-    if (!row.normalizedCode || !row.mapped.name || row.mapped.price == null || !row.mapped.categorySlug || !row.mapped.subcategoryName) {
+    const title = effectiveProductTitle(row.mapped);
+    if (!row.normalizedCode || !title || row.mapped.price == null || !row.mapped.categorySlug || !row.mapped.subcategoryName) {
       return noStoreJson({ error: `Fila ${row.rowIndex + 1}: datos incompletos` }, { status: 400 });
     }
     const ref = row.normalizedCode;
@@ -164,7 +167,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
           else galleryUrls.push(publicUrl);
         }
 
-        const name = row.mapped.name!.trim();
+        const name = effectiveProductTitle(row.mapped)!.trim();
         const slug = await allocateUniqueProductSlug(name);
         const description =
           row.mapped.description?.trim() || `Producto: ${name}`;

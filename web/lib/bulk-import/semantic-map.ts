@@ -6,11 +6,27 @@ type SynonymGroup = { keys: string[]; field: keyof SemanticMapped };
 const GROUPS: SynonymGroup[] = [
   {
     field: "name",
-    keys: ["detalle", "nombre", "producto", "descripcion corta", "titulo", "name"],
+    keys: [
+      "descripcion",
+      "descripción",
+      "detalle",
+      "nombre",
+      "nombre del producto",
+      "nombre producto",
+      "producto",
+      "articulo",
+      "artículo",
+      "item",
+      "descripcion corta",
+      "descripcion del producto",
+      "titulo",
+      "titulo producto",
+      "name",
+    ],
   },
   {
     field: "description",
-    keys: ["descripcion", "descripción", "texto", "notas"],
+    keys: ["descripcion larga", "texto largo", "texto", "notas", "observaciones", "contenido"],
   },
   {
     field: "price",
@@ -39,13 +55,29 @@ const GROUPS: SynonymGroup[] = [
       "sub linea",
       "sublinea",
       "sub-línea",
+      "subgrupo",
+      "sub grupo",
       "linea",
       "línea",
     ],
   },
   {
     field: "category",
-    keys: ["categoria", "categoría", "category", "rubro", "linea principal", "linea"],
+    keys: [
+      "categoria",
+      "categoría",
+      "category",
+      "rubro",
+      "departamento",
+      "division",
+      "división",
+      "grupo",
+      "familia",
+      "seccion",
+      "sección",
+      "linea principal",
+      "linea",
+    ],
   },
   {
     field: "tags",
@@ -175,7 +207,7 @@ export function parseTagsFromCell(raw: string): string[] {
   return out;
 }
 
-function mergeTagsChunks(chunks: string[][]): string[] {
+export function mergeTagTokenLists(chunks: string[][]): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const chunk of chunks) {
@@ -188,6 +220,40 @@ function mergeTagsChunks(chunks: string[][]): string[] {
     }
   }
   return out;
+}
+
+function mergeTagsChunks(chunks: string[][]): string[] {
+  return mergeTagTokenLists(chunks);
+}
+
+/**
+ * Une tokens para enriquecer fila: etiquetas ya partidas, una sola celda con comas,
+ * listas en descripción/nombre, etc.
+ */
+export function aggregateTokensForRowEnrichment(m: SemanticMapped): string[] {
+  const chunks: string[][] = [];
+
+  let fromTags = [...m.tags];
+  if (fromTags.length === 1 && /[,;|]/.test(fromTags[0]!)) {
+    fromTags = parseTagsFromCell(fromTags[0]!);
+  }
+  if (fromTags.length) chunks.push(fromTags);
+
+  const desc = m.description?.trim() ?? "";
+  if (desc.length > 0 && /[,;|]/.test(desc) && parseTagsFromCell(desc).length >= 2) {
+    chunks.push(parseTagsFromCell(desc));
+  }
+
+  const rawName = m.name?.trim() ?? "";
+  if (rawName.length > 0 && /[,;|]/.test(rawName) && parseTagsFromCell(rawName).length >= 3) {
+    chunks.push(parseTagsFromCell(rawName));
+  }
+
+  let merged = mergeTagTokenLists(chunks);
+  if (merged.length === 1 && /[,;|]/.test(merged[0]!)) {
+    merged = parseTagsFromCell(merged[0]!);
+  }
+  return merged;
 }
 
 export function mapRowValues(
@@ -242,5 +308,99 @@ export function mapRowValues(
     }
   });
   out.tags = mergeTagsChunks(tagChunks);
+  return out;
+}
+
+const MAX_TITLE_LEN = 240;
+
+/** Título para la tienda: nombre de columna o primera línea de descripción (CSV muy común). */
+export function effectiveProductTitle(m: SemanticMapped): string | null {
+  const n = m.name?.trim();
+  if (n) return n.length > MAX_TITLE_LEN ? n.slice(0, MAX_TITLE_LEN) : n;
+  const d = m.description?.trim();
+  if (!d) return null;
+  const line = d.split(/\r?\n/)[0]?.trim() ?? "";
+  if (!line) return null;
+  return line.length > MAX_TITLE_LEN ? line.slice(0, MAX_TITLE_LEN) : line;
+}
+
+/**
+ * Rellena nombre / categoría / subcategoría / marca desde tokens en «etiquetas» cuando el CSV
+ * trae varios datos en una sola columna (p. ej. EAN, código, rubro en mayúsculas, título mezclado).
+ */
+export function enrichSparseMappedFromTags(m: SemanticMapped, codeRaw: string): SemanticMapped {
+  const tagPool = aggregateTokensForRowEnrichment(m);
+  if (tagPool.length < 2) return m;
+
+  let base: SemanticMapped = { ...m, tags: tagPool };
+  if (m.name?.trim() && /[,;|]/.test(m.name) && parseTagsFromCell(m.name).length >= 3) {
+    base = { ...base, name: null };
+  }
+  if (m.description?.trim() && /[,;|]/.test(m.description) && parseTagsFromCell(m.description).length >= 3) {
+    base = { ...base, description: null };
+  }
+
+  const normCode = normalizeKey(codeRaw);
+  const isEanLike = (t: string) => /^\d{8,15}$/.test(t.replace(/\s+/g, ""));
+  const matchesCode = (t: string) => normCode.length > 0 && normalizeKey(t) === normCode;
+
+  let tokens = base.tags.map((t) => t.trim()).filter((t) => t.length > 0);
+  tokens = tokens.filter((t) => !isEanLike(t) && !matchesCode(t));
+  tokens = tokens.filter((t) => {
+    const p = parsePriceInt(t);
+    if (p != null && t.replace(/\s/g, "").length <= 14) return false;
+    return true;
+  });
+  tokens = tokens.filter((t) => !/^0+$/.test(t.replace(/\s/g, "")));
+
+  /** Token corto de taxonomía: todo mayúsculas o una palabra tipo «Maquillaje». */
+  const isNarrowTaxonomyToken = (t: string) => {
+    const s = t.trim();
+    if (s.length < 2 || s.length > 44) return false;
+    if (s.includes(" ")) return false;
+    const letters = s.replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ]/g, "");
+    if (letters.length < 2) return false;
+    if (s.toUpperCase() === s && /[A-ZÁÉÍÓÚÑ]/.test(s)) return true;
+    if (/^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{1,22}$/.test(s)) return true;
+    return false;
+  };
+
+  const shouty = tokens.filter(isNarrowTaxonomyToken);
+  const nonShouty = tokens.filter((t) => !isNarrowTaxonomyToken(t));
+
+  const out: SemanticMapped = { ...base, tags: [...base.tags] };
+
+  if (!out.category?.trim() && shouty[0]) out.category = shouty[0];
+  if (!out.subcategory?.trim() && shouty[1]) out.subcategory = shouty[1];
+
+  if (!out.name?.trim()) {
+    const titleLike =
+      nonShouty.find(
+        (t) =>
+          t.length >= 10 &&
+          /[A-Za-zÁÉÍÓÚÑáéíóú]/.test(t) &&
+          (t.includes("+") || /[a-záéíóú]/.test(t))
+      ) ??
+      nonShouty.find((t) => t.length >= 14 && /[A-Za-zÁÉÍÓÚÑáéíóú]{5,}/.test(t)) ??
+      nonShouty.find((t) => t.length >= 8 && /[A-Za-zÁÉÍÓÚÑáéíóú]/.test(t) && !/^\d+$/.test(t));
+    if (titleLike) out.name = titleLike;
+  }
+
+  if (!out.brand?.trim()) {
+    const twoWord = nonShouty.find((t) => {
+      if (t === out.name) return false;
+      const p = t.split(/\s+/).filter(Boolean);
+      return p.length === 2 && t.length < 40 && !isNarrowTaxonomyToken(t);
+    });
+    if (twoWord) out.brand = twoWord;
+  }
+
+  const usedNorm = new Set<string>();
+  for (const x of [out.name, out.category, out.subcategory, out.brand]) {
+    const v = x?.trim();
+    if (v) usedNorm.add(normalizeKey(v));
+  }
+  out.tags = out.tags.filter((t) => !usedNorm.has(normalizeKey(t.trim())));
+
   return out;
 }

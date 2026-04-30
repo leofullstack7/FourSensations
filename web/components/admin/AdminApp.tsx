@@ -33,11 +33,15 @@ import {
   postBulkImportCommit,
   postBulkImportPreview,
 } from "@/lib/api/admin-bulk-import";
+import { bulkImportStableRowId } from "@/lib/bulk-import/bulk-import-row-id";
 import type {
   BulkPreviewNewTaxonomyItem,
   BulkPreviewResult,
   BulkTaxonomyRehomeHint,
 } from "@/lib/bulk-import/build-preview";
+import { taxonomyPairKey } from "@/lib/bulk-import/category-resolve";
+import { effectiveProductTitle } from "@/lib/bulk-import/semantic-map";
+
 import { isHttpImageUrl } from "@/lib/util/image-url";
 import { getDefaultAdminMenu } from "@/data/admin-initial";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
@@ -123,6 +127,42 @@ function AdminProductThumb({ imageUrl, emoji }: { imageUrl: string | null; emoji
         emoji || "📦"
       )}
     </div>
+  );
+}
+
+function AdminRetryImage({
+  src,
+  alt,
+  style,
+  maxRetries = 3,
+}: {
+  src: string;
+  alt: string;
+  style: React.CSSProperties;
+  maxRetries?: number;
+}) {
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    setAttempt(0);
+  }, [src]);
+
+  const srcWithRetry = useMemo(() => {
+    const sep = src.includes("?") ? "&" : "?";
+    return `${src}${sep}retry=${attempt}`;
+  }, [src, attempt]);
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={srcWithRetry}
+      alt={alt}
+      style={style}
+      onError={() => {
+        if (attempt >= maxRetries) return;
+        window.setTimeout(() => setAttempt((n) => n + 1), 700 * (attempt + 1));
+      }}
+    />
   );
 }
 
@@ -1558,12 +1598,17 @@ function AdminBulkTab({
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [preview, setPreview] = useState<BulkPreviewResult | null>(null);
-  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(() => new Set());
+  const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const [existingPolicy, setExistingPolicy] = useState<"skip" | "replace">("skip");
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [showNewCategoriesModal, setShowNewCategoriesModal] = useState(false);
   const [applyingNewCategories, setApplyingNewCategories] = useState(false);
+  /** Tras «Continuar sin crear» o cerrar el modal, se permite importar filas válidas aunque el preview siga listando novedades. */
+  const [newCategoriesModalAcknowledged, setNewCategoriesModalAcknowledged] = useState(false);
   const [showTaxonomyHintsModal, setShowTaxonomyHintsModal] = useState(false);
+  const [editingTaxonomyRowId, setEditingTaxonomyRowId] = useState<string | null>(null);
+  const [manualCategorySlug, setManualCategorySlug] = useState("");
+  const [manualSubcategoryName, setManualSubcategoryName] = useState("");
   const bulkProgress = useBufferedProgress(93);
   const [bulkProgressLabel, setBulkProgressLabel] = useState("");
 
@@ -1572,25 +1617,21 @@ function AdminBulkTab({
     [categories]
   );
 
+  /** Tras un PATCH del preview, conserva la intersección o re-selecciona si los IDs cambiaron (p. ej. columna de código). */
   useEffect(() => {
-    if (!preview) {
-      setSelectedRowIds(new Set());
+    if (!preview || !jobId) {
+      setSelectedRowIds([]);
       return;
     }
-    const matched = preview.matchedRows ?? [];
+    const allIds = (preview.matchedRows ?? []).map(bulkImportStableRowId);
+    const available = new Set(allIds);
     setSelectedRowIds((prev) => {
-      const keep = new Set<string>();
-      const available = new Set(matched.map((r) => r.previewRowId ?? r.rowId));
-      prev.forEach((id) => {
-        if (available.has(id)) keep.add(id);
-      });
-      if (keep.size > 0) return keep;
-      const defaults = matched
-        .filter((r) => r.selected)
-        .map((r) => r.previewRowId ?? r.rowId);
-      return new Set(defaults);
+      const kept = prev.filter((id) => available.has(id));
+      if (kept.length > 0) return kept;
+      if (prev.length > 0) return allIds;
+      return prev;
     });
-  }, [preview]);
+  }, [preview, jobId]);
 
   const resetSession = () => {
     setJobId(null);
@@ -1598,12 +1639,17 @@ function AdminBulkTab({
     setExpiresAt(null);
     setCsvFile(null);
     setZipFile(null);
-    setSelectedRowIds(new Set());
+    setSelectedRowIds([]);
     setExistingPolicy("skip");
     setShowNewCategoriesModal(false);
     setApplyingNewCategories(false);
+    setNewCategoriesModalAcknowledged(false);
     setShowTaxonomyHintsModal(false);
   };
+
+  useEffect(() => {
+    setNewCategoriesModalAcknowledged(false);
+  }, [jobId]);
 
   const pendingNewCategories = useMemo((): BulkPreviewNewTaxonomyItem[] => {
     const raw = preview?.newCategories ?? [];
@@ -1647,14 +1693,12 @@ function AdminBulkTab({
     setShowNewCategoriesModal((preview.newCategories?.length ?? 0) > 0);
   }, [preview]);
 
-  const toggleRow = (previewRowId: string) => {
+  const toggleRow = useCallback((previewRowId: string) => {
     setSelectedRowIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(previewRowId)) next.delete(previewRowId);
-      else next.add(previewRowId);
-      return next;
+      if (prev.includes(previewRowId)) return prev.filter((id) => id !== previewRowId);
+      return [...prev, previewRowId];
     });
-  };
+  }, []);
 
   const selectAllValid = () => {
     if (!preview) return;
@@ -1665,17 +1709,23 @@ function AdminBulkTab({
         if (x === "Producto ya registrado") return false;
         return true;
       });
-      if (blocking.length === 0 && r.normalizedCode) next.add(r.previewRowId ?? r.rowId);
+      if (blocking.length === 0 && r.normalizedCode) next.add(bulkImportStableRowId(r));
     }
-    setSelectedRowIds(next);
+    setSelectedRowIds(Array.from(next));
   };
 
-  const clearSelection = () => setSelectedRowIds(new Set());
+  const clearSelection = () => setSelectedRowIds([]);
+
+  const selectedRowIdSet = useMemo(() => new Set(selectedRowIds), [selectedRowIds]);
+  const manualSubcategoryOptions = useMemo(() => {
+    const cat = sortedCats.find((c) => c.slug === manualCategorySlug);
+    return cat ? [...cat.subcategories].sort((a, b) => a.sortOrder - b.sortOrder) : [];
+  }, [sortedCats, manualCategorySlug]);
 
   const previewTableRows = useMemo(
     () =>
       (preview?.matchedRows ?? []).map((r) => {
-        const previewRowId = r.previewRowId ?? r.rowId;
+        const previewRowId = bulkImportStableRowId(r);
         const blockingErrors = r.issues.filter((x) => {
           if (x === "Sin imagen en ZIP para este código") return false;
           if (x === "Producto ya registrado") return false;
@@ -1692,18 +1742,66 @@ function AdminBulkTab({
           subcategoryValue: r.mapped.subcategoryName,
           priceValue: r.mapped.price,
           stockValue: r.mapped.stock,
-          nameValue: r.mapped.name,
+          nameValue: effectiveProductTitle(r.mapped) ?? r.mapped.name,
           tagsValue: r.mapped.tags ?? [],
           matchedImages: r.imageMatches,
           matchStatus: "valid" as const,
-          selected: selectedRowIds.has(previewRowId),
+          selected: selectedRowIdSet.has(previewRowId),
           errors: blockingErrors,
           warnings: r.issues.filter((x) => x === "Sin imagen en ZIP para este código"),
           hasExisting,
           existingProductName: r.existingProductName,
         };
       }),
-    [preview, selectedRowIds, existingPolicy]
+    [preview, selectedRowIdSet, existingPolicy]
+  );
+
+  const openManualTaxonomyEditor = useCallback(
+    (r: {
+      previewRowId: string;
+      categorySlug: string | null;
+      subcategoryValue: string | null;
+      categoryCsv: string | null;
+      subcategoryCsv: string | null;
+    }) => {
+      const fallbackCategory = r.categorySlug ?? sortedCats[0]?.slug ?? "";
+      setEditingTaxonomyRowId(r.previewRowId);
+      setManualCategorySlug(fallbackCategory);
+      if (r.subcategoryValue?.trim()) {
+        setManualSubcategoryName(r.subcategoryValue);
+        return;
+      }
+      const cat = sortedCats.find((c) => c.slug === fallbackCategory);
+      setManualSubcategoryName(cat?.subcategories?.[0]?.name ?? "");
+    },
+    [sortedCats]
+  );
+
+  const applyManualTaxonomyOverride = useCallback(
+    async (r: { categoryCsv: string | null; subcategoryCsv: string | null }) => {
+      if (!jobId || !manualCategorySlug || !manualSubcategoryName) return;
+      const pairKey = taxonomyPairKey(r.categoryCsv, r.subcategoryCsv);
+      setMutation("bulk");
+      try {
+        const { preview: p } = await patchBulkImportJob(jobId, {
+          taxonomyOverrides: {
+            [pairKey]: {
+              categorySlug: manualCategorySlug,
+              subcategoryName: manualSubcategoryName,
+            },
+          },
+          selectedRowIds,
+        });
+        setPreview(p);
+        setEditingTaxonomyRowId(null);
+        showToast("Categoría/subcategoría ajustada para este par del CSV", "success", "✅");
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "No se pudo aplicar el ajuste", "danger", "⚠️");
+      } finally {
+        setMutation(null);
+      }
+    },
+    [jobId, manualCategorySlug, manualSubcategoryName, selectedRowIds, setMutation, showToast]
   );
 
   return (
@@ -1821,6 +1919,7 @@ function AdminBulkTab({
                 setJobId(res.jobId);
                 setPreview(res.preview);
                 setExpiresAt(res.expiresAt);
+                setSelectedRowIds((res.preview.matchedRows ?? []).map(bulkImportStableRowId));
                 const hintN = res.preview.taxonomyRehomeHints?.length ?? 0;
                 const newN = res.preview.newCategories?.length ?? 0;
                 if (hintN > 0) {
@@ -1918,7 +2017,7 @@ function AdminBulkTab({
                     try {
                       const { preview: p } = await patchBulkImportJob(jobId, {
                         codeColumnIndex: idx,
-                        selectedRowIds: Array.from(selectedRowIds),
+                        selectedRowIds,
                       });
                       setPreview(p);
                       showToast("Columna de código actualizada", "default", "✓");
@@ -1948,7 +2047,7 @@ function AdminBulkTab({
                     setMutation("bulk");
                     try {
                       const { preview: p } = await patchBulkImportJob(jobId, {
-                        selectedRowIds: Array.from(selectedRowIds),
+                        selectedRowIds,
                       });
                       setPreview(p);
                       showToast("Vista previa recalculada", "success", "✓");
@@ -1973,7 +2072,7 @@ function AdminBulkTab({
               Quitar selección
             </button>
             <span style={{ fontSize: 13, color: "var(--text-muted)", alignSelf: "center" }}>
-              {selectedRowIds.size} fila(s) seleccionada(s) / {previewTableRows.length} con match
+              {selectedRowIds.length} fila(s) seleccionada(s) de {previewTableRows.length} con match de imagen
             </span>
           </div>
 
@@ -2016,6 +2115,7 @@ function AdminBulkTab({
                   <th>Etiquetas</th>
                   <th>Imágenes</th>
                   <th>Estado</th>
+                  <th>Ajuste</th>
                 </tr>
               </thead>
               <tbody>
@@ -2029,12 +2129,13 @@ function AdminBulkTab({
                         opacity: ok ? 1 : 0.75,
                         background: r.hasExisting ? "rgba(255, 84, 84, 0.10)" : undefined,
                       }}
+                      onClick={(e) => {
+                        const el = e.target as HTMLElement;
+                        if (el.closest("input, button, a, label, select, textarea")) return;
+                        toggleRow(r.previewRowId);
+                      }}
                     >
-                      <td
-                        className="admin-bulk-check-cell"
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => e.stopPropagation()}
-                      >
+                      <td className="admin-bulk-check-cell">
                         <input
                           type="checkbox"
                           checked={r.selected}
@@ -2086,12 +2187,81 @@ function AdminBulkTab({
                           </span>
                         )}
                       </td>
+                      <td style={{ minWidth: 220 }}>
+                        {r.errors.length > 0 ? (
+                          editingTaxonomyRowId === r.previewRowId ? (
+                            <div style={{ display: "grid", gap: 6 }}>
+                              <select
+                                className="form-select"
+                                value={manualCategorySlug}
+                                onChange={(e) => {
+                                  const slug = e.target.value;
+                                  setManualCategorySlug(slug);
+                                  const cat = sortedCats.find((c) => c.slug === slug);
+                                  setManualSubcategoryName(cat?.subcategories?.[0]?.name ?? "");
+                                }}
+                                disabled={saving}
+                              >
+                                {sortedCats.map((c) => (
+                                  <option key={c.id} value={c.slug}>
+                                    {c.icon ? `${c.icon} ` : ""}
+                                    {c.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                className="form-select"
+                                value={manualSubcategoryName}
+                                onChange={(e) => setManualSubcategoryName(e.target.value)}
+                                disabled={saving || manualSubcategoryOptions.length === 0}
+                              >
+                                {manualSubcategoryOptions.map((s) => (
+                                  <option key={s.id} value={s.name}>
+                                    {s.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <button
+                                  type="button"
+                                  className="btn btn-primary btn-sm"
+                                  disabled={saving || !manualCategorySlug || !manualSubcategoryName}
+                                  onClick={() => {
+                                    void applyManualTaxonomyOverride(r);
+                                  }}
+                                >
+                                  Aplicar
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm"
+                                  disabled={saving}
+                                  onClick={() => setEditingTaxonomyRowId(null)}
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-outline btn-sm"
+                              disabled={saving || sortedCats.length === 0}
+                              onClick={() => openManualTaxonomyEditor(r)}
+                            >
+                              Editar categoría/subcategoría
+                            </button>
+                          )
+                        ) : (
+                          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>—</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
                 {previewTableRows.length === 0 && (
                   <tr>
-                    <td colSpan={12} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>
+                    <td colSpan={13} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>
                       No hay filas con match válido para importar.
                     </td>
                   </tr>
@@ -2150,8 +2320,8 @@ function AdminBulkTab({
             className="btn btn-primary"
             disabled={
               saving ||
-              selectedRowIds.size === 0 ||
-              pendingNewCategories.length > 0 ||
+              selectedRowIds.length === 0 ||
+              (pendingNewCategories.length > 0 && !newCategoriesModalAcknowledged) ||
               taxonomyRehomeHints.length > 0
             }
             onClick={() => {
@@ -2160,7 +2330,7 @@ function AdminBulkTab({
                 setBulkProgressLabel("Importando productos y subiendo imágenes…");
                 bulkProgress.start();
                 try {
-                  const res = await postBulkImportCommit(jobId, Array.from(selectedRowIds).sort(), existingPolicy);
+                  const res = await postBulkImportCommit(jobId, [...selectedRowIds].sort(), existingPolicy);
                   bulkProgress.finish();
                   if (res.imported > 0) {
                     showToast(`Importados ${res.imported} producto(s)`, "success", "🎉");
@@ -2187,7 +2357,18 @@ function AdminBulkTab({
               })();
             }}
           >
-            {saving ? "Importando…" : `⬆️ Importar ${selectedRowIds.size} producto(s) seleccionado(s)`}
+            {saving ? (
+              <>
+                <span className="admin-inline-spinner" aria-hidden />
+                Importando...
+              </>
+            ) : selectedRowIds.length === 0 ? (
+              "⬆️ Importar: elige una o más filas (columna «Sel.»)"
+            ) : selectedRowIds.length === 1 ? (
+              "⬆️ Importar 1 producto"
+            ) : (
+              `⬆️ Importar ${selectedRowIds.length} productos`
+            )}
           </button>
           {taxonomyRehomeHints.length > 0 && (
             <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
@@ -2206,7 +2387,35 @@ function AdminBulkTab({
         open={showTaxonomyHintsModal && taxonomyRehomeHints.length > 0}
         hints={taxonomyRehomeHints}
         saving={saving}
-        onClose={() => setShowTaxonomyHintsModal(false)}
+        onClose={() => {
+          if (saving) return;
+          if (!jobId || taxonomyRehomeHints.length === 0) {
+            setShowTaxonomyHintsModal(false);
+            return;
+          }
+          void (async () => {
+            setMutation("bulk");
+            try {
+              const taxonomyRehomeDismissed: Record<string, boolean> = {};
+              for (const h of taxonomyRehomeHints) taxonomyRehomeDismissed[h.pairKey] = true;
+              const { preview: p } = await patchBulkImportJob(jobId, {
+                taxonomyRehomeDismissed,
+                selectedRowIds,
+              });
+              setPreview(p);
+              showToast(
+                "Sugerencias cerradas: se usará tu texto del CSV para esos pares. Puedes importar o revisar categorías nuevas.",
+                "default",
+                "ℹ️"
+              );
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : "Error al actualizar", "danger", "⚠️");
+            } finally {
+              setMutation(null);
+              setShowTaxonomyHintsModal(false);
+            }
+          })();
+        }}
         onAccept={(hint) => {
           if (!jobId) return;
           void (async () => {
@@ -2219,7 +2428,7 @@ function AdminBulkTab({
                     subcategoryName: hint.suggestedSubcategoryName,
                   },
                 },
-                selectedRowIds: Array.from(selectedRowIds),
+                selectedRowIds,
               });
               setPreview(p);
               showToast("Sugerencia aplicada al preview", "success", "📂");
@@ -2237,7 +2446,7 @@ function AdminBulkTab({
             try {
               const { preview: p } = await patchBulkImportJob(jobId, {
                 taxonomyRehomeDismissed: { [hint.pairKey]: true },
-                selectedRowIds: Array.from(selectedRowIds),
+                selectedRowIds,
               });
               setPreview(p);
               showToast("Entendido: se usará tu texto del CSV para este par (p. ej. crear categoría nueva).", "default", "ℹ️");
@@ -2253,9 +2462,19 @@ function AdminBulkTab({
         open={showNewCategoriesModal && pendingNewCategories.length > 0}
         items={pendingNewCategories}
         saving={applyingNewCategories || saving}
-        onClose={() => setShowNewCategoriesModal(false)}
+        onClose={() => {
+          if (applyingNewCategories || saving) return;
+          setShowNewCategoriesModal(false);
+          setNewCategoriesModalAcknowledged(true);
+          showToast(
+            "Puedes continuar sin crearlas, pero esas filas no serán importables hasta que existan en el sistema.",
+            "default",
+            "ℹ️"
+          );
+        }}
         onSkip={() => {
           setShowNewCategoriesModal(false);
+          setNewCategoriesModalAcknowledged(true);
           showToast(
             "Puedes continuar sin crearlas, pero esas filas no serán importables hasta que existan en el sistema.",
             "default",
@@ -2327,7 +2546,7 @@ function AdminBulkTab({
               await onCategoriesUpdated();
               if (jobId) {
                 const { preview: refreshed } = await patchBulkImportJob(jobId, {
-                  selectedRowIds: Array.from(selectedRowIds),
+                  selectedRowIds,
                 });
                 setPreview(refreshed);
               }
@@ -2997,7 +3216,14 @@ function AdminCategoriesTab({
                 })();
               }}
             >
-              {busy ? "Guardando…" : "➕ Crear categoría"}
+              {busy ? (
+                <>
+                  <span className="admin-inline-spinner" aria-hidden />
+                  Creando...
+                </>
+              ) : (
+                "➕ Crear categoría"
+              )}
             </button>
           </div>
         </div>
@@ -3367,7 +3593,14 @@ function AdminCategoriesTab({
                   })();
                 }}
               >
-                + Añadir subcategoría
+                {busy ? (
+                  <>
+                    <span className="admin-inline-spinner" aria-hidden />
+                    Creando...
+                  </>
+                ) : (
+                  "+ Añadir subcategoría"
+                )}
               </button>
             </div>
           </div>
@@ -3749,8 +3982,11 @@ function AdminProductDetailModal({
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
                     {(product.images ?? []).map((im) => (
                       <span key={im.id} style={{ position: "relative", display: "inline-block" }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={im.url} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }} />
+                        <AdminRetryImage
+                          src={im.url}
+                          alt=""
+                          style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }}
+                        />
                       </span>
                     ))}
                     {(product.images ?? []).length === 0 && (
@@ -3943,8 +4179,11 @@ function AdminProductDetailModal({
                   </label>
                   {(product.images ?? []).map((im) => (
                     <span key={im.id} style={{ position: "relative", display: "inline-block" }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={im.url} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }} />
+                      <AdminRetryImage
+                        src={im.url}
+                        alt=""
+                        style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }}
+                      />
                       <button
                         type="button"
                         onClick={() => {

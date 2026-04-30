@@ -1,13 +1,22 @@
 import type { ZipImageEntry } from "./zip-manifest";
 import { computeOrphanFiles } from "./zip-manifest";
 import { normalizeKey } from "./normalize";
-import { buildHeaderFieldMap, mapRowValues, type SemanticMapped } from "./semantic-map";
+import {
+  buildHeaderFieldMap,
+  effectiveProductTitle,
+  enrichSparseMappedFromTags,
+  mapRowValues,
+  mergeTagTokenLists,
+  parseTagsFromCell,
+  type SemanticMapped,
+} from "./semantic-map";
 import { topCodeColumnCandidates, type CodeColumnCandidate } from "./csv";
 import type { CategoryRow } from "./category-resolve";
 import {
   resolveCategorySlug,
   resolveSubcategoryName,
   resolveSubcategoryGlobal,
+  resolveTaxonomyFromCsvFixedMap,
   taxonomyPairKey,
   computeTaxonomyRehomeSuggestion,
   type TaxonomyRehomeKind,
@@ -132,7 +141,7 @@ function collectBaseRowIssues(
 ): string[] {
   const issues: string[] = [];
   if (!codeRaw.trim()) issues.push("Código vacío");
-  if (!m.name?.trim()) issues.push("Falta nombre");
+  if (!effectiveProductTitle(m)) issues.push("Falta nombre");
   if (m.price == null) issues.push("Precio inválido o vacío");
   if (m.stock == null) issues.push("Stock inválido");
   if (!effectiveCat) issues.push("Falta categoría");
@@ -147,6 +156,25 @@ function collectBaseRowIssues(
 
 function isBlockingIssue(issue: string): boolean {
   return issue !== "Sin imagen en ZIP para este código";
+}
+
+/** Columnas sin mapeo semántico que parecen listas (misma fila pegada en un solo campo). */
+function harvestListLikeUnmappedTokens(
+  values: string[],
+  headerFieldMap: Map<number, keyof SemanticMapped>,
+  codeColumnIndex: number
+): string[] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < values.length; i++) {
+    if (i === codeColumnIndex) continue;
+    if (headerFieldMap.has(i)) continue;
+    const raw = (values[i] ?? "").trim();
+    if (raw.length < 10) continue;
+    if (!/[,;|]/.test(raw)) continue;
+    const parts = parseTagsFromCell(raw);
+    if (parts.length >= 3) chunks.push(parts);
+  }
+  return mergeTagTokenLists(chunks);
 }
 
 export function buildBulkPreview(params: {
@@ -181,35 +209,52 @@ export function buildBulkPreview(params: {
     const codeRaw = (values[codeColumnIndex] ?? "").trim();
     const normalizedCode = codeRaw ? normalizeKey(codeRaw) : null;
     const mappedRaw = mapRowValues(values, headerFieldMap);
+    const unmappedTokens = harvestListLikeUnmappedTokens(values, headerFieldMap, codeColumnIndex);
+    const mappedForEnrich: SemanticMapped = {
+      ...mappedRaw,
+      tags: mergeTagTokenLists([mappedRaw.tags, unmappedTokens]),
+    };
 
     const stockCols = Array.from(headerFieldMap.entries())
       .filter(([, f]) => f === "stock")
       .map(([i]) => i);
     const hasStockInput = stockCols.some((i) => (values[i] ?? "").trim() !== "");
+    const enriched = enrichSparseMappedFromTags(mappedForEnrich, codeRaw);
     const mappedBase: SemanticMapped = {
-      ...mappedRaw,
-      stock: !hasStockInput && mappedRaw.stock == null ? 0 : mappedRaw.stock,
+      ...enriched,
+      stock: !hasStockInput && enriched.stock == null ? 0 : enriched.stock,
     };
 
     const pairKey = taxonomyPairKey(mappedBase.category, mappedBase.subcategory);
-    const resolvedCategoryFromCsv = resolveCategorySlug(mappedBase.category, categoryTree);
-    let categorySlug = resolvedCategoryFromCsv;
+    const fixedTaxonomy = resolveTaxonomyFromCsvFixedMap(mappedBase.category, mappedBase.subcategory);
+    let resolvedCategoryFromCsv: string | null = null;
+    let categorySlug: string | null = null;
     let subcategoryName: string | null = null;
     let subcategoryFromCsvResolved = false;
 
-    // 1) Si tengo categoría detectada, intento resolver sub dentro de esa categoría.
-    if (categorySlug) {
-      subcategoryName = resolveSubcategoryName(categorySlug, mappedBase.subcategory, categoryTree);
-      subcategoryFromCsvResolved = !!subcategoryName;
-    }
+    if (fixedTaxonomy) {
+      categorySlug = fixedTaxonomy.categorySlug;
+      subcategoryName = fixedTaxonomy.subcategoryName;
+      subcategoryFromCsvResolved = true;
+      resolvedCategoryFromCsv = fixedTaxonomy.categorySlug;
+    } else {
+      resolvedCategoryFromCsv = resolveCategorySlug(mappedBase.category, categoryTree);
+      categorySlug = resolvedCategoryFromCsv;
 
-    // 2) Si no hay categoría o sub no resolvió, intento inferir por subcategoría global.
-    if (!subcategoryName) {
-      const inferredGlobal = resolveSubcategoryGlobal(mappedBase.subcategory, categoryTree);
-      if (inferredGlobal) {
-        categorySlug = categorySlug ?? inferredGlobal.categorySlug;
-        subcategoryName = inferredGlobal.subcategoryName;
-        subcategoryFromCsvResolved = true;
+      // 1) Si tengo categoría detectada, intento resolver sub dentro de esa categoría.
+      if (categorySlug) {
+        subcategoryName = resolveSubcategoryName(categorySlug, mappedBase.subcategory, categoryTree);
+        subcategoryFromCsvResolved = !!subcategoryName;
+      }
+
+      // 2) Si no hay categoría o sub no resolvió, intento inferir por subcategoría global.
+      if (!subcategoryName) {
+        const inferredGlobal = resolveSubcategoryGlobal(mappedBase.subcategory, categoryTree);
+        if (inferredGlobal) {
+          categorySlug = categorySlug ?? inferredGlobal.categorySlug;
+          subcategoryName = inferredGlobal.subcategoryName;
+          subcategoryFromCsvResolved = true;
+        }
       }
     }
 
@@ -376,7 +421,7 @@ export function buildBulkPreview(params: {
       hasValidMatch &&
       blockingForAutoSelect.length === 0 &&
       !!r.codeRaw &&
-      !!r.mapped.name &&
+      !!effectiveProductTitle(r.mapped) &&
       r.mapped.price != null &&
       !!r.mapped.categorySlug;
   });
@@ -405,6 +450,7 @@ export function buildBulkPreview(params: {
   rows.forEach((r) => {
     const rawCategory = (r.mapped.category ?? "").trim();
     if (!rawCategory) return;
+    if (resolveTaxonomyFromCsvFixedMap(r.mapped.category, r.mapped.subcategory)) return;
     const resolved = resolveCategorySlug(rawCategory, categoryTree);
     if (resolved) return;
     const key = normalizeKey(rawCategory);

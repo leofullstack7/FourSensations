@@ -1,5 +1,92 @@
 import { normalizeKey } from "./normalize";
 
+/**
+ * Mapeo fijo proveedor CSV → taxonomía de la tienda (slug + nombre exacto de subcategoría).
+ * Se aplica antes de cualquier resolución por similitud.
+ */
+export const CSV_TAXONOMY_MAP: Record<string, { categorySlug: string; subcategoryName: string }> = {
+  "CUIDADO FACIAL|LIMPIADORA": { categorySlug: "cuidado-piel", subcategoryName: "Limpiador" },
+  "CUIDADO FACIAL|LIMPIEZA": { categorySlug: "cuidado-piel", subcategoryName: "Limpiador" },
+  "CUIDADO FACIAL|LIMPIADORES / DESMAQUILLADORES": {
+    categorySlug: "cuidado-piel",
+    subcategoryName: "Limpiador",
+  },
+  "CUIDADO FACIAL|TONIFICACION": { categorySlug: "cuidado-piel", subcategoryName: "Tónico" },
+  "CUIDADO FACIAL|TONICOS": { categorySlug: "cuidado-piel", subcategoryName: "Tónico" },
+  "CUIDADO FACIAL|HIDRATACION / NUTRICION": {
+    categorySlug: "cuidado-piel",
+    subcategoryName: "Hidratación",
+  },
+  "CUIDADO FACIAL|HIDRATACION": { categorySlug: "cuidado-piel", subcategoryName: "Hidratación" },
+  "CUIDADO FACIAL|NUTRICION": { categorySlug: "cuidado-piel", subcategoryName: "Hidratación" },
+  "CUIDADO FACIAL|CUIDADOS ESPECIALES": { categorySlug: "cuidado-piel", subcategoryName: "Mascarillas" },
+  "CUIDADO FACIAL|SERUM": { categorySlug: "cuidado-piel", subcategoryName: "Sérum" },
+  "CUIDADO FACIAL|PROTECCION SOLAR": { categorySlug: "cuidado-piel", subcategoryName: "Protector Solar" },
+  "CUIDADO FACIAL|CUIDADO FACIAL": { categorySlug: "cuidado-piel", subcategoryName: "Hidratación" },
+  "CUIDADO FACIAL|CONTORNO DE OJOS": { categorySlug: "cuidado-piel", subcategoryName: "Contorno Ojos" },
+  "CUIDADO FACIAL|CONTORNO OJOS": { categorySlug: "cuidado-piel", subcategoryName: "Contorno Ojos" },
+  "CUIDADO FACIAL|LABIOS": { categorySlug: "cuidado-piel", subcategoryName: "Labios" },
+  "CUIDADO FACIAL|EMOLIENTE": { categorySlug: "cuidado-piel", subcategoryName: "Labios" },
+  "CUIDADO DE PIEL|LIMPIEZA": { categorySlug: "cuidado-piel", subcategoryName: "Limpiador" },
+  "CUIDADO DE PIEL|DESMAQUILLADORA": { categorySlug: "cuidado-piel", subcategoryName: "Limpiador" },
+  "CUIDADO DE PIEL|LIMPIADORA": { categorySlug: "cuidado-piel", subcategoryName: "Limpiador" },
+  "CUIDADO DE PIEL|SERUM": { categorySlug: "cuidado-piel", subcategoryName: "Sérum" },
+  "CUIDADO DE PIEL|TONIFICACION": { categorySlug: "cuidado-piel", subcategoryName: "Tónico" },
+  "CUIDADO DE PIEL|TONICO": { categorySlug: "cuidado-piel", subcategoryName: "Tónico" },
+  "CUIDADO DE PIEL|HIDRATACION": { categorySlug: "cuidado-piel", subcategoryName: "Hidratación" },
+  "CUIDADO DE PIEL|PROTECCION SOLAR": { categorySlug: "cuidado-piel", subcategoryName: "Protector Solar" },
+  "CUIDADO DE PIEL|CONTORNO DE OJOS": { categorySlug: "cuidado-piel", subcategoryName: "Contorno Ojos" },
+  "CUIDADO DE PIEL|CUIDADOS ESPECIALES": { categorySlug: "cuidado-piel", subcategoryName: "Mascarillas" },
+  "LIMPIEZA|ESPUMA": { categorySlug: "cuidado-piel", subcategoryName: "Limpiador" },
+  "LIMPIEZA|LIMPIADORA": { categorySlug: "cuidado-piel", subcategoryName: "Limpiador" },
+  "LIMPIEZA|DESMAQUILLADORA": { categorySlug: "cuidado-piel", subcategoryName: "Limpiador" },
+  "LIMPIEZA|TONICO": { categorySlug: "cuidado-piel", subcategoryName: "Tónico" },
+  "LIMPIEZA|TONIFICACION": { categorySlug: "cuidado-piel", subcategoryName: "Tónico" },
+  "MAQUILLAJE|SERUM": { categorySlug: "maquillaje", subcategoryName: "Rostro" },
+  "MAQUILLAJE|OJOS/ CEJAS": { categorySlug: "maquillaje", subcategoryName: "Ojos" },
+  "MAQUILLAJE|OJOS/CEJAS": { categorySlug: "maquillaje", subcategoryName: "Ojos" },
+  "MAQUILLAJE|LABIOS": { categorySlug: "maquillaje", subcategoryName: "Labial" },
+  "MAQUILLAJE|LABIOS / OJOS": { categorySlug: "maquillaje", subcategoryName: "Labial" },
+  "MAQUILLAJE|BRILLOS FACIALES": { categorySlug: "maquillaje", subcategoryName: "Gloss" },
+  "MAQUILLAJE|FIJADOR": { categorySlug: "maquillaje", subcategoryName: "Rostro" },
+  "MAQUILLAJE|PALETAS FACIALES": { categorySlug: "maquillaje", subcategoryName: "Rostro" },
+  "MAQUILLAJE|POLVOS FACIALES": { categorySlug: "maquillaje", subcategoryName: "Rostro" },
+  "MAQUILLAJE|ROSTRO": { categorySlug: "maquillaje", subcategoryName: "Rostro" },
+  "MAQUILLAJE|CORRECTOR": { categorySlug: "maquillaje", subcategoryName: "Corrector" },
+  "MAQUILLAJE|CEJAS": { categorySlug: "maquillaje", subcategoryName: "Cejas" },
+  "HERRAMIENTAS Y ACCESORIOS|BROCHAS": { categorySlug: "accesorios", subcategoryName: "Brochas" },
+  "HERRAMIENTAS Y ACCESORIOS|SACAPUNTAS": { categorySlug: "accesorios", subcategoryName: "Sacapuntas" },
+  "HERRAMIENTAS Y ACCESORIOS|ESPONJAS": { categorySlug: "accesorios", subcategoryName: "Esponjas" },
+  "HERRAMIENTAS Y HERRAMIENTAS|BROCHAS": { categorySlug: "accesorios", subcategoryName: "Brochas" },
+  "HERRAMIENTAS Y HERRAMIENTAS|SACAPUNTAS": { categorySlug: "accesorios", subcategoryName: "Sacapuntas" },
+};
+
+/** Parte de clave proveedor: trim, sin acentos, mayúsculas (consistente con normalización de texto del CSV). */
+function normalizeCsvVendorTaxonomyPart(value: string): string {
+  return value
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Si la pareja (categoría, subcategoría) del CSV coincide con {@link CSV_TAXONOMY_MAP},
+ * devuelve slug y nombre de subcategoría de tienda sin usar heurísticas.
+ */
+export function resolveTaxonomyFromCsvFixedMap(
+  csvCategory: string | null | undefined,
+  csvSubcategory: string | null | undefined
+): { categorySlug: string; subcategoryName: string } | null {
+  const c = csvCategory?.trim() ?? "";
+  const s = csvSubcategory?.trim() ?? "";
+  if (!c || !s) return null;
+  const key = `${normalizeCsvVendorTaxonomyPart(c)}|${normalizeCsvVendorTaxonomyPart(s)}`;
+  const hit = CSV_TAXONOMY_MAP[key];
+  return hit ? { categorySlug: hit.categorySlug, subcategoryName: hit.subcategoryName } : null;
+}
+
 /** Clave estable para parejas (categoría CSV, subcategoría CSV) y overrides de reubicación. */
 export function taxonomyPairKey(
   csvCategory: string | null | undefined,
