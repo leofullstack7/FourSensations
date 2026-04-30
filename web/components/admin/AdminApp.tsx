@@ -170,7 +170,7 @@ export function AdminApp() {
     setProductsLoading(true);
     setProductsError(null);
     try {
-      let list = await fetchAdminProducts();
+      const list = await fetchAdminProducts();
       setProducts(list);
       if (process.env.NODE_ENV === "development") {
         console.debug("[AdminApp] Productos cargados desde API:", list.length);
@@ -179,17 +179,19 @@ export function AdminApp() {
         list.some((p) => (p.tags?.length ?? 0) === 0) && !menuTagsSyncAttemptedRef.current;
       if (needsMenuTags) {
         menuTagsSyncAttemptedRef.current = true;
-        try {
-          const r = await postSyncProductTagsFromMenu();
-          if (r.updated > 0) {
-            list = await fetchAdminProducts();
-            setProducts(list);
-            showToast(`Etiquetas de menú asignadas a ${r.updated} producto(s)`, "success", "🏷️");
+        void (async () => {
+          try {
+            const r = await postSyncProductTagsFromMenu();
+            if (r.updated > 0) {
+              const fresh = await fetchAdminProducts();
+              setProducts(fresh);
+              showToast(`Etiquetas de menú asignadas a ${r.updated} producto(s)`, "success", "🏷️");
+            }
+          } catch (syncErr) {
+            menuTagsSyncAttemptedRef.current = false;
+            console.error("[AdminApp] sync-menu-tags:", syncErr);
           }
-        } catch (syncErr) {
-          menuTagsSyncAttemptedRef.current = false;
-          console.error("[AdminApp] sync-menu-tags:", syncErr);
-        }
+        })();
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error al cargar productos";
@@ -223,13 +225,6 @@ export function AdminApp() {
     void loadProducts();
   }, [status, sessionUserId, loadProducts]);
 
-  /** Al abrir Gestión de productos, refresco por si la primera GET quedó en caché vacía. */
-  useEffect(() => {
-    if (status !== "authenticated" || !sessionUserId) return;
-    if (page !== "products") return;
-    void loadProducts();
-  }, [page, status, sessionUserId, loadProducts]);
-
   useEffect(() => {
     if (productTab !== "list") {
       setProductListSelectedIds(new Set());
@@ -259,12 +254,6 @@ export function AdminApp() {
     if (status !== "authenticated" || !sessionUserId) return;
     void loadCategories();
   }, [status, sessionUserId, loadCategories]);
-
-  useEffect(() => {
-    if (status !== "authenticated" || !sessionUserId) return;
-    if (page !== "categories") return;
-    void loadCategories();
-  }, [page, status, sessionUserId, loadCategories]);
 
   useEffect(() => {
     if (status === "loading") return;
@@ -613,7 +602,10 @@ export function AdminApp() {
   if (status === "loading") {
     return (
       <div className="admin-login-gate">
-        <p style={{ color: "var(--text-muted)" }}>Cargando…</p>
+        <div style={{ textAlign: "center" }}>
+          <div className="admin-boot-spinner" role="status" aria-label="Cargando panel" />
+          <p style={{ color: "var(--text-muted)", fontSize: 14 }}>Cargando panel…</p>
+        </div>
       </div>
     );
   }
@@ -621,7 +613,10 @@ export function AdminApp() {
   if (!session?.user || session.user.role !== "ADMIN") {
     return (
       <div className="admin-login-gate">
-        <p style={{ color: "var(--text-muted)" }}>Redirigiendo…</p>
+        <div style={{ textAlign: "center" }}>
+          <div className="admin-boot-spinner" role="status" aria-label="Redirigiendo" />
+          <p style={{ color: "var(--text-muted)", fontSize: 14 }}>Redirigiendo…</p>
+        </div>
       </div>
     );
   }

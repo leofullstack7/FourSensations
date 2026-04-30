@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn, useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
@@ -13,6 +14,7 @@ export function AdminLoginForm() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loginErr, setLoginErr] = useState(false);
+  const [loginSubmitting, setLoginSubmitting] = useState(false);
 
   const nextPath = searchParams.get("next") || "/admin";
   const forbidden = searchParams.get("error") === "forbidden";
@@ -27,6 +29,10 @@ export function AdminLoginForm() {
   useEffect(() => {
     void redirectIfAuthed();
   }, [redirectIfAuthed]);
+
+  useEffect(() => {
+    router.prefetch("/admin");
+  }, [router]);
 
   return (
     <div className="admin-login-gate">
@@ -93,20 +99,46 @@ export function AdminLoginForm() {
         <button
           type="button"
           className="btn btn-primary"
-          style={{ width: "100%", justifyContent: "center" }}
+          style={{ width: "100%", justifyContent: "center", gap: 10 }}
+          disabled={loginSubmitting}
+          aria-busy={loginSubmitting}
           onClick={async () => {
             setLoginErr(false);
-            const res = await signIn("credentials", { username, password, redirect: false });
-            if (res?.error) {
+            setLoginSubmitting(true);
+            try {
+              const res = await signIn("credentials", { username, password, redirect: false });
+              if (res?.error) {
+                setLoginErr(true);
+                setPassword("");
+                setLoginSubmitting(false);
+                return;
+              }
+              router.refresh();
+              router.replace(nextPath.startsWith("/admin") ? nextPath : "/admin");
+            } catch {
               setLoginErr(true);
-              setPassword("");
-              return;
+              setLoginSubmitting(false);
             }
-            router.refresh();
-            router.replace(nextPath.startsWith("/admin") ? nextPath : "/admin");
           }}
         >
-          Entrar al panel
+          {loginSubmitting && (
+            <motion.span
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 0.85, ease: "linear" }}
+              style={{
+                display: "inline-block",
+                width: 18,
+                height: 18,
+                border: "2px solid rgba(255,255,255,0.35)",
+                borderTopColor: "rgba(255,255,255,0.95)",
+                borderRadius: "50%",
+                boxSizing: "border-box",
+                flexShrink: 0,
+              }}
+              aria-hidden
+            />
+          )}
+          {loginSubmitting ? "Entrando…" : "Entrar al panel"}
         </button>
         <Link href="/" style={{ display: "block", marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
           ← Volver a la tienda

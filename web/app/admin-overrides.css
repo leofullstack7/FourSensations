@@ -445,3 +445,17 @@
   box-shadow: var(--shadow-xl);
   text-align: center;
 }
+
+@keyframes admin-boot-spin {
+  to { transform: rotate(360deg); }
+}
+.admin-boot-spinner {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 16px;
+  border: 3px solid var(--cream);
+  border-top-color: var(--dusty-rose);
+  border-radius: 50%;
+  animation: admin-boot-spin 0.85s linear infinite;
+  box-sizing: border-box;
+}

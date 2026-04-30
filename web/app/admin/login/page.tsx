@@ -4,7 +4,10 @@ import { AdminLoginForm } from "@/components/admin/AdminLoginForm";
 function LoginFallback() {
   return (
     <div className="admin-login-gate">
-      <p style={{ color: "var(--text-muted)" }}>Cargando…</p>
+      <div style={{ textAlign: "center" }}>
+        <div className="admin-boot-spinner" role="status" aria-label="Cargando" />
+        <p style={{ color: "var(--text-muted)", fontSize: 14 }}>Cargando…</p>
+      </div>
     </div>
   );
 }

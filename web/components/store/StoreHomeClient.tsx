@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useReveal } from "@/hooks/useReveal";
 import { toCategorySlug } from "@/lib/menu-config";
 import type { MenuConfig } from "@/lib/types/admin";
@@ -143,7 +143,6 @@ export function StoreHomeClient({
   const [cartOpen, setCartOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [adminOpening, setAdminOpening] = useState(false);
-  const adminNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const [topbarIndex, setTopbarIndex] = useState(0);
   const [authMode, setAuthMode] = useState<"login" | "fav-warning">("login");
@@ -163,12 +162,6 @@ export function StoreHomeClient({
       setTopbarIndex((i) => (i + 1) % STOREFRONT_TOPBAR_MESSAGES.length);
     }, 7500);
     return () => window.clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (adminNavTimerRef.current) clearTimeout(adminNavTimerRef.current);
-    };
   }, []);
 
   const persistCart = useCallback((next: CartLine[]) => {
@@ -521,10 +514,7 @@ export function StoreHomeClient({
                   onClick={() => {
                     if (adminOpening) return;
                     setAdminOpening(true);
-                    adminNavTimerRef.current = setTimeout(() => {
-                      adminNavTimerRef.current = null;
-                      router.push("/admin");
-                    }, 2000);
+                    router.push("/admin");
                   }}
                 >
                   ⚙️
@@ -1363,7 +1353,7 @@ export function StoreHomeClient({
               }}
             />
             <div style={{ fontWeight: 600, color: "var(--dark)", fontSize: 15 }}>Abriendo panel…</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>Redirigiendo al admin</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>Un momento</div>
           </div>
         </div>
       )}
