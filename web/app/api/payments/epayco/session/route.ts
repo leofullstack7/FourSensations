@@ -51,6 +51,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "El pedido no admite un nuevo pago" }, { status: 409 });
   }
 
+  if (order.paymentProvider === "BOLD") {
+    return NextResponse.json(
+      { error: "Este pedido está reservado para pago con Bold. Vuelve al checkout y elige Bold." },
+      { status: 409 },
+    );
+  }
+
   const responseWithRef = responseUrl.includes("?")
     ? `${responseUrl}&ref=${encodeURIComponent(order.reference)}`
     : `${responseUrl}?ref=${encodeURIComponent(order.reference)}`;

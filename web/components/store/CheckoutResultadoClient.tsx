@@ -10,6 +10,7 @@ type OrderPoll = {
   reference: string;
   status: string;
   paymentStatus: string;
+  paymentProvider?: string | null;
   total: number;
   currency: string;
   customerName: string;
@@ -18,7 +19,13 @@ type OrderPoll = {
 export function CheckoutResultadoClient() {
   const searchParams = useSearchParams();
   const [syncDone, setSyncDone] = useState(false);
-  const [reference, setReference] = useState<string | null>(searchParams.get("ref"));
+  const boldOrderId = searchParams.get("bold-order-id");
+  const boldTxStatus = searchParams.get("bold-tx-status");
+  const isBoldReturn = Boolean(boldOrderId);
+
+  const [reference, setReference] = useState<string | null>(
+    searchParams.get("ref") || boldOrderId,
+  );
   const [order, setOrder] = useState<OrderPoll | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,18 +51,20 @@ export function CheckoutResultadoClient() {
 
     (async () => {
       try {
-        const res = await fetch("/api/payments/epayco/sync-response", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            refPayco: refPayco ?? undefined,
-            reference: refFromUrl ?? undefined,
-            query: q,
-          }),
-        });
-        const data = (await res.json()) as { linked?: boolean; reference?: string };
-        if (data.linked && data.reference) {
-          setReference(data.reference);
+        if (!isBoldReturn) {
+          const res = await fetch("/api/payments/epayco/sync-response", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              refPayco: refPayco ?? undefined,
+              reference: refFromUrl ?? undefined,
+              query: q,
+            }),
+          });
+          const data = (await res.json()) as { linked?: boolean; reference?: string };
+          if (data.linked && data.reference) {
+            setReference(data.reference);
+          }
         }
       } catch {
         /* sync es best-effort */
@@ -63,7 +72,7 @@ export function CheckoutResultadoClient() {
         setSyncDone(true);
       }
     })();
-  }, [syncDone, refPayco, searchParams]);
+  }, [syncDone, refPayco, searchParams, isBoldReturn]);
 
   useEffect(() => {
     if (!reference) return;
@@ -73,6 +82,8 @@ export function CheckoutResultadoClient() {
   }, [reference, fetchOrder]);
 
   const paid = order?.status === "PAID" && order?.paymentStatus === "APPROVED";
+  const providerLabel =
+    order?.paymentProvider === "BOLD" || isBoldReturn ? "Bold" : "ePayco";
 
   useEffect(() => {
     if (paid) saveCart([]);
@@ -102,7 +113,9 @@ export function CheckoutResultadoClient() {
         <p style={{ color: "var(--text-muted, #6b6560)", lineHeight: 1.6, marginBottom: 20 }}>
           {paid
             ? "Gracias por tu compra en GinnaBeauty. Recibirás la confirmación por correo."
-            : "La confirmación definitiva llega por notificación segura de ePayco. Esta página se actualiza sola."}
+            : isBoldReturn && boldTxStatus
+              ? `Estado en Bold: ${boldTxStatus}. Consultamos tu pedido en nuestra base de datos; la confirmación definitiva puede tardar unos segundos.`
+              : `La confirmación definitiva llega por notificación segura (${providerLabel}). Esta página se actualiza sola.`}
         </p>
         {reference && (
           <p style={{ fontSize: 14, marginBottom: 8 }}>
@@ -128,7 +141,7 @@ export function CheckoutResultadoClient() {
         </div>
         <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 24, lineHeight: 1.5 }}>
           ¿Necesitas ayuda? Escríbenos por WhatsApp desde el sitio. No confirmamos el pago solo por esta pantalla: el
-          cobro queda registrado cuando ePayco notifica a nuestro servidor.
+          estado real es el que ves arriba según nuestro servidor (webhook {providerLabel} o sincronización).
         </p>
         </motion.div>
       </div>

@@ -67,7 +67,7 @@ const siteMenuData: Prisma.InputJsonValue = {
 };
 
 const siteSettingsData: Prisma.InputJsonValue = {
-  topbar: "Envío gratis en compras superiores a $130.000 · Productos cruelty-free seleccionados",
+  topbar: "Envío gratis en compras superiores a $150.000 · Productos cruelty-free seleccionados",
   hero: {
     eyebrow: "Nueva temporada · GinnaBeauty",
     titleBefore: "Belleza que",

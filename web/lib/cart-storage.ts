@@ -22,5 +22,5 @@ export function saveCart(cart: CartLine[]): void {
 
 /** Misma regla que el carrito lateral (envío gratis desde cierto subtotal). */
 export function computeShippingCop(subtotal: number): number {
-  return subtotal >= 130_000 ? 0 : 9_000;
+  return subtotal >= 150_000 ? 0 : 9_000;
 }

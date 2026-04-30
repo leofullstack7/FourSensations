@@ -1,4 +1,5 @@
 import { OrderStatus, PaymentStatus, Prisma } from "@prisma/client";
+import { SHIPPING_ZONES, checkoutShippingCop } from "@/lib/checkout/shipping-zones";
 import { prisma } from "@/lib/prisma";
 import type { CreateCheckoutOrderInput } from "@/lib/validation/checkout-order";
 import { generateOrderReference } from "@/lib/server/checkout/reference";
@@ -19,8 +20,6 @@ export async function createPendingOrderFromCheckout(input: CreateCheckoutOrderI
   if (!process.env.DATABASE_URL) {
     return { ok: false, error: "Pedidos no disponibles (sin base de datos)", status: 503 };
   }
-
-  const shipping = input.shipping ?? 0;
 
   try {
     const data = await prisma.$transaction(async (tx) => {
@@ -61,19 +60,36 @@ export async function createPendingOrderFromCheckout(input: CreateCheckoutOrderI
         });
       }
 
+      const shipping = checkoutShippingCop(input.shippingZoneId, subtotal);
       const total = subtotal + shipping;
       if (total <= 0) {
         throw new Error("Total inválido");
       }
 
       const reference = generateOrderReference();
-      const shippingJson = input.shippingAddress as unknown as Prisma.InputJsonValue;
+      const zoneMeta = SHIPPING_ZONES[input.shippingZoneId];
+      let addr = { ...input.shippingAddress };
+      if (input.shippingZoneId === "pickup") {
+        const l1 = addr.line1?.trim() ?? "";
+        if (l1.length < 3) {
+          addr = {
+            ...addr,
+            line1: "Recogida en tienda GinnaBeauty (coordinación por WhatsApp)",
+          };
+        }
+      }
+      const shippingJson = {
+        ...addr,
+        shippingZoneId: input.shippingZoneId,
+        shippingZoneLabel: zoneMeta.shortLabel,
+      } as unknown as Prisma.InputJsonValue;
 
       const order = await tx.order.create({
         data: {
           reference,
           status: OrderStatus.PENDING_PAYMENT,
           paymentStatus: PaymentStatus.PENDING,
+          paymentProvider: input.paymentProvider ?? null,
           subtotal,
           shipping,
           total,
