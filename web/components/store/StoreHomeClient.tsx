@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useReveal } from "@/hooks/useReveal";
 import { toCategorySlug } from "@/lib/menu-config";
 import type { MenuConfig } from "@/lib/types/admin";
@@ -12,6 +12,7 @@ import type { CartLine, StoreProduct } from "@/lib/types/product";
 import { catKeyFromDisplayName, getCategoryLabel } from "@/lib/category-labels";
 import { formatPrice } from "@/lib/format";
 import { computeShippingCop, loadCart, saveCart } from "@/lib/cart-storage";
+import { loadFavorites, saveFavorites } from "@/lib/favorites-storage";
 import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
 import { isHttpImageUrl } from "@/lib/util/image-url";
 
@@ -130,8 +131,11 @@ export function StoreHomeClient({
   );
   const [cart, setCart] = useState<CartLine[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [favoritesHydrated, setFavoritesHydrated] = useState(false);
+  const [wishlistOpen, setWishlistOpen] = useState(false);
   const { data: session, status } = useSession();
   const isStoreCustomer = status === "authenticated" && session?.user?.role === "CUSTOMER";
+  const customerId = session?.user?.id;
   const customerLabel = (session?.user?.name?.trim() || session?.user?.email?.split("@")[0] || "Cliente") as string;
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [manualSub, setManualSub] = useState<string | null>(null);
@@ -254,6 +258,26 @@ export function StoreHomeClient({
     [showToast, isStoreCustomer],
   );
 
+  useEffect(() => {
+    if (!isStoreCustomer || !customerId) {
+      setFavorites([]);
+      setFavoritesHydrated(false);
+      return;
+    }
+    setFavorites(loadFavorites(customerId));
+    setFavoritesHydrated(true);
+  }, [isStoreCustomer, customerId]);
+
+  useEffect(() => {
+    if (!favoritesHydrated || !isStoreCustomer || !customerId) return;
+    saveFavorites(customerId, favorites);
+  }, [favoritesHydrated, isStoreCustomer, customerId, favorites]);
+
+  const wishlistProducts = useMemo(() => {
+    const map = new Map(products.map((p) => [p.id, p]));
+    return favorites.map((id) => map.get(id)).filter((p): p is StoreProduct => p != null);
+  }, [products, favorites]);
+
   const filteredProducts = useMemo(() => {
     let list: StoreProduct[];
     if (activeCategory === "__sub__" && manualSub != null) {
@@ -345,6 +369,25 @@ export function StoreHomeClient({
   const closeMobileMenu = useCallback(() => {
     setMobileMenuOpen(false);
     setMobileExpandedCat(null);
+  }, []);
+
+  const closeWishlist = useCallback(() => {
+    setWishlistOpen(false);
+    document.body.style.overflow = "";
+  }, []);
+
+  const openWishlist = useCallback(() => {
+    closeMobileMenu();
+    setWishlistOpen(true);
+    document.body.style.overflow = "hidden";
+  }, [closeMobileMenu]);
+
+  const openCustomerAuthFromWishlist = useCallback((tab: "login" | "register") => {
+    setWishlistOpen(false);
+    setAuthMode("login");
+    setCustomerAuthTab(tab);
+    setAuthOpen(true);
+    document.body.style.overflow = "hidden";
   }, []);
 
   const openCart = () => {
@@ -487,7 +530,7 @@ export function StoreHomeClient({
                     <path d="m21 21-4.35-4.35" />
                   </svg>
                 </button>
-                <button type="button" className="icon-btn icon-btn--fav" style={{ position: "relative" }} title="Favoritos">
+                <button type="button" className="icon-btn icon-btn--fav" style={{ position: "relative" }} title="Lista de deseos" onClick={openWishlist}>
                   <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
                   </svg>
@@ -1171,6 +1214,120 @@ export function StoreHomeClient({
               </div>
             </>
           )}
+        </div>
+      </div>
+
+      <div
+        className={`modal-overlay gb-wish-modal-overlay${wishlistOpen ? " open" : ""}`}
+        id="wishlist-overlay"
+        onClick={(e) => e.target === e.currentTarget && closeWishlist()}
+        role="presentation"
+      >
+        <div className="modal gb-wish-modal" role="dialog" aria-modal="true" aria-labelledby="wishlist-title" onClick={(e) => e.stopPropagation()}>
+          <div className="gb-wish-energy-shell">
+            <div className="gb-wish-energy-spin" aria-hidden />
+            <div className="gb-wish-particles" aria-hidden>
+              {Array.from({ length: 20 }, (_, i) => (
+                <span
+                  key={i}
+                  className="gb-wish-particle-dot"
+                  style={
+                    {
+                      "--gb-a": `${i * 18}deg`,
+                      "--gb-d": `${i * 0.1}s`,
+                    } as CSSProperties
+                  }
+                />
+              ))}
+            </div>
+            <div className="gb-wish-modal-panel">
+              <button type="button" className="modal-close" onClick={closeWishlist} aria-label="Cerrar lista de deseos">
+                ✕
+              </button>
+              <h2 id="wishlist-title" className="gb-wish-title">
+                Lista de deseos
+              </h2>
+              {isStoreCustomer ? (
+                <>
+                  <p className="gb-wish-sub">Tus productos favoritos guardados en esta cuenta.</p>
+                  {wishlistProducts.length === 0 ? (
+                    <div className="gb-wish-empty">
+                      Aún no tienes favoritos. Explora la tienda y pulsa el corazón en un producto para guardarlo aquí.
+                    </div>
+                  ) : (
+                    <ul className="gb-wish-list">
+                      {wishlistProducts.map((p) => (
+                        <li key={p.id} className="gb-wish-row">
+                          <button type="button" className="gb-wish-thumb" onClick={() => { closeWishlist(); openProductModal(p.id); }} title="Ver producto">
+                            {isHttpImageUrl(p.img) ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={p.img} alt="" />
+                            ) : (
+                              p.emoji
+                            )}
+                          </button>
+                          <div className="gb-wish-row-info">
+                            <button type="button" className="gb-wish-row-name" onClick={() => { closeWishlist(); openProductModal(p.id); }}>
+                              {p.name}
+                            </button>
+                            <p className="gb-wish-row-meta">
+                              {p.brand} · {formatPrice(p.price)}
+                            </p>
+                          </div>
+                          <div className="gb-wish-row-actions">
+                            <button type="button" onClick={() => addToCart(p.id)}>
+                              Al carrito
+                            </button>
+                            <button type="button" className="gb-wish-remove" onClick={() => toggleFavorite(p.id)}>
+                              Quitar ♥
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="gb-wish-sub">Inicia sesión o crea una cuenta para guardar y ver tu lista en cualquier momento.</p>
+                  <div className="gb-wish-guest-grid">
+                    <motion.button
+                      type="button"
+                      className="gb-wish-guest-card"
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
+                      onClick={() => openCustomerAuthFromWishlist("register")}
+                    >
+                      <strong>Registrarme en GinnaBeauty</strong>
+                      <span>Crea tu cuenta gratis con correo y contraseña.</span>
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      className="gb-wish-guest-card"
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
+                      onClick={() => openCustomerAuthFromWishlist("login")}
+                    >
+                      <strong>Iniciar sesión</strong>
+                      <span>Entra con el correo con el que te registraste.</span>
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      className="gb-wish-guest-card"
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
+                      onClick={() => {
+                        void signIn("google", { callbackUrl: typeof window !== "undefined" ? window.location.href : "/" });
+                      }}
+                    >
+                      <strong>Iniciar sesión con Google</strong>
+                      <span>Accede rápido con tu cuenta de Google.</span>
+                    </motion.button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

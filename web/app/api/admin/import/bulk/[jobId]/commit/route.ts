@@ -28,9 +28,9 @@ const commitSchema = z
     message: "Selecciona al menos una fila",
   });
 
-const BLOCKING_FILTER = (x: string, existingPolicy: "skip" | "replace") =>
-  x !== "Sin imagen en ZIP para este código" &&
-  !(x === "Producto ya registrado" && existingPolicy === "replace");
+/** «Producto ya registrado» se gestiona en el bucle (omitir o reemplazar), no aquí. */
+const BLOCKING_FILTER = (x: string) =>
+  x !== "Sin imagen en ZIP para este código" && x !== "Producto ya registrado";
 
 function parsePreview(raw: unknown): BulkPreviewResult | null {
   if (!raw || typeof raw !== "object") return null;
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const chosen =
       idSet.size > 0 ? idSet.has(row.previewRowId ?? row.rowId) : indexSet.has(row.rowIndex);
     if (!chosen) continue;
-    const blocking = row.issues.filter((x) => BLOCKING_FILTER(x, existingPolicy));
+    const blocking = row.issues.filter((x) => BLOCKING_FILTER(x));
     if (blocking.length > 0) {
       return noStoreJson(
         { error: `Fila ${row.rowIndex + 1}: ${blocking.join("; ")}` },

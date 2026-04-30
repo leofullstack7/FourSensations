@@ -1662,7 +1662,7 @@ function AdminBulkTab({
     for (const r of preview.matchedRows) {
       const blocking = r.issues.filter((x) => {
         if (x === "Sin imagen en ZIP para este código") return false;
-        if (x === "Producto ya registrado" && existingPolicy === "replace") return false;
+        if (x === "Producto ya registrado") return false;
         return true;
       });
       if (blocking.length === 0 && r.normalizedCode) next.add(r.previewRowId ?? r.rowId);
@@ -1678,7 +1678,7 @@ function AdminBulkTab({
         const previewRowId = r.previewRowId ?? r.rowId;
         const blockingErrors = r.issues.filter((x) => {
           if (x === "Sin imagen en ZIP para este código") return false;
-          if (x === "Producto ya registrado" && existingPolicy === "replace") return false;
+          if (x === "Producto ya registrado") return false;
           return true;
         });
         const hasExisting = r.issues.includes("Producto ya registrado");
@@ -1707,7 +1707,8 @@ function AdminBulkTab({
   );
 
   return (
-    <div className="admin-card">
+    <div className="admin-bulk-tab">
+      <div className="admin-card">
       <BulkImportProgressOverlay open={bulkProgress.active} percent={bulkProgress.percent} label={bulkProgressLabel} />
       <div className="admin-card-title" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span>📦 Carga masiva CSV + ZIP</span>
@@ -1964,7 +1965,7 @@ function AdminBulkTab({
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 12 }}>
             <button type="button" className="btn btn-outline btn-sm" onClick={selectAllValid}>
               Seleccionar filas importables
             </button>
@@ -1974,25 +1975,36 @@ function AdminBulkTab({
             <span style={{ fontSize: 13, color: "var(--text-muted)", alignSelf: "center" }}>
               {selectedRowIds.size} fila(s) seleccionada(s) / {previewTableRows.length} con match
             </span>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
-              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Producto ya registrado:</span>
-              <select
-                className="form-select"
-                style={{ minWidth: 220, height: 34 }}
-                value={existingPolicy}
-                onChange={(e) => setExistingPolicy(e.target.value as "skip" | "replace")}
-              >
-                <option value="skip">No subir producto ya registrado</option>
-                <option value="replace">Reemplazar producto registrado</option>
-              </select>
-            </div>
           </div>
 
-          <div style={{ overflowX: "auto", marginBottom: 16, border: "1px solid var(--dusty-rose)", borderRadius: "var(--radius-md)" }}>
-            <table className="admin-table" style={{ minWidth: 720, margin: 0 }}>
+          <div className="admin-bulk-policy-row">
+            <label className="form-label" style={{ marginBottom: 6, display: "block" }}>
+              Producto ya registrado (mismo código en tienda)
+            </label>
+            <select
+              className="form-select"
+              style={{ width: "100%", maxWidth: 420, minHeight: 40 }}
+              value={existingPolicy}
+              onChange={(e) => setExistingPolicy(e.target.value as "skip" | "replace")}
+            >
+              <option value="skip">Omitir filas ya registradas (no reemplazar)</option>
+              <option value="replace">Reemplazar datos del producto ya registrado</option>
+            </select>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "10px 0 0", lineHeight: 1.45 }}>
+              Si eliges omitir, esas filas se saltan al importar; si eliges reemplazar, se actualizan nombre, precio, imágenes, etc.
+            </p>
+          </div>
+
+          <div
+            className="admin-bulk-scroll"
+            style={{ marginBottom: 16, border: "1px solid var(--dusty-rose)", borderRadius: "var(--radius-md)" }}
+          >
+            <table className="admin-table admin-bulk-matched-table" style={{ minWidth: 720, margin: 0 }}>
               <thead>
                 <tr>
-                  <th style={{ width: 40 }}>#</th>
+                  <th style={{ width: 44 }} className="admin-bulk-check-cell">
+                    Sel.
+                  </th>
                   <th>Código</th>
                   <th>Nombre</th>
                   <th>Categoría CSV</th>
@@ -2018,11 +2030,16 @@ function AdminBulkTab({
                         background: r.hasExisting ? "rgba(255, 84, 84, 0.10)" : undefined,
                       }}
                     >
-                      <td>
+                      <td
+                        className="admin-bulk-check-cell"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
                         <input
                           type="checkbox"
                           checked={r.selected}
                           onChange={() => toggleRow(r.previewRowId)}
+                          onClick={(e) => e.stopPropagation()}
                           aria-label={`Seleccionar fila ${r.csvRowIndex + 1}`}
                         />
                       </td>
@@ -2083,7 +2100,10 @@ function AdminBulkTab({
             </table>
           </div>
 
-          <div style={{ overflowX: "auto", marginBottom: 16, border: "1px solid var(--line, #e7d9d4)", borderRadius: "var(--radius-md)" }}>
+          <div
+            className="admin-bulk-scroll"
+            style={{ marginBottom: 16, border: "1px solid var(--line, #e7d9d4)", borderRadius: "var(--radius-md)" }}
+          >
             <table className="admin-table" style={{ minWidth: 900, margin: 0 }}>
               <thead>
                 <tr>
@@ -2321,6 +2341,7 @@ function AdminBulkTab({
           })();
         }}
       />
+      </div>
     </div>
   );
 }
@@ -2395,7 +2416,7 @@ function AdminBulkTaxonomyHintsModal({
                     : "La subcategoría encaja mejor en otra categoría del sistema."}
                 </span>
               </p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, paddingBottom: 6 }}>
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"

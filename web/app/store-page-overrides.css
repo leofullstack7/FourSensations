@@ -632,3 +632,281 @@
     margin-right: auto;
   }
 }
+
+/* ══════════════════════════════════════════
+   WISHLIST MODAL — borde energía + partículas
+   ══════════════════════════════════════════ */
+.gb-wish-modal-overlay {
+  z-index: 1002;
+}
+.gb-wish-modal.modal {
+  max-width: 520px;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.gb-wish-energy-shell {
+  position: relative;
+  border-radius: var(--radius-xl);
+  overflow: visible;
+}
+.gb-wish-energy-spin {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 0deg,
+    rgba(201, 123, 134, 0.98),
+    rgba(255, 214, 224, 0.92),
+    rgba(255, 250, 248, 0.95),
+    rgba(212, 165, 116, 0.88),
+    rgba(236, 180, 195, 0.95),
+    rgba(201, 123, 134, 0.98)
+  );
+  animation: gb-wish-energy-rotate 3.2s linear infinite;
+  z-index: 0;
+  filter: saturate(1.15);
+}
+.gb-wish-energy-spin::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    0 0 18px rgba(201, 123, 134, 0.45),
+    0 0 36px rgba(255, 200, 210, 0.35),
+    inset 0 0 14px rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+}
+@keyframes gb-wish-energy-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.gb-wish-particles {
+  position: absolute;
+  inset: -28px;
+  z-index: 1;
+  pointer-events: none;
+  overflow: visible;
+}
+.gb-wish-particle-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fff 0%, var(--dusty-rose) 45%, transparent 72%);
+  animation: gb-wish-particle-burst 2.5s ease-out infinite;
+  animation-delay: var(--gb-d, 0s);
+  --gb-a: 0deg;
+  --gb-d: 0s;
+}
+@keyframes gb-wish-particle-burst {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--gb-a)) translateY(-52px) scale(0.35);
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--gb-a)) translateY(-96px) scale(0.1);
+  }
+}
+.gb-wish-modal-panel {
+  position: relative;
+  z-index: 2;
+  margin: 3px;
+  background: var(--white);
+  border-radius: calc(var(--radius-xl) - 4px);
+  padding: 22px 22px 20px;
+  max-height: min(78vh, 640px);
+  overflow-y: auto;
+  box-shadow: var(--shadow-xl);
+}
+.gb-wish-modal-panel .modal-close {
+  top: 12px;
+  right: 12px;
+}
+.gb-wish-title {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--dark);
+  margin: 0 40px 6px 0;
+  letter-spacing: -0.02em;
+}
+.gb-wish-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 18px;
+  line-height: 1.5;
+}
+.gb-wish-guest-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gb-wish-guest-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--cream);
+  background: linear-gradient(145deg, #fffdfb 0%, var(--ivory) 100%);
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+  font: inherit;
+  color: inherit;
+}
+.gb-wish-guest-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(201, 123, 134, 0.45);
+  box-shadow: 0 10px 28px rgba(80, 50, 60, 0.12);
+}
+.gb-wish-guest-card:focus-visible {
+  outline: 2px solid var(--dusty-rose);
+  outline-offset: 2px;
+}
+.gb-wish-guest-card strong {
+  display: block;
+  font-size: 15px;
+  color: var(--dark);
+  margin-bottom: 4px;
+}
+.gb-wish-guest-card span {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.gb-wish-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gb-wish-row {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--cream);
+  background: var(--ivory);
+  transition: box-shadow 0.2s ease;
+}
+.gb-wish-row:hover {
+  box-shadow: 0 6px 18px rgba(50, 35, 40, 0.08);
+}
+.gb-wish-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+  background: var(--cream);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 22px;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+.gb-wish-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.gb-wish-row-info {
+  min-width: 0;
+  text-align: left;
+}
+.gb-wish-row-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dark);
+  margin: 0 0 4px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.gb-wish-row-name:hover {
+  color: var(--dusty-rose);
+}
+.gb-wish-row-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.gb-wish-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+.gb-wish-row-actions button {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--cream);
+  background: var(--white);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+.gb-wish-row-actions button:hover {
+  border-color: rgba(201, 123, 134, 0.4);
+  background: #fff5f6;
+}
+.gb-wish-row-actions .gb-wish-remove {
+  color: var(--text-muted);
+  border-color: transparent;
+  background: transparent;
+}
+.gb-wish-row-actions .gb-wish-remove:hover {
+  color: #b54a5a;
+  background: rgba(181, 74, 90, 0.08);
+}
+.gb-wish-empty {
+  text-align: center;
+  padding: 28px 16px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+@media (max-width: 520px) {
+  .gb-wish-row {
+    grid-template-columns: 48px 1fr;
+    grid-template-rows: auto auto;
+  }
+  .gb-wish-thumb {
+    width: 48px;
+    height: 48px;
+    grid-row: 1 / span 2;
+  }
+  .gb-wish-row-actions {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}

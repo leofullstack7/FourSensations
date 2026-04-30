@@ -99,6 +99,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-width: 0; /* evita que tablas anchas recorten el área útil del grid */
 }
 .admin-topbar {
   background: white;
@@ -113,7 +114,44 @@
 }
 .admin-page-title { font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--dark); }
 .admin-topbar-actions { display: flex; gap: 10px; align-items: center; }
-.admin-content { flex: 1; padding: 32px; }
+.admin-content { flex: 1; padding: 32px; min-width: 0; }
+
+/* Carga masiva: usar todo el ancho disponible y scroll horizontal claro */
+.admin-bulk-tab {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.admin-bulk-tab .admin-card {
+  max-width: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+.admin-bulk-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.admin-bulk-matched-table tbody tr {
+  cursor: default;
+}
+.admin-bulk-matched-table tbody tr .admin-bulk-check-cell {
+  cursor: pointer;
+}
+.admin-bulk-matched-table tbody tr .admin-bulk-check-cell input {
+  cursor: pointer;
+}
+.admin-bulk-policy-row {
+  width: 100%;
+  padding: 12px 0 20px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(200, 168, 162, 0.2);
+}
+.admin-bulk-policy-row .form-select {
+  max-width: 100%;
+}
 
 .admin-page { display: none; }
 .admin-page.active { display: block; }

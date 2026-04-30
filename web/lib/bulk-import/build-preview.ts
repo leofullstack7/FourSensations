@@ -367,12 +367,14 @@ export function buildBulkPreview(params: {
     }
 
     const blocking = r.issues.filter(isBlockingIssue);
+    /** No bloquea la selección por defecto: la política «skip/replace» se aplica al importar. */
+    const blockingForAutoSelect = blocking.filter((x) => x !== "Producto ya registrado");
     const hasValidMatch = r.imageMatches.some(
       (m) => m.matchedBy === "exact" || m.matchedBy === "numericPrefix" || m.matchedBy === "sixDigitPrefix"
     );
     r.selected =
       hasValidMatch &&
-      blocking.length === 0 &&
+      blockingForAutoSelect.length === 0 &&
       !!r.codeRaw &&
       !!r.mapped.name &&
       r.mapped.price != null &&
