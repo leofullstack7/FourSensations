@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signIn, signOut, useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useReveal } from "@/hooks/useReveal";
 import { toCategorySlug } from "@/lib/menu-config";
@@ -129,7 +130,9 @@ export function StoreHomeClient({
   );
   const [cart, setCart] = useState<CartLine[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [user, setUser] = useState<{ name: string; email: string; provider: string } | null>(null);
+  const { data: session, status } = useSession();
+  const isStoreCustomer = status === "authenticated" && session?.user?.role === "CUSTOMER";
+  const customerLabel = (session?.user?.name?.trim() || session?.user?.email?.split("@")[0] || "Cliente") as string;
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [manualSub, setManualSub] = useState<string | null>(null);
   const [sortValue, setSortValue] = useState<string>("default");
@@ -144,6 +147,7 @@ export function StoreHomeClient({
   const router = useRouter();
   const [topbarIndex, setTopbarIndex] = useState(0);
   const [authMode, setAuthMode] = useState<"login" | "fav-warning">("login");
+  const [customerAuthTab, setCustomerAuthTab] = useState<"login" | "register">("login");
   const [selectedProduct, setSelectedProduct] = useState<StoreProduct | null>(null);
   const [modalImgIdx, setModalImgIdx] = useState(0);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -237,8 +241,9 @@ export function StoreHomeClient({
 
   const toggleFavorite = useCallback(
     (productId: string) => {
-      if (!user) {
+      if (!isStoreCustomer) {
         setAuthMode("fav-warning");
+        setCustomerAuthTab("login");
         setAuthOpen(true);
         document.body.style.overflow = "hidden";
         return;
@@ -253,7 +258,7 @@ export function StoreHomeClient({
         return f.filter((x) => x !== productId);
       });
     },
-    [showToast, user],
+    [showToast, isStoreCustomer],
   );
 
   const filteredProducts = useMemo(() => {
@@ -461,15 +466,18 @@ export function StoreHomeClient({
                 <button
                   type="button"
                   className="icon-btn icon-btn--account"
-                  title={user ? `Hola, ${user.name} — Cerrar sesión` : "Mi cuenta"}
-                  style={user ? { color: "var(--dusty-rose)" } : undefined}
+                  title={isStoreCustomer ? `Hola, ${customerLabel} — Cerrar sesión` : "Mi cuenta"}
+                  style={isStoreCustomer ? { color: "var(--dusty-rose)" } : undefined}
                   onClick={() => {
-                    if (user) {
-                      setUser(null);
-                      setFavorites([]);
-                      showToast("Sesión cerrada", "info", "👋");
+                    if (isStoreCustomer) {
+                      void signOut({ redirect: false }).then(() => {
+                        setFavorites([]);
+                        showToast("Sesión cerrada", "info", "👋");
+                        router.refresh();
+                      });
                     } else {
                       setAuthMode("login");
+                      setCustomerAuthTab("login");
                       setAuthOpen(true);
                       document.body.style.overflow = "hidden";
                     }
@@ -1209,41 +1217,49 @@ export function StoreHomeClient({
               type="button"
               className="auth-social-btn"
               onClick={() => {
-                setUser({ name: "Usuario", email: "usuario@demo.com", provider: "Google" });
-                setAuthOpen(false);
-                document.body.style.overflow = "";
-                showToast("Sesión iniciada con Google", "success", "✅");
+                void signIn("google", { callbackUrl: typeof window !== "undefined" ? window.location.href : "/" });
               }}
             >
               <span style={{ fontSize: 18 }}>🔴</span> Continuar con Google
             </button>
-            <button
-              type="button"
-              className="auth-social-btn"
-              onClick={() => {
-                setUser({ name: "Usuario", email: "usuario@demo.com", provider: "Microsoft" });
-                setAuthOpen(false);
-                document.body.style.overflow = "";
-                showToast("Sesión iniciada con Microsoft", "success", "✅");
-              }}
-            >
-              <span style={{ fontSize: 18 }}>🔷</span> Continuar con Microsoft
-            </button>
           </div>
           <div className="auth-divider">o con correo electrónico</div>
-          <AuthEmailForm
-            onSuccess={(email) => {
-              setUser({ name: email.split("@")[0], email, provider: "email" });
+          <CustomerEmailAuthForm
+            tab={customerAuthTab}
+            showToast={showToast}
+            closeAuthModal={() => {
               setAuthOpen(false);
               document.body.style.overflow = "";
-              showToast("Sesión iniciada correctamente", "success", "✅");
             }}
           />
           <p className="auth-switch">
-            ¿No tienes cuenta?{" "}
-            <a onClick={() => showToast("Registro próximamente", "info", "📝")} style={{ cursor: "pointer" }}>
-              Crear cuenta gratis
-            </a>
+            {customerAuthTab === "login" ? (
+              <>
+                ¿No tienes cuenta?{" "}
+                <a
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setCustomerAuthTab("register")}
+                  onKeyDown={(e) => e.key === "Enter" && setCustomerAuthTab("register")}
+                  style={{ cursor: "pointer" }}
+                >
+                  Crear cuenta gratis
+                </a>
+              </>
+            ) : (
+              <>
+                ¿Ya tienes cuenta?{" "}
+                <a
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setCustomerAuthTab("login")}
+                  onKeyDown={(e) => e.key === "Enter" && setCustomerAuthTab("login")}
+                  style={{ cursor: "pointer" }}
+                >
+                  Iniciar sesión
+                </a>
+              </>
+            )}
           </p>
         </div>
       </div>
@@ -1364,29 +1380,136 @@ export function StoreHomeClient({
   );
 }
 
-function AuthEmailForm({ onSuccess }: { onSuccess: (email: string) => void }) {
+function CustomerEmailAuthForm({
+  tab,
+  showToast,
+  closeAuthModal,
+}: {
+  tab: "login" | "register";
+  showToast: (msg: string, type?: string, icon?: string) => void;
+  closeAuthModal: () => void;
+}) {
+  const router = useRouter();
+  const { update } = useSession();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [pass, setPass] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setError(null);
+  }, [tab]);
+
+  async function parseJson(res: Response): Promise<{ error?: string }> {
+    try {
+      return (await res.json()) as { error?: string };
+    } catch {
+      return {};
+    }
+  }
+
+  const submit = async () => {
+    setError(null);
+    if (tab === "register") {
+      if (!name.trim() || !email.trim() || !password) {
+        setError("Completa nombre, correo y contraseña");
+        return;
+      }
+    } else if (!email.trim() || !password) {
+      setError("Correo y contraseña requeridos");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (tab === "register") {
+        const res = await fetch("/api/auth/customer/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ name: name.trim(), email: email.trim(), password }),
+        });
+        const data = await parseJson(res);
+        if (!res.ok) {
+          setError(data.error || "No se pudo crear la cuenta");
+          return;
+        }
+      }
+
+      const loginRes = await fetch("/api/auth/customer/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const loginData = await parseJson(loginRes);
+      if (!loginRes.ok) {
+        setError(loginData.error || "No se pudo iniciar sesión");
+        return;
+      }
+
+      await update();
+      router.refresh();
+      closeAuthModal();
+      showToast(
+        tab === "register" ? "Cuenta creada. ¡Bienvenida/o!" : "Sesión iniciada correctamente",
+        "success",
+        "✅"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
+      {error && (
+        <p style={{ color: "var(--dusty-rose)", fontSize: 13, marginBottom: 12, lineHeight: 1.45 }}>{error}</p>
+      )}
+      {tab === "register" && (
+        <div className="form-group">
+          <label className="form-label">Nombre</label>
+          <input
+            type="text"
+            className="form-input"
+            placeholder="Tu nombre"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="name"
+          />
+        </div>
+      )}
       <div className="form-group">
         <label className="form-label">Correo electrónico</label>
-        <input type="email" className="form-input" placeholder="tu@correo.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input
+          type="email"
+          className="form-input"
+          placeholder="tu@correo.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+        />
       </div>
       <div className="form-group">
         <label className="form-label">Contraseña</label>
-        <input type="password" className="form-input" placeholder="••••••••" value={pass} onChange={(e) => setPass(e.target.value)} />
+        <input
+          type="password"
+          className="form-input"
+          placeholder="••••••••"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete={tab === "register" ? "new-password" : "current-password"}
+        />
       </div>
       <button
         type="button"
         className="btn btn-primary"
         style={{ width: "100%", justifyContent: "center", marginTop: 4 }}
-        onClick={() => {
-          if (!email || !pass) return;
-          onSuccess(email);
-        }}
+        disabled={loading}
+        onClick={() => void submit()}
       >
-        Iniciar sesión
+        {loading ? "…" : tab === "register" ? "Crear cuenta" : "Iniciar sesión"}
       </button>
     </>
   );

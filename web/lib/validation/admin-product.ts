@@ -80,3 +80,17 @@ export function formatZodError(err: z.ZodError): { message: string; issues: z.Zo
     issues: err.issues,
   };
 }
+
+/** Debe coincidir con lo que el admin escribe en el segundo paso al borrar todo el catálogo. */
+export const BULK_DELETE_ALL_CONFIRM_PHRASE = "ELIMINAR_TODOS_LOS_PRODUCTOS" as const;
+
+export const adminProductBulkDeleteSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("ids"),
+    ids: z.array(z.string().trim().min(1).max(200)).min(1).max(5000),
+  }),
+  z.object({
+    mode: z.literal("all"),
+    confirmPhrase: z.literal(BULK_DELETE_ALL_CONFIRM_PHRASE),
+  }),
+]);

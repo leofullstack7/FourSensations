@@ -14,9 +14,11 @@ import {
   updateAdminSubcategory,
 } from "@/lib/api/admin-categories";
 import {
+  BULK_DELETE_ALL_CONFIRM_PHRASE,
   createAdminProduct,
   deleteAdminProduct,
   fetchAdminProducts,
+  postAdminProductsBulkDelete,
   postSyncProductTagsFromMenu,
   updateAdminProduct,
 } from "@/lib/api/admin-products";
@@ -146,6 +148,10 @@ export function AdminApp() {
   const [productFilterCategorySlug, setProductFilterCategorySlug] = useState("");
   const [productFilterSubcategory, setProductFilterSubcategory] = useState("");
   const [productFilterTag, setProductFilterTag] = useState("");
+  const [productListSelectedIds, setProductListSelectedIds] = useState<Set<string>>(() => new Set());
+  const [productBulkMenuOpen, setProductBulkMenuOpen] = useState(false);
+  const [productBulkDeleting, setProductBulkDeleting] = useState(false);
+  const productBulkMenuRef = useRef<HTMLDivElement>(null);
 
   const [addSaleOpen, setAddSaleOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -223,6 +229,31 @@ export function AdminApp() {
     if (page !== "products") return;
     void loadProducts();
   }, [page, status, sessionUserId, loadProducts]);
+
+  useEffect(() => {
+    if (productTab !== "list") {
+      setProductListSelectedIds(new Set());
+      setProductBulkMenuOpen(false);
+    }
+  }, [productTab]);
+
+  useEffect(() => {
+    if (!productBulkMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (productBulkMenuRef.current && !productBulkMenuRef.current.contains(e.target as Node)) {
+        setProductBulkMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setProductBulkMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [productBulkMenuOpen]);
 
   useEffect(() => {
     if (status !== "authenticated" || !sessionUserId) return;
@@ -352,6 +383,95 @@ export function AdminApp() {
     productFilterSubcategory,
     productFilterTag,
   ]);
+
+  const toggleProductListSelection = useCallback((id: string) => {
+    setProductListSelectedIds((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }, []);
+
+  const applyProductListSelectionForVisible = useCallback((visibleIds: string[], select: boolean) => {
+    setProductListSelectedIds((prev) => {
+      const n = new Set(prev);
+      for (const id of visibleIds) {
+        if (select) n.add(id);
+        else n.delete(id);
+      }
+      return n;
+    });
+  }, []);
+
+  const clearProductListSelection = useCallback(() => {
+    setProductListSelectedIds(new Set());
+  }, []);
+
+  const handleBulkDeleteSelected = useCallback(async () => {
+    const ids = Array.from(productListSelectedIds);
+    if (ids.length === 0) {
+      showToast("No hay productos seleccionados", "danger", "⚠️");
+      return;
+    }
+    if (
+      !confirm(
+        `¿Eliminar ${ids.length} producto(s) seleccionado(s)? Esta acción no se puede deshacer.`
+      )
+    ) {
+      return;
+    }
+    setProductBulkDeleting(true);
+    setProductBulkMenuOpen(false);
+    try {
+      const { deleted } = await postAdminProductsBulkDelete({ mode: "ids", ids });
+      clearProductListSelection();
+      showToast(`${deleted} producto(s) eliminado(s)`, "default", "🗑️");
+      await loadProducts();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Error al eliminar", "danger", "⚠️");
+    } finally {
+      setProductBulkDeleting(false);
+    }
+  }, [productListSelectedIds, showToast, loadProducts, clearProductListSelection]);
+
+  const handleBulkDeleteAll = useCallback(async () => {
+    if (products.length === 0) {
+      showToast("No hay productos en el catálogo", "default", "ℹ️");
+      return;
+    }
+    if (
+      !confirm(
+        "Se eliminarán todos los productos del catálogo. Los pedidos existentes se conservan, pero esta acción no se puede deshacer. ¿Continuar?"
+      )
+    ) {
+      return;
+    }
+    const typed = window.prompt(
+      `Para confirmar, escribe exactamente:\n${BULK_DELETE_ALL_CONFIRM_PHRASE}`
+    )?.trim();
+    if (typed !== BULK_DELETE_ALL_CONFIRM_PHRASE) {
+      if (typed != null && typed !== "") {
+        showToast("Frase de confirmación incorrecta", "danger", "⚠️");
+      }
+      return;
+    }
+    setProductBulkDeleting(true);
+    setProductBulkMenuOpen(false);
+    try {
+      const { deleted } = await postAdminProductsBulkDelete({
+        mode: "all",
+        confirmPhrase: BULK_DELETE_ALL_CONFIRM_PHRASE,
+      });
+      clearProductListSelection();
+      showToast(`Se eliminaron ${deleted} producto(s)`, "default", "🗑️");
+      await loadProducts();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Error al eliminar", "danger", "⚠️");
+    } finally {
+      setProductBulkDeleting(false);
+    }
+  }, [products.length, showToast, loadProducts, clearProductListSelection]);
 
   const setProductFilterCategorySlugAndResetSub = useCallback((slug: string) => {
     setProductFilterCategorySlug(slug);
@@ -592,16 +712,79 @@ export function AdminApp() {
               {productsLoading && products.length === 0 && (
                 <p style={{ color: "var(--text-muted)", marginBottom: 16 }}>Cargando productos desde la base de datos…</p>
               )}
-              <div className="tabs">
-                <button type="button" className={`tab-btn ${productTab === "list" ? "active" : ""}`} onClick={() => setProductTab("list")}>
-                  📋 Lista de productos
-                </button>
-                <button type="button" className={`tab-btn ${productTab === "add" ? "active" : ""}`} onClick={() => setProductTab("add")}>
-                  + Agregar producto
-                </button>
-                <button type="button" className={`tab-btn ${productTab === "bulk" ? "active" : ""}`} onClick={() => setProductTab("bulk")}>
-                  📤 Carga masiva
-                </button>
+              <div className="tabs" style={{ flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  <button type="button" className={`tab-btn ${productTab === "list" ? "active" : ""}`} onClick={() => setProductTab("list")}>
+                    📋 Lista de productos
+                  </button>
+                  <button type="button" className={`tab-btn ${productTab === "add" ? "active" : ""}`} onClick={() => setProductTab("add")}>
+                    + Agregar producto
+                  </button>
+                  <button type="button" className={`tab-btn ${productTab === "bulk" ? "active" : ""}`} onClick={() => setProductTab("bulk")}>
+                    📤 Carga masiva
+                  </button>
+                </div>
+                <div ref={productBulkMenuRef} style={{ position: "relative", display: "flex", alignItems: "center", marginBottom: -1 }}>
+                  <button
+                    type="button"
+                    className={`tab-btn ${productBulkMenuOpen ? "active" : ""}`}
+                    aria-expanded={productBulkMenuOpen}
+                    aria-haspopup="menu"
+                    disabled={productBulkDeleting}
+                    title="Más acciones (eliminación en lote)"
+                    onClick={() => setProductBulkMenuOpen((o) => !o)}
+                    style={{ minWidth: 44, padding: "10px 14px" }}
+                  >
+                    ⋯
+                  </button>
+                  {productBulkMenuOpen && (
+                    <div
+                      role="menu"
+                      style={{
+                        position: "absolute",
+                        top: "calc(100% + 6px)",
+                        right: 0,
+                        minWidth: 260,
+                        background: "var(--ivory)",
+                        border: "1px solid var(--cream)",
+                        borderRadius: "var(--radius-md)",
+                        boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+                        zIndex: 40,
+                        padding: 8,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={productBulkDeleting || productListSelectedIds.size === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={() => void handleBulkDeleteSelected()}
+                      >
+                        Eliminar seleccionados ({productListSelectedIds.size})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={productBulkDeleting || products.length === 0}
+                        style={{
+                          width: "100%",
+                          justifyContent: "flex-start",
+                          textAlign: "left",
+                          borderColor: "var(--dusty-rose)",
+                          color: "var(--dusty-rose)",
+                        }}
+                        onClick={() => void handleBulkDeleteAll()}
+                      >
+                        Eliminar todos los productos…
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
               {productTab === "list" && (
                 <AdminProductListTab
@@ -623,6 +806,9 @@ export function AdminApp() {
                   totalProductCount={products.length}
                   listLoading={productsLoading}
                   categoryTree={categoriesTree}
+                  selectedIds={productListSelectedIds}
+                  onToggleSelect={toggleProductListSelection}
+                  onSelectAllVisible={applyProductListSelectionForVisible}
                   featuredHomeSavingId={featuredHomeSavingId}
                   onToggleFeaturedInHome={async (id, value) => {
                     setFeaturedHomeSavingId(id);
@@ -650,6 +836,11 @@ export function AdminApp() {
                     if (!confirm("¿Eliminar este producto?")) return;
                     try {
                       await deleteAdminProduct(id);
+                      setProductListSelectedIds((prev) => {
+                        const n = new Set(prev);
+                        n.delete(id);
+                        return n;
+                      });
                       showToast("Producto eliminado", "default", "🗑️");
                       await loadProducts();
                     } catch (e) {
@@ -836,6 +1027,9 @@ function AdminProductListTab({
   totalProductCount,
   listLoading,
   categoryTree,
+  selectedIds,
+  onToggleSelect,
+  onSelectAllVisible,
   featuredHomeSavingId,
   onToggleFeaturedInHome,
   onView,
@@ -859,6 +1053,9 @@ function AdminProductListTab({
   totalProductCount: number;
   listLoading: boolean;
   categoryTree: AdminCategoryTree[];
+  selectedIds: ReadonlySet<string>;
+  onToggleSelect: (id: string) => void;
+  onSelectAllVisible: (visibleIds: string[], select: boolean) => void;
   featuredHomeSavingId: string | null;
   onToggleFeaturedInHome: (id: string, value: boolean) => void | Promise<void>;
   onView: (p: AdminProduct) => void;
@@ -866,6 +1063,10 @@ function AdminProductListTab({
 }) {
   const hasActiveFilters =
     !!filterBrand || !!filterCategorySlug || !!filterSubcategory || !!filterTag || !!productSearch.trim();
+
+  const visibleIds = useMemo(() => filteredProducts.map((p) => p.id), [filteredProducts]);
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
 
   return (
     <>
@@ -986,6 +1187,15 @@ function AdminProductListTab({
         <table className="admin-table">
           <thead style={{ padding: "0 16px" }}>
             <tr>
+              <th style={{ width: 44, padding: "16px 8px 16px 16px", textAlign: "center" }} title="Seleccionar para eliminación en lote">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  disabled={visibleIds.length === 0}
+                  aria-label="Seleccionar o anular todos los productos visibles"
+                  onChange={() => onSelectAllVisible(visibleIds, !allVisibleSelected)}
+                />
+              </th>
               <th style={{ padding: 16 }}>Producto</th>
               <th>Marca</th>
               <th>Categoría</th>
@@ -999,13 +1209,13 @@ function AdminProductListTab({
           <tbody>
             {listLoading && filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                <td colSpan={9} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   Cargando…
                 </td>
               </tr>
             ) : filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                <td colSpan={9} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   {totalProductCount === 0
                     ? "Sin productos"
                     : "Ningún producto coincide con la búsqueda o los filtros seleccionados."}
@@ -1017,6 +1227,15 @@ function AdminProductListTab({
                 const stockLabel = p.stock === 0 ? "Sin stock" : p.stock < 5 ? "Stock bajo" : "Disponible";
                 return (
                   <tr key={p.id}>
+                    <td style={{ textAlign: "center", verticalAlign: "middle" }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(p.id)}
+                        aria-label={`Seleccionar ${p.name}`}
+                        onChange={() => onToggleSelect(p.id)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </td>
                     <td>
                       <div className="table-product-cell" style={{ cursor: "pointer" }} onClick={() => onView(p)} title="Ver detalle">
                         <AdminProductThumb imageUrl={p.imageUrl} emoji={p.emoji} />

@@ -1,4 +1,7 @@
 import type { AdminProduct } from "@/lib/types/admin";
+import { BULK_DELETE_ALL_CONFIRM_PHRASE } from "@/lib/validation/admin-product";
+
+export { BULK_DELETE_ALL_CONFIRM_PHRASE };
 
 type ApiErrorBody = { error: string; details?: unknown; hint?: string };
 
@@ -78,6 +81,23 @@ export async function updateAdminProduct(
 export async function deleteAdminProduct(id: string): Promise<void> {
   const res = await fetch(`/api/admin/products/${id}`, { method: "DELETE", credentials: "include" });
   if (!res.ok) throw new Error(await parseError(res));
+}
+
+export type AdminBulkDeleteProductsBody =
+  | { mode: "ids"; ids: string[] }
+  | { mode: "all"; confirmPhrase: typeof BULK_DELETE_ALL_CONFIRM_PHRASE };
+
+export async function postAdminProductsBulkDelete(
+  body: AdminBulkDeleteProductsBody
+): Promise<{ deleted: number }> {
+  const res = await fetch("/api/admin/products/bulk-delete", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as { deleted: number };
 }
 
 /** Asigna a cada producto la etiqueta de menú (`Subcategory.menuTag`) de su subcategoría. */
