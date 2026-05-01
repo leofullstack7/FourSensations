@@ -72,7 +72,7 @@ function mountBoldButton(opts: {
   s.setAttribute("data-bold-button", "dark-L");
   s.setAttribute("data-order-id", opts.reference);
   s.setAttribute("data-currency", "COP");
-  s.setAttribute("data-amount", String(opts.amount));
+  s.setAttribute("data-amount", String(Math.round(Number(opts.amount))));
   s.setAttribute("data-api-key", opts.apiKey);
   s.setAttribute("data-integrity-signature", opts.integritySignature);
   s.setAttribute("data-redirection-url", opts.redirectionUrl);
@@ -312,7 +312,11 @@ export function CheckoutPageClient() {
       }
       if (!data.reference || data.total == null) throw new Error("Respuesta inválida");
       reference = data.reference;
-      orderTotal = data.total;
+      const totalNum = Number(data.total);
+      if (!Number.isFinite(totalNum) || totalNum < 1 || !Number.isInteger(totalNum)) {
+        throw new Error("Total del pedido inválido (entero en pesos COP, sin decimales)");
+      }
+      orderTotal = totalNum;
     } catch (e) {
       setPhase("error");
       setErrorMsg(e instanceof Error ? e.message : "Error al crear el pedido");
