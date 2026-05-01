@@ -5,8 +5,8 @@ import { getStorefrontCategoryBySlug, type StoreCategoryWithSubs } from "@/lib/s
 import { getMenuCategoryBySlug } from "@/lib/menu-config";
 import { slugify } from "@/lib/slugify";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+/** ISR 5 min: datos de categoría/productos alineados con caché del catálogo en lib. */
+export const revalidate = 300;
 
 type Props = {
   params: { slug: string };

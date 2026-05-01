@@ -1,6 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  /** Bunny CDN / storage: permite optimización next/image en URLs remotas del catálogo. */
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "**.b-cdn.net", pathname: "/**" },
+      { protocol: "https", hostname: "**.bunnycdn.com", pathname: "/**" },
+    ],
+  },
   /**
    * En Windows, sobre todo con OneDrive/antivirus, la caché incremental de Webpack en `next dev`
    * a veces deja `webpack-runtime.js` apuntando a chunks (`./9161.js`) que ya no existen.

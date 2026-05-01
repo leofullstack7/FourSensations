@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { mockProducts } from "@/data/mock-products";
 import type { StoreProduct } from "@/lib/types/product";
 import { prisma } from "@/lib/prisma";
@@ -48,10 +49,9 @@ function rowToStore(
   };
 }
 
-/** Fase D: usa Prisma si hay DB; si no, mock tipado. */
-export async function getStorefrontProducts(): Promise<StoreProduct[]> {
-  if (!process.env.DATABASE_URL) return mockProducts;
-  try {
+/** Catálogo tienda pública: una query con imágenes; caché Next 5 min (no aplica a admin). */
+const getCachedStorefrontProducts = unstable_cache(
+  async (): Promise<StoreProduct[]> => {
     const rows = await prisma.product.findMany({
       where: { active: true },
       orderBy: [{ featuredInHome: "desc" }, { createdAt: "desc" }],
@@ -59,6 +59,16 @@ export async function getStorefrontProducts(): Promise<StoreProduct[]> {
     });
     if (rows.length === 0) return mockProducts;
     return rows.map((r) => rowToStore(r, r.images));
+  },
+  ["storefront-products-v1"],
+  { revalidate: 300 }
+);
+
+/** Fase D: usa Prisma si hay DB; si no, mock tipado. */
+export async function getStorefrontProducts(): Promise<StoreProduct[]> {
+  if (!process.env.DATABASE_URL) return mockProducts;
+  try {
+    return await getCachedStorefrontProducts();
   } catch {
     return mockProducts;
   }

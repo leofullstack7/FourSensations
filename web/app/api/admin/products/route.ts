@@ -29,6 +29,7 @@ export async function GET() {
   const denied = await requireAdminApi();
   if (denied) return denied;
   try {
+    // Una sola query con imágenes incluidas (evita N+1 por producto).
     const rows = await prisma.product.findMany({
       orderBy: { updatedAt: "desc" },
       include: { images: true },

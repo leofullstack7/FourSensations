@@ -1,10 +1,11 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { MotionButton, MotionDiv, MotionSpan } from "@/components/store/store-framer-motion";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useReveal } from "@/hooks/useReveal";
 import { toCategorySlug } from "@/lib/menu-config";
 import type { MenuConfig } from "@/lib/types/admin";
@@ -17,6 +18,29 @@ import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
 import { isHttpImageUrl } from "@/lib/util/image-url";
 
 type ToastItem = { id: number; msg: string; type: string; icon: string };
+
+function getCustomerInitials(name: string | null | undefined, email: string | null | undefined): string {
+  const n = name?.trim();
+  if (n) {
+    const parts = n.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0]!.charAt(0) + parts[1]!.charAt(0)).toUpperCase();
+    }
+    if (parts.length === 1 && parts[0]!.length >= 2) {
+      return parts[0]!.slice(0, 2).toUpperCase();
+    }
+    if (parts.length === 1) {
+      return parts[0]!.charAt(0).toUpperCase();
+    }
+  }
+  const e = email?.trim();
+  if (e?.includes("@")) {
+    const local = e.split("@")[0] ?? "";
+    if (local.length >= 2) return local.slice(0, 2).toUpperCase();
+    if (local.length === 1) return local.charAt(0).toUpperCase();
+  }
+  return "GB";
+}
 
 function normalizeSearchText(value: string): string {
   return value
@@ -33,12 +57,15 @@ function ProductCard({
   onOpen,
   onToggleFav,
   onAddCart,
+  imagePriority = false,
 }: {
   product: StoreProduct;
   isFav: boolean;
   onOpen: (id: string) => void;
   onToggleFav: (id: string) => void;
   onAddCart: (id: string) => void;
+  /** Primera tarjeta visible: prioridad LCP para next/image. */
+  imagePriority?: boolean;
 }) {
   const discount = product.originalPrice
     ? Math.round((1 - product.price / product.originalPrice) * 100)
@@ -51,8 +78,15 @@ function ProductCard({
       <div className="product-img-wrap">
         <div className="product-img-placeholder">
           {isHttpImageUrl(product.img) ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            <Image
+              src={product.img}
+              alt=""
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px"
+              priority={imagePriority}
+              loading={imagePriority ? undefined : "lazy"}
+              style={{ objectFit: "cover" }}
+            />
           ) : (
             product.emoji
           )}
@@ -137,6 +171,12 @@ export function StoreHomeClient({
   const isStoreCustomer = status === "authenticated" && session?.user?.role === "CUSTOMER";
   const customerId = session?.user?.id;
   const customerLabel = (session?.user?.name?.trim() || session?.user?.email?.split("@")[0] || "Cliente") as string;
+  const customerInitials = useMemo(
+    () => getCustomerInitials(session?.user?.name, session?.user?.email),
+    [session?.user?.name, session?.user?.email]
+  );
+  const [customerProfileOpen, setCustomerProfileOpen] = useState(false);
+  const customerProfileWrapRef = useRef<HTMLDivElement>(null);
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [manualSub, setManualSub] = useState<string | null>(null);
   const [sortValue, setSortValue] = useState<string>("default");
@@ -154,6 +194,8 @@ export function StoreHomeClient({
   const [selectedProduct, setSelectedProduct] = useState<StoreProduct | null>(null);
   const [modalImgIdx, setModalImgIdx] = useState(0);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  /** Loader global (correo o redirección Google). */
+  const [authBusyLabel, setAuthBusyLabel] = useState<string | null>(null);
 
   useReveal();
 
@@ -179,6 +221,18 @@ export function StoreHomeClient({
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3800);
   }, []);
 
+  const startGoogleSignIn = useCallback(async () => {
+    setAuthBusyLabel("Redirigiendo a Google…");
+    try {
+      await signIn("google", {
+        callbackUrl: typeof window !== "undefined" ? window.location.href : "/",
+      });
+    } catch {
+      setAuthBusyLabel(null);
+      showToast("No se pudo conectar con Google. Intenta de nuevo.", "error", "⚠️");
+    }
+  }, [showToast]);
+
   useEffect(() => {
     const onScroll = () => {
       const header = document.querySelector(".header");
@@ -198,6 +252,24 @@ export function StoreHomeClient({
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  useEffect(() => {
+    if (!customerProfileOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (customerProfileWrapRef.current && !customerProfileWrapRef.current.contains(e.target as Node)) {
+        setCustomerProfileOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCustomerProfileOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [customerProfileOpen]);
 
   const cartCount = useMemo(() => cart.reduce((s, i) => s + i.qty, 0), [cart]);
 
@@ -406,7 +478,7 @@ export function StoreHomeClient({
   return (
     <>
       <div className="topbar" aria-live="polite">
-        <motion.span
+        <MotionSpan
           key={topbarIndex}
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -414,7 +486,7 @@ export function StoreHomeClient({
           style={{ display: "inline-block" }}
         >
           {STOREFRONT_TOPBAR_MESSAGES[topbarIndex]}
-        </motion.span>
+        </MotionSpan>
       </div>
 
       <header className="header" id="main-header">
@@ -499,31 +571,87 @@ export function StoreHomeClient({
                 <input type="text" placeholder="Buscar productos..." readOnly onClick={openSearch} />
               </div>
               <div className="header-icon-group">
-                <button
-                  type="button"
-                  className="icon-btn icon-btn--account"
-                  title={isStoreCustomer ? `Hola, ${customerLabel} — Cerrar sesión` : "Mi cuenta"}
-                  style={isStoreCustomer ? { color: "var(--dusty-rose)" } : undefined}
-                  onClick={() => {
-                    if (isStoreCustomer) {
-                      void signOut({ redirect: false }).then(() => {
-                        setFavorites([]);
-                        showToast("Sesión cerrada", "info", "👋");
-                        router.refresh();
-                      });
-                    } else {
+                {isStoreCustomer ? (
+                  <div className="gb-customer-bubble-wrap" ref={customerProfileWrapRef}>
+                    <div className="gb-customer-cluster">
+                      <button
+                        type="button"
+                        className={`gb-customer-avatar-btn${customerProfileOpen ? " is-open" : ""}`}
+                        aria-expanded={customerProfileOpen}
+                        aria-haspopup="dialog"
+                        title={`Hola, ${customerLabel}`}
+                        onClick={() => setCustomerProfileOpen((v) => !v)}
+                      >
+                        <span className="gb-customer-avatar-ring" aria-hidden />
+                        <span className="gb-customer-avatar-initials">{customerInitials}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="gb-customer-logout-mini"
+                        title="Cerrar sesión"
+                        aria-label="Cerrar sesión"
+                        onClick={() => {
+                          setCustomerProfileOpen(false);
+                          void signOut({ redirect: false }).then(() => {
+                            setFavorites([]);
+                            showToast("Sesión cerrada", "info", "👋");
+                            router.refresh();
+                          });
+                        }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                          <polyline points="16 17 21 12 16 7" />
+                          <line x1="21" y1="12" x2="9" y2="12" />
+                        </svg>
+                      </button>
+                    </div>
+                    {customerProfileOpen ? (
+                      <MotionDiv
+                        className="gb-customer-popover"
+                        role="dialog"
+                        aria-labelledby="gb-customer-welcome-title"
+                        initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                      >
+                        <div className="gb-customer-popover__shine" aria-hidden />
+                        <div className="gb-customer-popover__petals" aria-hidden>
+                          <span>✿</span>
+                          <span>✦</span>
+                          <span>✿</span>
+                        </div>
+                        <p id="gb-customer-welcome-title" className="gb-customer-popover__title">
+                          ¡Qué gusto verte, <em>{customerLabel}</em>!
+                        </p>
+                        <p className="gb-customer-popover__text">
+                          Ya eres parte de la familia <strong>GinnaBeauty</strong>. Busca lo que necesitas con nosotros: te
+                          ofrecemos la mejor calidad.
+                        </p>
+                        <div className="gb-customer-popover__footer" aria-hidden>
+                          <span className="gb-customer-popover__heart">♥</span>
+                        </div>
+                      </MotionDiv>
+                    ) : null}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn--account"
+                    title="Mi cuenta"
+                    onClick={() => {
                       setAuthMode("login");
                       setCustomerAuthTab("login");
                       setAuthOpen(true);
                       document.body.style.overflow = "hidden";
-                    }
-                  }}
-                >
-                  <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                    <circle cx="12" cy="8" r="4" />
-                    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-                  </svg>
-                </button>
+                    }}
+                  >
+                    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                      <circle cx="12" cy="8" r="4" />
+                      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+                    </svg>
+                  </button>
+                )}
                 <button type="button" className="icon-btn icon-btn--search" title="Buscar" onClick={openSearch}>
                   <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
                     <circle cx="11" cy="11" r="8" />
@@ -700,20 +828,17 @@ export function StoreHomeClient({
               ["Hombres", "🧔", "linear-gradient(135deg,#D4E8E4,#A8BFBB)"],
               ["Uñas", "💅", "linear-gradient(135deg,#E2DCF0,#C5BBDA)"],
             ].map(([label, icon, bg]) => (
-              <a
+              <Link
                 key={label}
-                href="#"
+                href={`/categoria/${categoryPath(label as string)}`}
                 className="cat-card"
-                onClick={(e) => {
-                  e.preventDefault();
-                  filterByCat(label as string);
-                }}
+                prefetch
               >
                 <div className="cat-icon" style={{ background: bg as string }}>
                   {icon}
                 </div>
                 <span className="cat-label">{label === "Cuidado capilar" ? "Capilar" : label === "Cuidado piel" ? "Cuidado Piel" : label}</span>
-              </a>
+              </Link>
             ))}
           </div>
         </div>
@@ -842,7 +967,7 @@ export function StoreHomeClient({
           </div>
 
           <div className="products-grid" id="products-grid-main">
-            {filteredProducts.map((p) => (
+            {filteredProducts.map((p, i) => (
               <ProductCard
                 key={p.id}
                 product={p}
@@ -850,6 +975,7 @@ export function StoreHomeClient({
                 onOpen={openProductModal}
                 onToggleFav={toggleFavorite}
                 onAddCart={addToCart}
+                imagePriority={i === 0}
               />
             ))}
           </div>
@@ -964,12 +1090,11 @@ export function StoreHomeClient({
             <div className="footer-col">
               <h4>Productos</h4>
               <div className="footer-links">
-                <a href="#">Maquillaje</a>
-                <a href="#">Cuidado Piel</a>
-                <a href="#">Cuidado Capilar</a>
-                <a href="#">Uñas</a>
-                <a href="#">Hombres</a>
-                <a href="#">Mayorista</a>
+                {Object.keys(menuConfig).map((catName) => (
+                  <Link key={catName} href={`/categoria/${categoryPath(catName)}`} prefetch>
+                    {catName}
+                  </Link>
+                ))}
               </div>
             </div>
             <div className="footer-col">
@@ -987,8 +1112,9 @@ export function StoreHomeClient({
                 <a href="#">Centro de ayuda</a>
                 <a href="#">Rastrear pedido</a>
                 <a href="#">Devoluciones</a>
-                <a href="#">Política de privacidad</a>
-                <a href="#">Términos y condiciones</a>
+                <Link href="/politicas-envio">Políticas de envío</Link>
+                <Link href="/politicas-privacidad">Política de privacidad</Link>
+                <Link href="/terminos-condiciones">Términos y condiciones</Link>
               </div>
             </div>
           </div>
@@ -1032,8 +1158,7 @@ export function StoreHomeClient({
               <div key={item.id} className="cart-item">
                 <div className="cart-item-img" style={{ background: "var(--cream)" }}>
                   {isHttpImageUrl(item.img) ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    <Image src={item.img} alt="" fill sizes="72px" loading="lazy" style={{ objectFit: "cover" }} />
                   ) : (
                     item.emoji
                   )}
@@ -1111,8 +1236,14 @@ export function StoreHomeClient({
                       <>
                         <div className="modal-gallery-placeholder">
                           {src ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                            <Image
+                              src={src}
+                              alt=""
+                              fill
+                              sizes="(max-width: 900px) 100vw, 45vw"
+                              loading="lazy"
+                              style={{ objectFit: "cover" }}
+                            />
                           ) : (
                             selectedProduct.emoji
                           )}
@@ -1135,8 +1266,7 @@ export function StoreHomeClient({
                                   background: "transparent",
                                 }}
                               >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={u} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                                <Image src={u} alt="" width={52} height={52} loading="lazy" style={{ objectFit: "cover", display: "block" }} />
                               </button>
                             ))}
                           </div>
@@ -1148,11 +1278,20 @@ export function StoreHomeClient({
                 <div className="modal-details">
                   <div>
                     <div className="breadcrumbs">
-                      <a href="#">Inicio</a>
+                      <Link href="/" prefetch>
+                        Inicio
+                      </Link>
                       <i>›</i>
-                      <a href="#">{getCategoryLabel(selectedProduct.category)}</a>
+                      <Link href={`/categoria/${selectedProduct.category}`} prefetch>
+                        {getCategoryLabel(selectedProduct.category)}
+                      </Link>
                       <i>›</i>
-                      <a href="#">{selectedProduct.subcategory}</a>
+                      <Link
+                        href={`/categoria/${selectedProduct.category}?sub=${encodeURIComponent(selectedProduct.subcategory)}`}
+                        prefetch
+                      >
+                        {selectedProduct.subcategory}
+                      </Link>
                       <i>›</i>
                       <span>{selectedProduct.name}</span>
                     </div>
@@ -1260,8 +1399,7 @@ export function StoreHomeClient({
                         <li key={p.id} className="gb-wish-row">
                           <button type="button" className="gb-wish-thumb" onClick={() => { closeWishlist(); openProductModal(p.id); }} title="Ver producto">
                             {isHttpImageUrl(p.img) ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={p.img} alt="" />
+                              <Image src={p.img} alt="" fill sizes="56px" loading="lazy" style={{ objectFit: "cover" }} />
                             ) : (
                               p.emoji
                             )}
@@ -1291,7 +1429,7 @@ export function StoreHomeClient({
                 <>
                   <p className="gb-wish-sub">Inicia sesión o crea una cuenta para guardar y ver tu lista en cualquier momento.</p>
                   <div className="gb-wish-guest-grid">
-                    <motion.button
+                    <MotionButton
                       type="button"
                       className="gb-wish-guest-card"
                       whileHover={{ scale: 1.01 }}
@@ -1300,8 +1438,8 @@ export function StoreHomeClient({
                     >
                       <strong>Registrarme en GinnaBeauty</strong>
                       <span>Crea tu cuenta gratis con correo y contraseña.</span>
-                    </motion.button>
-                    <motion.button
+                    </MotionButton>
+                    <MotionButton
                       type="button"
                       className="gb-wish-guest-card"
                       whileHover={{ scale: 1.01 }}
@@ -1310,19 +1448,18 @@ export function StoreHomeClient({
                     >
                       <strong>Iniciar sesión</strong>
                       <span>Entra con el correo con el que te registraste.</span>
-                    </motion.button>
-                    <motion.button
+                    </MotionButton>
+                    <MotionButton
                       type="button"
                       className="gb-wish-guest-card"
                       whileHover={{ scale: 1.01 }}
                       whileTap={{ scale: 0.99 }}
-                      onClick={() => {
-                        void signIn("google", { callbackUrl: typeof window !== "undefined" ? window.location.href : "/" });
-                      }}
+                      disabled={!!authBusyLabel}
+                      onClick={() => void startGoogleSignIn()}
                     >
                       <strong>Iniciar sesión con Google</strong>
                       <span>Accede rápido con tu cuenta de Google.</span>
-                    </motion.button>
+                    </MotionButton>
                   </div>
                 </>
               )}
@@ -1334,7 +1471,13 @@ export function StoreHomeClient({
       <div
         className={`modal-overlay${authOpen ? " open" : ""}`}
         id="auth-overlay"
-        onClick={(e) => e.target === e.currentTarget && (setAuthOpen(false), (document.body.style.overflow = ""))}
+        onClick={(e) => {
+          if (authBusyLabel) return;
+          if (e.target === e.currentTarget) {
+            setAuthOpen(false);
+            document.body.style.overflow = "";
+          }
+        }}
         role="presentation"
       >
         <div className="modal auth-modal">
@@ -1342,6 +1485,7 @@ export function StoreHomeClient({
             type="button"
             className="modal-close"
             onClick={() => {
+              setAuthBusyLabel(null);
               setAuthOpen(false);
               document.body.style.overflow = "";
             }}
@@ -1363,9 +1507,8 @@ export function StoreHomeClient({
             <button
               type="button"
               className="auth-social-btn"
-              onClick={() => {
-                void signIn("google", { callbackUrl: typeof window !== "undefined" ? window.location.href : "/" });
-              }}
+              disabled={!!authBusyLabel}
+              onClick={() => void startGoogleSignIn()}
             >
               <span style={{ fontSize: 18 }}>🔴</span> Continuar con Google
             </button>
@@ -1374,7 +1517,10 @@ export function StoreHomeClient({
           <CustomerEmailAuthForm
             tab={customerAuthTab}
             showToast={showToast}
+            onBusyChange={setAuthBusyLabel}
+            disabled={!!authBusyLabel}
             closeAuthModal={() => {
+              setAuthBusyLabel(null);
               setAuthOpen(false);
               document.body.style.overflow = "";
             }}
@@ -1385,10 +1531,10 @@ export function StoreHomeClient({
                 ¿No tienes cuenta?{" "}
                 <a
                   role="button"
-                  tabIndex={0}
-                  onClick={() => setCustomerAuthTab("register")}
-                  onKeyDown={(e) => e.key === "Enter" && setCustomerAuthTab("register")}
-                  style={{ cursor: "pointer" }}
+                  tabIndex={authBusyLabel ? -1 : 0}
+                  onClick={() => !authBusyLabel && setCustomerAuthTab("register")}
+                  onKeyDown={(e) => e.key === "Enter" && !authBusyLabel && setCustomerAuthTab("register")}
+                  style={{ cursor: authBusyLabel ? "default" : "pointer", opacity: authBusyLabel ? 0.45 : 1 }}
                 >
                   Crear cuenta gratis
                 </a>
@@ -1398,10 +1544,10 @@ export function StoreHomeClient({
                 ¿Ya tienes cuenta?{" "}
                 <a
                   role="button"
-                  tabIndex={0}
-                  onClick={() => setCustomerAuthTab("login")}
-                  onKeyDown={(e) => e.key === "Enter" && setCustomerAuthTab("login")}
-                  style={{ cursor: "pointer" }}
+                  tabIndex={authBusyLabel ? -1 : 0}
+                  onClick={() => !authBusyLabel && setCustomerAuthTab("login")}
+                  onKeyDown={(e) => e.key === "Enter" && !authBusyLabel && setCustomerAuthTab("login")}
+                  style={{ cursor: authBusyLabel ? "default" : "pointer", opacity: authBusyLabel ? 0.45 : 1 }}
                 >
                   Iniciar sesión
                 </a>
@@ -1442,7 +1588,7 @@ export function StoreHomeClient({
               (searchResults.length === 0 ? (
                 <p style={{ gridColumn: "1/-1", textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>Sin resultados para &quot;{searchQuery}&quot;</p>
               ) : (
-                searchResults.map((p) => (
+                searchResults.map((p, i) => (
                   <ProductCard
                     key={p.id}
                     product={p}
@@ -1453,6 +1599,7 @@ export function StoreHomeClient({
                     }}
                     onToggleFav={toggleFavorite}
                     onAddCart={addToCart}
+                    imagePriority={i === 0}
                   />
                 ))
               ))}
@@ -1496,7 +1643,7 @@ export function StoreHomeClient({
               minWidth: 220,
             }}
           >
-            <motion.div
+            <MotionDiv
               animate={{ rotate: 360 }}
               transition={{ repeat: Infinity, duration: 0.85, ease: "linear" }}
               style={{
@@ -1515,6 +1662,15 @@ export function StoreHomeClient({
         </div>
       )}
 
+      {authBusyLabel ? (
+        <div className="gb-auth-global-loader" role="status" aria-live="polite" aria-busy="true" aria-label={authBusyLabel}>
+          <div className="gb-auth-global-loader__card">
+            <div className="gb-auth-global-loader__spinner" />
+            <p className="gb-auth-global-loader__text">{authBusyLabel}</p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="toast-container" id="toast-container">
         {toasts.map((t) => (
           <div key={t.id} className={`toast ${t.type}`}>
@@ -1531,13 +1687,15 @@ function CustomerEmailAuthForm({
   tab,
   showToast,
   closeAuthModal,
+  onBusyChange,
+  disabled = false,
 }: {
   tab: "login" | "register";
   showToast: (msg: string, type?: string, icon?: string) => void;
   closeAuthModal: () => void;
+  onBusyChange?: (label: string | null) => void;
+  disabled?: boolean;
 }) {
-  const router = useRouter();
-  const { update } = useSession();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -1569,6 +1727,7 @@ function CustomerEmailAuthForm({
     }
 
     setLoading(true);
+    onBusyChange?.(tab === "register" ? "Creando tu cuenta…" : "Iniciando sesión…");
     try {
       if (tab === "register") {
         const res = await fetch("/api/auth/customer/register", {
@@ -1584,20 +1743,21 @@ function CustomerEmailAuthForm({
         }
       }
 
-      const loginRes = await fetch("/api/auth/customer/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email: email.trim(), password }),
+      // signIn en cliente → POST directo a [...nextauth].
+      const signInResult = await signIn("customer-credentials", {
+        email: email.trim(),
+        password,
+        redirect: false,
       });
-      const loginData = await parseJson(loginRes);
-      if (!loginRes.ok) {
-        setError(loginData.error || "No se pudo iniciar sesión");
+      if (!signInResult || signInResult.error || !signInResult.ok) {
+        setError(
+          tab === "register"
+            ? "Cuenta creada, pero no se pudo iniciar sesión. Prueba «Iniciar sesión»."
+            : "Correo o contraseña incorrectos"
+        );
         return;
       }
 
-      await update();
-      router.refresh();
       closeAuthModal();
       showToast(
         tab === "register" ? "Cuenta creada. ¡Bienvenida/o!" : "Sesión iniciada correctamente",
@@ -1606,6 +1766,7 @@ function CustomerEmailAuthForm({
       );
     } finally {
       setLoading(false);
+      onBusyChange?.(null);
     }
   };
 
@@ -1624,6 +1785,7 @@ function CustomerEmailAuthForm({
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoComplete="name"
+            disabled={disabled || loading}
           />
         </div>
       )}
@@ -1636,6 +1798,7 @@ function CustomerEmailAuthForm({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
+          disabled={disabled || loading}
         />
       </div>
       <div className="form-group">
@@ -1647,16 +1810,17 @@ function CustomerEmailAuthForm({
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete={tab === "register" ? "new-password" : "current-password"}
+          disabled={disabled || loading}
         />
       </div>
       <button
         type="button"
         className="btn btn-primary"
         style={{ width: "100%", justifyContent: "center", marginTop: 4 }}
-        disabled={loading}
+        disabled={disabled || loading}
         onClick={() => void submit()}
       >
-        {loading ? "…" : tab === "register" ? "Crear cuenta" : "Iniciar sesión"}
+        {loading ? "Procesando…" : tab === "register" ? "Crear cuenta" : "Iniciar sesión"}
       </button>
     </>
   );

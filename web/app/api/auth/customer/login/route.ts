@@ -1,3 +1,7 @@
+/**
+ * Alternativa server-side a `signIn()` en cliente. La tienda usa el flujo estándar
+ * desde el navegador (más rápido); esta ruta se mantiene por si hace falta integración API.
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { CredentialsSignin } from "next-auth";
 import { signIn } from "@/auth";

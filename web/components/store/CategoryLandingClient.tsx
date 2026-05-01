@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { StoreProduct } from "@/lib/types/product";
@@ -29,14 +30,21 @@ function normalizeGroup(menuTag: string | null): string {
   return (menuTag?.trim() ? menuTag.trim() : "General") as string;
 }
 
-function ProductCardLite({ product }: { product: StoreProduct }) {
+function ProductCardLite({ product, imagePriority = false }: { product: StoreProduct; imagePriority?: boolean }) {
   return (
     <article className="product-card">
       <div className="product-img-wrap">
         <div className="product-img-placeholder">
           {isHttpImageUrl(product.img) ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.img} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <Image
+              src={product.img}
+              alt={product.name}
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px"
+              priority={imagePriority}
+              loading={imagePriority ? undefined : "lazy"}
+              style={{ objectFit: "cover" }}
+            />
           ) : (
             product.emoji
           )}
@@ -277,8 +285,8 @@ export function CategoryLandingClient({
             </div>
           ) : (
             <div className="products-grid category-landing-products">
-              {filtered.map((p) => (
-                <ProductCardLite key={`${categorySlug}-${p.id}`} product={p} />
+              {filtered.map((p, i) => (
+                <ProductCardLite key={`${categorySlug}-${p.id}`} product={p} imagePriority={i === 0} />
               ))}
             </div>
           )}

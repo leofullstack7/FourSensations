@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { applyEpaycoConfirmation } from "@/lib/server/checkout/apply-confirmation";
-import { getEpaycoServerConfig } from "@/lib/server/epayco/env";
+import {
+  epaycoWebhookAllowUnsignedInDev,
+  getEpaycoServerConfig,
+} from "@/lib/server/epayco/env";
 import { validateEpaycoWebhookSignature, type EpaycoWebhookFields } from "@/lib/server/epayco/webhook-signature";
 
 export const dynamic = "force-dynamic";
@@ -63,6 +66,7 @@ async function handleConfirmation(req: Request): Promise<Response> {
   };
 
   const { customerId, pKey } = getEpaycoServerConfig();
+  const keysOk = Boolean(customerId && pKey);
   const hasSig =
     Boolean(sigFields.x_ref_payco) &&
     Boolean(sigFields.x_transaction_id) &&
@@ -70,22 +74,51 @@ async function handleConfirmation(req: Request): Promise<Response> {
     Boolean(sigFields.x_currency_code) &&
     Boolean(sigFields.x_signature);
 
-  if (hasSig) {
-    if (!customerId || !pKey) {
-      if (process.env.NODE_ENV === "production") {
-        console.error("[epayco] webhook: faltan EPAYCO_CUSTOMER_ID / EPAYCO_P_KEY (obligatorias en producción)");
-        return new NextResponse("CONFIG", { status: 503 });
-      }
-      console.warn("[epayco] webhook: sin credenciales de firma — omitiendo validación (solo desarrollo)");
-    } else {
+  const isProd = process.env.NODE_ENV === "production";
+  const allowUnsignedDev = epaycoWebhookAllowUnsignedInDev();
+
+  /**
+   * Seguridad webhook ePayco:
+   * - Producción: EPAYCO_CUSTOMER_ID + EPAYCO_P_KEY obligatorias; payload debe incluir los 5 campos de firma y validar SHA256.
+   * - Desarrollo: mismo comportamiento por defecto; solo si EPAYCO_WEBHOOK_ALLOW_UNSIGNED=true se aceptan confirmaciones sin firma (solo pruebas locales).
+   */
+  if (isProd && !keysOk) {
+    console.error("[epayco] webhook: producción sin EPAYCO_CUSTOMER_ID / EPAYCO_P_KEY");
+    return new NextResponse("CONFIG", { status: 503 });
+  }
+
+  const mustVerifySignature = isProd || !allowUnsignedDev;
+
+  if (mustVerifySignature) {
+    if (!hasSig) {
+      console.warn("[epayco] webhook rechazado: parámetros de firma incompletos", Object.keys(flat));
+      return new NextResponse("MISSING SIGNATURE", { status: 400 });
+    }
+    if (!keysOk) {
+      console.error("[epayco] webhook rechazado: faltan claves P_KEY / Customer ID para validar firma");
+      return new NextResponse("CONFIG", { status: 503 });
+    }
+    const check = validateEpaycoWebhookSignature(sigFields as EpaycoWebhookFields);
+    if (!check.ok) {
+      console.error("[epayco] webhook: firma inválida", check.reason);
+      return new NextResponse("INVALID SIGNATURE", { status: 400 });
+    }
+  } else {
+    if (hasSig && keysOk) {
       const check = validateEpaycoWebhookSignature(sigFields as EpaycoWebhookFields);
       if (!check.ok) {
         console.error("[epayco] webhook: firma inválida", check.reason);
         return new NextResponse("INVALID SIGNATURE", { status: 400 });
       }
+    } else if (hasSig && !keysOk) {
+      console.warn(
+        "[epayco] webhook: firma presente pero sin EPAYCO_CUSTOMER_ID/P_KEY; no se valida (EPAYCO_WEBHOOK_ALLOW_UNSIGNED)",
+      );
+    } else {
+      console.warn(
+        "[epayco] webhook: aceptado sin firma — solo desarrollo (EPAYCO_WEBHOOK_ALLOW_UNSIGNED). No uses esto en producción.",
+      );
     }
-  } else {
-    console.warn("[epayco] webhook: parámetros de firma incompletos", Object.keys(flat));
   }
 
   const result = await applyEpaycoConfirmation(flat);

@@ -60,3 +60,12 @@ export function assertCheckoutUrls(): { responseUrl: string; confirmationUrl: st
   }
   return { responseUrl, confirmationUrl };
 }
+
+/**
+ * Solo desarrollo: si es `true`, el webhook acepta payloads sin `x_signature` (pruebas locales).
+ * En producción nunca aplica: la firma ePayco es siempre obligatoria.
+ */
+export function epaycoWebhookAllowUnsignedInDev(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  return parseBool(process.env.EPAYCO_WEBHOOK_ALLOW_UNSIGNED, false);
+}

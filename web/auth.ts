@@ -17,6 +17,8 @@ const googleConfigured =
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   trustHost: true,
+  /** Sin esto estable, el JWT puede invalidarse al reiniciar el servidor (sesión «desaparece» tras Google). */
+  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 7 },
   pages: {
     signIn: "/",
@@ -102,30 +104,68 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async signIn({ user, account }) {
-      const email = user?.email?.trim();
-      if (account?.provider === "google") {
-        if (!email) return false;
-        const existing = await prisma.user.findFirst({
-          where: { email: { equals: email, mode: "insensitive" } },
-        });
-        if (existing?.role === "ADMIN") return false;
+      /**
+       * Proveedor `google`: si este callback retorna `false`, Auth.js responde **AccessDenied** en
+       * `/api/auth/callback/google`.
+       *
+       * Condiciones exactas que aquí pueden causar `return false`:
+       * - **Única condición de negocio:** ya existe un `User` con el mismo correo (comparación
+       *   case-insensitive) y `role === "ADMIN"`. Así la cuenta del panel no puede usarse como login
+       *   OAuth de la tienda.
+       *
+       * Todo lo demás con Google retorna `true`: usuario nuevo (el adaptador Prisma crea fila con
+       * `role` por defecto **CUSTOMER** en `schema.prisma`), o usuario existente **CUSTOMER**
+       * (enlace permitido con `allowDangerousEmailAccountLinking`).
+       *
+       * AccessDenied por otras causas (p. ej. `redirect_uri` no coincide en consola Google, error
+       * de intercambio de código, `AUTH_SECRET` distinto) **no** pasan por esta rama: fallan antes
+       * o en otra capa de Auth.js.
+       */
+      if (account?.provider !== "google") {
+        return true;
       }
+
+      const email = user?.email?.trim() ?? null;
+      if (!email) {
+        return true;
+      }
+
+      const existing = await prisma.user.findFirst({
+        where: { email: { equals: email, mode: "insensitive" } },
+        select: { role: true },
+      });
+
+      if (existing?.role === "ADMIN") {
+        console.log("[auth] signIn google rechazado:", {
+          reason: "email_already_registered_as_admin",
+          email,
+        });
+        return false;
+      }
+
       return true;
     },
-    async jwt({ token, user }) {
-      if (user) {
+    async jwt({ token, user, account }) {
+      if (user?.id) {
         token.sub = user.id;
-        token.role = (user as { role?: string }).role;
       }
-      if (token.sub) {
-        const r = token.role as string | undefined;
-        if (!r) {
-          const u = await prisma.user.findUnique({
-            where: { id: token.sub as string },
-            select: { role: true },
-          });
-          if (u) token.role = u.role;
-        }
+      // OAuth (Google): el objeto `user` del adaptador no suele traer `role`; leer siempre de DB en el primer JWT.
+      if (account?.provider === "google" && user?.id) {
+        const u = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { role: true },
+        });
+        if (u) token.role = u.role;
+      } else if (user) {
+        const r = (user as { role?: string }).role;
+        if (r) token.role = r;
+      }
+      if (token.sub && !token.role) {
+        const u = await prisma.user.findUnique({
+          where: { id: token.sub as string },
+          select: { role: true },
+        });
+        if (u) token.role = u.role;
       }
       return token;
     },

@@ -4,16 +4,26 @@ import { prisma } from "@/lib/prisma";
 
 /**
  * Webhook / notificación servidor de Bold (estructura puede variar según el producto Bold).
- * Protege con `Authorization: Bearer <BOLD_SECRET_KEY>` si está definida.
- * Ajusta el parseo cuando tengas el payload oficial.
+ * - Producción: exige BOLD_SECRET_KEY y cabecera `Authorization: Bearer <BOLD_SECRET_KEY>`.
+ * - Desarrollo sin clave: se registra advertencia (no apto para datos reales).
+ * Si el payload trae monto (`amount`, `total`, `amount_in_cents`), debe coincidir con `Order.total` al aprobar.
  */
 export async function POST(req: Request) {
   const secret = process.env.BOLD_SECRET_KEY?.trim();
+  const isProd = process.env.NODE_ENV === "production";
+
+  if (isProd && !secret) {
+    console.error("[bold] webhook: producción sin BOLD_SECRET_KEY");
+    return NextResponse.json({ error: "Configuración incompleta" }, { status: 503 });
+  }
+
   if (secret) {
     const auth = req.headers.get("authorization");
     if (auth !== `Bearer ${secret}`) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+  } else {
+    console.warn("[bold] webhook: BOLD_SECRET_KEY vacía — webhook público (solo desarrollo)");
   }
 
   let body: Record<string, unknown>;
@@ -45,6 +55,36 @@ export async function POST(req: Request) {
 
   if (order.paymentProvider !== "BOLD") {
     return NextResponse.json({ ok: true, handled: false });
+  }
+
+  /** Monto en COP (misma unidad que `Order.total` y `data-amount` del botón embebido). */
+  function extractBoldAmountCop(b: Record<string, unknown>): number | null {
+    const keys = ["amount", "total", "value", "paid_amount", "transactionAmount", "orderAmount"];
+    for (const k of keys) {
+      const v = b[k];
+      if (typeof v === "number" && Number.isFinite(v)) {
+        return Math.round(v);
+      }
+      if (typeof v === "string" && v.trim()) {
+        const n = Number.parseFloat(v.replace(/,/g, ".").replace(/[^\d.-]/g, ""));
+        if (Number.isFinite(n)) return Math.round(n);
+      }
+    }
+    const cents = b.amount_in_cents ?? b.amountInCents;
+    if (typeof cents === "number" && Number.isFinite(cents)) {
+      return Math.round(cents / 100);
+    }
+    return null;
+  }
+
+  const payloadTotal = extractBoldAmountCop(body);
+  if (payloadTotal != null && payloadTotal !== order.total) {
+    console.error("[bold] webhook rechazado: monto no coincide con pedido", {
+      reference,
+      orderTotal: order.total,
+      payloadTotal,
+    });
+    return NextResponse.json({ error: "Monto no coincide" }, { status: 400 });
   }
 
   if (order.status === OrderStatus.PAID && order.paymentStatus === PaymentStatus.APPROVED) {

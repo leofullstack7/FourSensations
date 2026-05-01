@@ -36,7 +36,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
+    // Coste 10: equilibrio velocidad/seguridad (12 era notablemente lento en registro en hardware típico).
+    const passwordHash = await bcrypt.hash(password, 10);
     await prisma.user.create({
       data: {
         name: name.trim(),
