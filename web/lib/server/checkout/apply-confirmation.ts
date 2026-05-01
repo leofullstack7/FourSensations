@@ -1,5 +1,6 @@
 import { OrderStatus, PaymentStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { orderPayloadForEmail, sendOrderNotification } from "@/lib/server/email/order-notification";
 
 export type FlatConfirmationPayload = Record<string, string>;
 
@@ -158,6 +159,9 @@ export async function applyEpaycoConfirmation(
       console.error("[epayco] webhook: error aprobando pedido", msg);
       return { ok: false, error: msg };
     }
+    void sendOrderNotification(orderPayloadForEmail(order)).catch((err) =>
+      console.error("[email] error silencioso:", err),
+    );
     return { ok: true, duplicate: false, orderReference: order.reference };
   }
 
