@@ -33,7 +33,14 @@ export type AdminProduct = {
 };
 
 export type AdminSale = {
-  id: number;
+  /** `manual-*` o `order-*` (pedido web en base de datos). */
+  id: string | number;
+  /** Pedidos del checkout vs registro manual en el panel. */
+  source?: "manual" | "online";
+  /** Referencia del pedido (ej. invoice ePayco) cuando `source === "online"`. */
+  orderReference?: string;
+  /** Para ordenar ventas recientes (ms). */
+  createdAtMs?: number;
   productId: string | null;
   productName: string;
   client: string;

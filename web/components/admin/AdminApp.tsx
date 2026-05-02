@@ -22,6 +22,7 @@ import {
   postSyncProductTagsFromMenu,
   updateAdminProduct,
 } from "@/lib/api/admin-products";
+import { fetchAdminPaidOrders } from "@/lib/api/admin-orders";
 import {
   addProductGalleryImage,
   removeProductGalleryImage,
@@ -180,7 +181,8 @@ export function AdminApp() {
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [productMutation, setProductMutation] = useState<"add" | "bulk" | "edit" | null>(null);
   const [stockSavingId, setStockSavingId] = useState<string | null>(null);
-  const [sales, setSales] = useState<AdminSale[]>([]);
+  const [onlineSales, setOnlineSales] = useState<AdminSale[]>([]);
+  const [manualSales, setManualSales] = useState<AdminSale[]>([]);
   const [menuConfig, setMenuConfig] = useState<MenuConfig>(getDefaultAdminMenu);
   const [productTab, setProductTab] = useState<"list" | "add" | "bulk">("list");
   const [productSearch, setProductSearch] = useState("");
@@ -257,6 +259,22 @@ export function AdminApp() {
     }
   }, [showToast]);
 
+  const loadPaidOrders = useCallback(async () => {
+    try {
+      const list = await fetchAdminPaidOrders();
+      setOnlineSales(list);
+    } catch (e) {
+      console.error("[AdminApp] pedidos tienda:", e);
+      showToast(e instanceof Error ? e.message : "No se cargaron pedidos de la tienda", "danger", "⚠️");
+    }
+  }, [showToast]);
+
+  const sales = useMemo(
+    () =>
+      [...onlineSales, ...manualSales].sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0)),
+    [onlineSales, manualSales],
+  );
+
   const sessionUserId = session?.user?.id;
 
   /** Carga cuando la sesión está lista (`user.id` estable en deps). */
@@ -296,6 +314,11 @@ export function AdminApp() {
   }, [status, sessionUserId, loadCategories]);
 
   useEffect(() => {
+    if (status !== "authenticated" || !sessionUserId) return;
+    void loadPaidOrders();
+  }, [status, sessionUserId, loadPaidOrders]);
+
+  useEffect(() => {
     if (status === "loading") return;
     if (status === "unauthenticated") {
       router.replace("/admin/login");
@@ -319,6 +342,9 @@ export function AdminApp() {
   const goPage = (p: AdminPageId) => {
     setPage(p);
     setPageTitle(titles[p]);
+    if (p === "sales") {
+      void loadPaidOrders();
+    }
   };
 
   const handleLogout = useCallback(async () => {
@@ -611,10 +637,10 @@ export function AdminApp() {
                   </td>
                 </tr>
               ) : (
-                [...sales].slice(-8).reverse().map((s) => {
+                sales.slice(0, 8).map((s) => {
                   const prod = products.find((p) => p.id === s.productId);
                   return (
-                    <tr key={s.id}>
+                    <tr key={String(s.id)}>
                       <td>
                         <div className="table-product-cell">
                           <AdminProductThumb imageUrl={prod?.imageUrl ?? null} emoji={prod?.emoji ?? "📦"} />
@@ -925,7 +951,7 @@ export function AdminApp() {
             </div>
 
             <div className={`admin-page ${page === "sales" ? "active" : ""}`} style={{ display: page === "sales" ? "block" : "none" }}>
-              <AdminSalesTab sales={sales} products={products} />
+              <AdminSalesTab sales={sales} products={products} onReloadOnline={() => void loadPaidOrders()} />
             </div>
 
             <div className={`admin-page ${page === "stock" ? "active" : ""}`} style={{ display: page === "stock" ? "block" : "none" }}>
@@ -976,7 +1002,15 @@ export function AdminApp() {
         onClose={() => setAddSaleOpen(false)}
         products={products}
         onSave={(sale) => {
-          setSales((s) => [...s, sale]);
+          setManualSales((s) => [
+            ...s,
+            {
+              ...sale,
+              id: `manual-${Date.now()}`,
+              source: "manual",
+              createdAtMs: Date.now(),
+            },
+          ]);
           setProducts((prev) =>
             prev.map((p) => {
               if (p.id !== sale.productId) return p;
@@ -2753,22 +2787,38 @@ function AdminBulkNewCategoriesModal({
   );
 }
 
-function AdminSalesTab({ sales, products }: { sales: AdminSale[]; products: AdminProduct[] }) {
+function AdminSalesTab({
+  sales,
+  products,
+  onReloadOnline,
+}: {
+  sales: AdminSale[];
+  products: AdminProduct[];
+  onReloadOnline?: () => void;
+}) {
   const total = sales.reduce((s, v) => s + Number(v.total), 0);
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-        <div style={{ display: "flex", gap: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           <div className="admin-card" style={{ padding: "16px 24px", minWidth: 160, textAlign: "center" }}>
             <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Total ventas</div>
             <div className="stat-num" style={{ fontSize: 28 }}>{formatPrice(total)}</div>
           </div>
           <div className="admin-card" style={{ padding: "16px 24px", minWidth: 130, textAlign: "center" }}>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}># Pedidos</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}># Registros</div>
             <div className="stat-num" style={{ fontSize: 28 }}>{sales.length}</div>
           </div>
         </div>
+        {onReloadOnline ? (
+          <button type="button" className="btn btn-outline btn-sm" onClick={onReloadOnline}>
+            🔄 Actualizar pedidos web
+          </button>
+        ) : null}
       </div>
+      <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "-12px 0 20px" }}>
+        Se listan las compras aprobadas del checkout (base de datos) y las ventas que registres manualmente en esta sesión.
+      </p>
       <div className="admin-card" style={{ padding: 0, overflow: "hidden" }}>
         <table className="admin-table">
           <thead>
@@ -2786,14 +2836,14 @@ function AdminSalesTab({ sales, products }: { sales: AdminSale[]; products: Admi
             {sales.length === 0 ? (
               <tr>
                 <td colSpan={7} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
-                  Sin ventas registradas. ¡Registra tu primera venta!
+                  Sin ventas aún. Si acabas de cobrar en la tienda, pulsa «Actualizar pedidos web» o recarga el panel.
                 </td>
               </tr>
             ) : (
-              [...sales].reverse().map((s) => {
+              sales.map((s) => {
                 const p = products.find((x) => x.id === s.productId);
                 return (
-                  <tr key={s.id}>
+                  <tr key={String(s.id)}>
                     <td>
                       <div className="table-product-cell">
                         <AdminProductThumb imageUrl={p?.imageUrl ?? null} emoji={p?.emoji ?? "📦"} />

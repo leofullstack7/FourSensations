@@ -40,7 +40,21 @@ export async function POST(req: Request) {
     null;
 
   const statusRaw = String(body.status ?? body.payment_status ?? body.paymentStatus ?? "").toLowerCase();
-  const approved = statusRaw === "approved" || statusRaw === "aceptada" || body.paid === true;
+  const approvedStates = new Set([
+    "approved",
+    "aceptada",
+    "paid",
+    "completed",
+    "successful",
+    "succeeded",
+    "success",
+    "aprobada",
+  ]);
+  const approved =
+    approvedStates.has(statusRaw) ||
+    body.paid === true ||
+    body.success === true ||
+    String(body.result ?? "").toLowerCase() === "success";
 
   if (!reference || !approved) {
     console.info("[bold] confirmation ignorado o pendiente", { reference, bodyKeys: Object.keys(body) });

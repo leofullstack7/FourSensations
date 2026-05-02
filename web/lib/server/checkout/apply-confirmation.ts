@@ -4,10 +4,62 @@ import { orderPayloadForEmail, sendOrderNotification } from "@/lib/server/email/
 
 export type FlatConfirmationPayload = Record<string, string>;
 
-function parseAmountCop(amountStr: string): number | null {
-  const n = Number.parseFloat(String(amountStr).replace(",", "."));
+function parseAmountCop(amountStr: string | undefined): number | null {
+  if (amountStr == null || !String(amountStr).trim()) return null;
+  const n = Number.parseFloat(String(amountStr).replace(",", ".").replace(/[^\d.-]/g, ""));
   if (Number.isNaN(n)) return null;
   return Math.round(n);
+}
+
+/** ePayco puede enviar el monto en varias claves según el producto / versión del checkout. */
+function parseAmountFromEpaycoPayload(payload: FlatConfirmationPayload): number | null {
+  const keys = ["x_amount", "x_amount_base", "x_amount_ok", "x_amount_cuota"];
+  for (const k of keys) {
+    const v = parseAmountCop(payload[k]);
+    if (v != null) return v;
+  }
+  return null;
+}
+
+type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
+
+async function findOrderWithItemsForEpayco(payload: FlatConfirmationPayload): Promise<OrderWithItems | null> {
+  const include = { items: true as const };
+  const triedRefs = new Set<string>();
+  const tryRef = async (ref: string | undefined) => {
+    const t = ref?.trim();
+    if (!t || triedRefs.has(t)) return null;
+    triedRefs.add(t);
+    return prisma.order.findUnique({ where: { reference: t }, include });
+  };
+
+  let order =
+    (await tryRef(payload.x_id_invoice)) ??
+    (await tryRef(payload.x_extra1)) ??
+    null;
+
+  const xExtra2 = payload.x_extra2?.trim();
+  if (!order && xExtra2) {
+    order = await prisma.order.findUnique({ where: { id: xExtra2 }, include });
+  }
+
+  if (!order) {
+    const refPayco = payload.ref_payco?.trim();
+    const xRefPayco = payload.x_ref_payco?.trim();
+    for (const rp of [refPayco, xRefPayco]) {
+      if (!rp) continue;
+      const byProv = await prisma.order.findFirst({
+        where: { providerTransactionId: rp },
+        include,
+      });
+      if (byProv) {
+        order = byProv;
+        break;
+      }
+    }
+  }
+
+  return order;
 }
 
 function mapXResponseToPaymentStatus(xResponse: string): PaymentStatus {
@@ -46,42 +98,39 @@ function mapXResponseToOrderStatus(xResponse: string): OrderStatus {
 export async function applyEpaycoConfirmation(
   payload: FlatConfirmationPayload,
 ): Promise<{ ok: true; duplicate: boolean; orderReference: string | null } | { ok: false; error: string }> {
-  const xIdInvoice = payload.x_id_invoice?.trim();
   const refPayco = payload.ref_payco?.trim();
   const xRefPayco = payload.x_ref_payco?.trim();
   const xTransactionId = payload.x_transaction_id?.trim();
   const xResponse = payload.x_response?.trim();
-  const xAmount = payload.x_amount?.trim();
 
   if (!xResponse) {
     return { ok: false, error: "Falta x_response" };
   }
 
-  let order = xIdInvoice
-    ? await prisma.order.findUnique({
-        where: { reference: xIdInvoice },
-        include: { items: true },
-      })
-    : null;
-
-  if (!order && payload.x_extra1?.trim()) {
-    order = await prisma.order.findUnique({
-      where: { reference: payload.x_extra1.trim() },
-      include: { items: true },
-    });
-  }
+  const order = await findOrderWithItemsForEpayco(payload);
 
   if (!order) {
-    console.warn("[epayco] webhook: pedido no encontrado", { x_id_invoice: xIdInvoice, ref_payco: refPayco });
+    console.warn("[epayco] webhook: pedido no encontrado", {
+      x_id_invoice: payload.x_id_invoice?.trim(),
+      x_extra1: payload.x_extra1?.trim(),
+      x_extra2: payload.x_extra2?.trim(),
+      ref_payco: refPayco,
+      x_ref_payco: payload.x_ref_payco?.trim(),
+    });
     return { ok: true, duplicate: false, orderReference: null };
   }
 
-  const amountOk = xAmount != null && parseAmountCop(xAmount) === order.total;
+  const paidAmount = parseAmountFromEpaycoPayload(payload);
+  let amountOk = paidAmount != null && paidAmount === order.total;
+  if (!amountOk && paidAmount != null && Math.abs(paidAmount - order.total) <= 1) {
+    amountOk = true;
+  }
   if (!amountOk && xResponse === "Aceptada") {
     console.error("[epayco] webhook: monto no coincide con pedido", {
       orderId: order.id,
       expected: order.total,
-      x_amount: xAmount,
+      parsedAmount: paidAmount,
+      x_amount: payload.x_amount,
     });
     return { ok: false, error: "Monto inválido" };
   }
@@ -171,7 +220,7 @@ export async function applyEpaycoConfirmation(
       status: nextOrder,
       paymentStatus: nextPayment,
       paymentProvider: "EPAYCO",
-      providerTransactionId: xTransactionId || order.providerTransactionId,
+      providerTransactionId: xTransactionId || xRefPayco || refPayco || order.providerTransactionId,
       confirmationData: jsonPayload,
     },
   });
