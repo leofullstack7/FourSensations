@@ -1,11 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useStorefrontUi } from "@/components/store/storefront-ui-context";
+import { StoreProductCard } from "@/components/store/store-product-card";
 import type { StoreProduct } from "@/lib/types/product";
-import { formatPrice } from "@/lib/format";
-import { isHttpImageUrl } from "@/lib/util/image-url";
 import { getCategoryLandingCopy } from "@/lib/category-landing-theme";
 
 export type SubcategoryRow = {
@@ -30,38 +29,6 @@ function normalizeGroup(menuTag: string | null): string {
   return (menuTag?.trim() ? menuTag.trim() : "General") as string;
 }
 
-function ProductCardLite({ product, imagePriority = false }: { product: StoreProduct; imagePriority?: boolean }) {
-  return (
-    <article className="product-card">
-      <div className="product-img-wrap">
-        <div className="product-img-placeholder">
-          {isHttpImageUrl(product.img) ? (
-            <Image
-              src={product.img}
-              alt={product.name}
-              fill
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px"
-              priority={imagePriority}
-              loading={imagePriority ? undefined : "lazy"}
-              style={{ objectFit: "cover" }}
-            />
-          ) : (
-            product.emoji
-          )}
-        </div>
-      </div>
-      <div className="product-info">
-        <div className="product-brand">{product.brand}</div>
-        <div className="product-name">{product.name}</div>
-        <div className="product-variant">{product.subcategory}</div>
-        <div className="product-price-row">
-          <span className="price-current">{formatPrice(product.price)}</span>
-        </div>
-      </div>
-    </article>
-  );
-}
-
 export function CategoryLandingClient({
   categoryLabel,
   categorySlug,
@@ -74,6 +41,7 @@ export function CategoryLandingClient({
   productTagOptions,
   defaultProductTag,
 }: CategoryLandingClientProps) {
+  const { openProductModal, addToCart, toggleFavorite, favorites } = useStorefrontUi();
   const copy = useMemo(() => getCategoryLandingCopy(categoryLabel, categorySlug), [categoryLabel, categorySlug]);
   const [selectedGrupo, setSelectedGrupo] = useState(defaultGrupo);
   const [selectedSub, setSelectedSub] = useState(defaultSubcategory);
@@ -286,7 +254,15 @@ export function CategoryLandingClient({
           ) : (
             <div className="products-grid category-landing-products">
               {filtered.map((p, i) => (
-                <ProductCardLite key={`${categorySlug}-${p.id}`} product={p} imagePriority={i === 0} />
+                <StoreProductCard
+                  key={`${categorySlug}-${p.id}`}
+                  product={p}
+                  isFav={favorites.includes(p.id)}
+                  onOpen={openProductModal}
+                  onToggleFav={toggleFavorite}
+                  onAddCart={addToCart}
+                  imagePriority={i === 0}
+                />
               ))}
             </div>
           )}

@@ -1,4 +1,5 @@
 import { StoreHomeClient } from "@/components/store/StoreHomeClient";
+import { StorefrontShell } from "@/components/store/StorefrontShell";
 import { getStorefrontProducts } from "@/lib/products";
 import { getStorefrontCategoryMenu } from "@/lib/store-categories";
 
@@ -13,10 +14,12 @@ export default async function StoreHomePage() {
     getStorefrontCategoryMenu(),
   ]);
   return (
-    <StoreHomeClient
-      initialProducts={products}
+    <StorefrontShell
+      catalogProducts={products}
       initialMenuConfig={menuPayload.config}
       categorySlugByName={menuPayload.slugByCategoryName}
-    />
+    >
+      <StoreHomeClient />
+    </StorefrontShell>
   );
 }

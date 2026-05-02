@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { CategoryLandingClient } from "@/components/store/CategoryLandingClient";
+import { StorefrontShell } from "@/components/store/StorefrontShell";
 import { getStorefrontProducts } from "@/lib/products";
-import { getStorefrontCategoryBySlug, type StoreCategoryWithSubs } from "@/lib/store-categories";
+import { getStorefrontCategoryBySlug, getStorefrontCategoryMenu, type StoreCategoryWithSubs } from "@/lib/store-categories";
 import { getMenuCategoryBySlug } from "@/lib/menu-config";
 import { slugify } from "@/lib/slugify";
 
@@ -43,7 +44,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   }
   if (!cat) return notFound();
 
-  const allProducts = await getStorefrontProducts();
+  const [allProducts, menuPayload] = await Promise.all([getStorefrontProducts(), getStorefrontCategoryMenu()]);
   const categoryProducts = allProducts.filter((p) => p.category === cat.slug);
 
   const dbSubNames = cat.subcategories.map((s) => s.name);
@@ -65,21 +66,27 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     searchParams?.tag && productTags.includes(searchParams.tag) ? searchParams.tag : "";
 
   return (
-    <CategoryLandingClient
-      categoryLabel={cat.name}
-      categorySlug={cat.slug}
-      categoryIcon={cat.icon ?? "📦"}
-      products={categoryProducts}
-      subcategoriesFromDb={cat.subcategories.map((s) => ({
-        name: s.name,
-        menuTag: s.menuTag,
-      }))}
-      grupoLabels={grupoLabels}
-      defaultGrupo={defaultGrupo}
-      defaultSubcategory={defaultSub}
-      productTagOptions={productTags}
-      defaultProductTag={defaultProductTag}
-    />
+    <StorefrontShell
+      catalogProducts={allProducts}
+      initialMenuConfig={menuPayload.config}
+      categorySlugByName={menuPayload.slugByCategoryName}
+    >
+      <CategoryLandingClient
+        categoryLabel={cat.name}
+        categorySlug={cat.slug}
+        categoryIcon={cat.icon ?? "📦"}
+        products={categoryProducts}
+        subcategoriesFromDb={cat.subcategories.map((s) => ({
+          name: s.name,
+          menuTag: s.menuTag,
+        }))}
+        grupoLabels={grupoLabels}
+        defaultGrupo={defaultGrupo}
+        defaultSubcategory={defaultSub}
+        productTagOptions={productTags}
+        defaultProductTag={defaultProductTag}
+      />
+    </StorefrontShell>
   );
 }
 
