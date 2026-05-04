@@ -194,6 +194,9 @@ export function AdminApp() {
   const [productBulkMenuOpen, setProductBulkMenuOpen] = useState(false);
   const [productBulkDeleting, setProductBulkDeleting] = useState(false);
   const productBulkMenuRef = useRef<HTMLDivElement>(null);
+  /** Menú lateral expandido (texto + iconos); al colapsar solo iconos y más ancho útil. */
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const sidebarAutoCollapseDone = useRef(false);
 
   const [addSaleOpen, setAddSaleOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -329,6 +332,15 @@ export function AdminApp() {
     }
   }, [status, session, router]);
 
+  /** Al entrar al panel: menú abierto y cierre automático a los 4 s (una sola vez por carga). */
+  useEffect(() => {
+    if (status !== "authenticated" || session?.user?.role !== "ADMIN") return;
+    if (sidebarAutoCollapseDone.current) return;
+    sidebarAutoCollapseDone.current = true;
+    const t = window.setTimeout(() => setSidebarExpanded(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [status, session?.user?.role]);
+
   const titles: Record<AdminPageId, string> = {
     dashboard: "Dashboard",
     products: "Gestión de Productos",
@@ -346,6 +358,10 @@ export function AdminApp() {
       void loadPaidOrders();
     }
   };
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarExpanded((v) => !v);
+  }, []);
 
   const handleLogout = useCallback(async () => {
     // Evita depender de callbackUrl absoluto (p. ej. localhost en entornos mal configurados).
@@ -687,52 +703,99 @@ export function AdminApp() {
     );
   }
 
+  const navLinkLabel = (text: string) => <span className="sidebar-link-label">{text}</span>;
+
   return (
-    <div className="admin-app-shell">
+    <div className={`admin-app-shell${sidebarExpanded ? "" : " admin-sidebar-collapsed"}`}>
       <div className="admin-layout">
-        <aside className="admin-sidebar">
+        <aside className="admin-sidebar" aria-label="Navegación del panel">
           <div className="admin-sidebar-header">
             <div className="admin-logo">
-              <span style={{ fontSize: 22 }}>🌸</span>
+              <span className="admin-logo-mark" style={{ fontSize: 22 }}>
+                🌸
+              </span>
               <span className="admin-logo-text">
                 Ginna<em>Beauty</em>
               </span>
             </div>
             <div className="admin-role">Panel Administrativo</div>
           </div>
-          <nav className="sidebar-nav">
+          <nav id="admin-sidebar-nav" className="sidebar-nav">
             <div className="nav-section-label">Principal</div>
-            <button type="button" className={`sidebar-link ${page === "dashboard" ? "active" : ""}`} onClick={() => goPage("dashboard")}>
-              <span className="icon">📊</span> Dashboard
+            <button
+              type="button"
+              className={`sidebar-link ${page === "dashboard" ? "active" : ""}`}
+              title="Dashboard"
+              onClick={() => goPage("dashboard")}
+            >
+              <span className="icon">📊</span>
+              {navLinkLabel("Dashboard")}
             </button>
-            <button type="button" className={`sidebar-link ${page === "products" ? "active" : ""}`} onClick={() => goPage("products")}>
-              <span className="icon">📦</span> Productos
+            <button
+              type="button"
+              className={`sidebar-link ${page === "products" ? "active" : ""}`}
+              title="Productos"
+              onClick={() => goPage("products")}
+            >
+              <span className="icon">📦</span>
+              {navLinkLabel("Productos")}
             </button>
-            <button type="button" className={`sidebar-link ${page === "sales" ? "active" : ""}`} onClick={() => goPage("sales")}>
-              <span className="icon">💰</span> Ventas
+            <button
+              type="button"
+              className={`sidebar-link ${page === "sales" ? "active" : ""}`}
+              title="Ventas"
+              onClick={() => goPage("sales")}
+            >
+              <span className="icon">💰</span>
+              {navLinkLabel("Ventas")}
             </button>
-            <button type="button" className={`sidebar-link ${page === "stock" ? "active" : ""}`} onClick={() => goPage("stock")}>
-              <span className="icon">📋</span> Inventario
+            <button
+              type="button"
+              className={`sidebar-link ${page === "stock" ? "active" : ""}`}
+              title="Inventario"
+              onClick={() => goPage("stock")}
+            >
+              <span className="icon">📋</span>
+              {navLinkLabel("Inventario")}
             </button>
             <div className="nav-section-label">Configuración</div>
-            <button type="button" className={`sidebar-link ${page === "categories" ? "active" : ""}`} onClick={() => goPage("categories")}>
-              <span className="icon">🏷️</span> Categorías
+            <button
+              type="button"
+              className={`sidebar-link ${page === "categories" ? "active" : ""}`}
+              title="Categorías"
+              onClick={() => goPage("categories")}
+            >
+              <span className="icon">🏷️</span>
+              {navLinkLabel("Categorías")}
             </button>
-            <button type="button" className={`sidebar-link ${page === "menu" ? "active" : ""}`} onClick={() => goPage("menu")}>
-              <span className="icon">🗂️</span> Gestión de Menú
+            <button
+              type="button"
+              className={`sidebar-link ${page === "menu" ? "active" : ""}`}
+              title="Gestión de Menú"
+              onClick={() => goPage("menu")}
+            >
+              <span className="icon">🗂️</span>
+              {navLinkLabel("Gestión de Menú")}
             </button>
-            <button type="button" className={`sidebar-link ${page === "reports" ? "active" : ""}`} onClick={() => goPage("reports")}>
-              <span className="icon">📈</span> Reportes
+            <button
+              type="button"
+              className={`sidebar-link ${page === "reports" ? "active" : ""}`}
+              title="Reportes"
+              onClick={() => goPage("reports")}
+            >
+              <span className="icon">📈</span>
+              {navLinkLabel("Reportes")}
             </button>
             <div className="nav-section-label">Tienda</div>
-            <Link href="/" className="sidebar-link" target="_blank">
-              <span className="icon">🌐</span> Ver Tienda
+            <Link href="/" className="sidebar-link" target="_blank" title="Ver tienda en nueva pestaña">
+              <span className="icon">🌐</span>
+              {navLinkLabel("Ver Tienda")}
             </Link>
           </nav>
           <div className="sidebar-bottom">
             <div className="admin-user-chip">
               <div className="admin-avatar">G</div>
-              <div>
+              <div className="admin-user-chip-text">
                 <div className="admin-user-name">{session.user.name || "Admin"}</div>
                 <div className="admin-user-role">Administradora</div>
               </div>
@@ -742,7 +805,21 @@ export function AdminApp() {
 
         <main className="admin-main">
           <div className="admin-topbar">
-            <div className="admin-page-title">{pageTitle}</div>
+            <div className="admin-topbar-leading">
+              <button
+                type="button"
+                className={`admin-sidebar-toggle${sidebarExpanded ? "" : " admin-sidebar-toggle--pulse"}`}
+                onClick={toggleSidebar}
+                aria-expanded={sidebarExpanded}
+                aria-controls="admin-sidebar-nav"
+                title={sidebarExpanded ? "Contraer menú lateral" : "Expandir menú lateral"}
+              >
+                <span className="admin-sidebar-toggle-icon" aria-hidden>
+                  {sidebarExpanded ? "◀" : "▶"}
+                </span>
+              </button>
+              <h1 className="admin-page-title">{pageTitle}</h1>
+            </div>
             <div className="admin-topbar-actions">
               <button type="button" className="btn btn-outline btn-sm" onClick={() => { goPage("products"); setProductTab("add"); }}>
                 + Agregar Producto

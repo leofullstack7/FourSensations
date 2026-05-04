@@ -1,13 +1,17 @@
 /* Migrado desde <style> de admin.html — body → .admin-app-shell para no pisar la tienda en Next. */
 .admin-app-shell {
+  --admin-sidebar-w: 260px;
   background: #F8F4F2;
   font-family: var(--font-body);
   min-height: 100vh;
 }
 
+.admin-app-shell.admin-sidebar-collapsed {
+  --admin-sidebar-w: 76px;
+}
+
 .admin-layout {
-  display: grid;
-  grid-template-columns: 260px 1fr;
+  display: block;
   min-height: 100vh;
 }
 
@@ -16,20 +20,32 @@
   color: white;
   display: flex;
   flex-direction: column;
-  position: sticky;
+  position: fixed;
+  left: 0;
   top: 0;
+  z-index: 90;
+  width: var(--admin-sidebar-w);
   height: 100vh;
+  overflow-x: hidden;
   overflow-y: auto;
+  box-sizing: border-box;
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 .admin-sidebar-header {
   padding: 28px 24px 24px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
+  transition: padding 0.25s ease;
 }
 .admin-logo {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 4px;
+  min-width: 0;
+}
+.admin-logo-mark {
+  flex-shrink: 0;
 }
 .admin-logo-text {
   font-family: var(--font-display);
@@ -74,7 +90,13 @@
 .sidebar-link:hover { background: rgba(255,255,255,0.07); color: white; }
 .sidebar-link.active { background: rgba(200,145,139,0.2); color: var(--blush); }
 .sidebar-link .icon { font-size: 17px; width: 22px; text-align: center; flex-shrink: 0; }
-.sidebar-bottom { padding: 16px 24px; border-top: 1px solid rgba(255,255,255,0.08); }
+.sidebar-link-label {
+  white-space: nowrap;
+  overflow: hidden;
+  transition: opacity 0.2s ease, max-width 0.28s ease;
+  max-width: 200px;
+}
+.sidebar-bottom { padding: 16px 24px; border-top: 1px solid rgba(255,255,255,0.08); transition: padding 0.25s ease; }
 .admin-user-chip {
   display: flex;
   align-items: center;
@@ -94,12 +116,69 @@
 }
 .admin-user-name { font-size: 13px; color: white; font-weight: 500; }
 .admin-user-role { font-size: 11px; color: rgba(255,255,255,0.45); }
+.admin-user-chip-text {
+  min-width: 0;
+}
+
+/* ——— Sidebar colapsada (solo iconos) ——— */
+.admin-sidebar-collapsed .admin-sidebar-header {
+  padding: 20px 12px 16px;
+  text-align: center;
+}
+.admin-sidebar-collapsed .admin-logo {
+  justify-content: center;
+  gap: 0;
+}
+.admin-sidebar-collapsed .admin-logo-text,
+.admin-sidebar-collapsed .admin-role {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.admin-sidebar-collapsed .nav-section-label {
+  height: 0;
+  padding: 0 12px;
+  margin: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.admin-sidebar-collapsed .sidebar-nav {
+  padding: 12px 8px;
+}
+.admin-sidebar-collapsed .sidebar-link {
+  justify-content: center;
+  padding: 12px 10px;
+  gap: 0;
+}
+.admin-sidebar-collapsed .sidebar-link-label {
+  max-width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.admin-sidebar-collapsed .sidebar-bottom {
+  padding: 14px 10px;
+}
+.admin-sidebar-collapsed .admin-user-chip {
+  justify-content: center;
+}
+.admin-sidebar-collapsed .admin-user-chip-text {
+  display: none;
+}
 
 .admin-main {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
   min-width: 0; /* evita que tablas anchas recorten el área útil del grid */
+  margin-left: var(--admin-sidebar-w);
+  transition: margin-left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .admin-topbar {
   background: white;
@@ -108,12 +187,80 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   position: sticky;
   top: 0;
   z-index: 50;
 }
-.admin-page-title { font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--dark); }
-.admin-topbar-actions { display: flex; gap: 10px; align-items: center; }
+.admin-topbar-leading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+.admin-sidebar-toggle {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--cream);
+  background: #fff;
+  color: var(--dark);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+.admin-sidebar-toggle:hover {
+  border-color: rgba(200, 145, 139, 0.55);
+  color: var(--rose);
+}
+.admin-sidebar-toggle-icon {
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 600;
+  user-select: none;
+}
+@keyframes admin-sidebar-toggle-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(200, 145, 139, 0.4);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 11px rgba(200, 145, 139, 0);
+    transform: scale(1.05);
+  }
+}
+.admin-sidebar-toggle--pulse {
+  animation: admin-sidebar-toggle-pulse 2.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-sidebar-toggle--pulse {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(200, 145, 139, 0.35);
+  }
+  .admin-sidebar,
+  .admin-main {
+    transition: none;
+  }
+}
+.admin-page-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--dark);
+  margin: 0;
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-topbar-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
 .admin-content { flex: 1; padding: 32px; min-width: 0; }
 
 /* Carga masiva: usar todo el ancho disponible y scroll horizontal claro */

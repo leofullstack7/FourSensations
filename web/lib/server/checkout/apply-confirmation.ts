@@ -1,5 +1,9 @@
 import { OrderStatus, PaymentStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import {
+  buildCustomerOrderConfirmationPayload,
+  sendOrderConfirmationToCustomer,
+} from "@/lib/server/email/order-confirmation-customer";
 import { orderPayloadForEmail, sendOrderNotification } from "@/lib/server/email/order-notification";
 
 export type FlatConfirmationPayload = Record<string, string>;
@@ -211,6 +215,12 @@ export async function applyEpaycoConfirmation(
     void sendOrderNotification(orderPayloadForEmail(order)).catch((err) =>
       console.error("[email] error silencioso:", err),
     );
+    const customerMail = buildCustomerOrderConfirmationPayload(order);
+    if (customerMail) {
+      void sendOrderConfirmationToCustomer(customerMail).catch((err) =>
+        console.error("[email] error correo cliente:", err),
+      );
+    }
     return { ok: true, duplicate: false, orderReference: order.reference };
   }
 

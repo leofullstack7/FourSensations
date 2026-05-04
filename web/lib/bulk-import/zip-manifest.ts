@@ -10,7 +10,7 @@ export type ZipImageEntry = {
   fileName: string;
   /** Nombre base sin extensión. */
   baseName: string;
-  /** Bloque antes del primer "_" (normalizado trim + uppercase). */
+  /** Código inferido del nombre base (ver `toRawImageCode`). */
   rawImageCode: string;
   /** Prefijo numérico inicial continuo (si existe). */
   numericPrefixCode: string | null;
@@ -30,6 +30,15 @@ function toRawImageCode(baseName: string): string {
     .split(/[^A-Z0-9]+/g)
     .map((t) => t.trim())
     .filter((t) => t.length > 0);
+
+  // Códigos tipo SKU / referencia (p. ej. AGV17144, SKU12345): 2+ letras y luego al menos un dígito.
+  // Debe ir ANTES del filtro digit-led: nombres como "AGV17144 #5" tokenizan en ["AGV17144","5"]
+  // y el "5" no debe ganar frente al código real.
+  const letterPrefixSku = tokens.filter((t) => /^[A-Z]{2,}\d/.test(t));
+  if (letterPrefixSku.length > 0) {
+    letterPrefixSku.sort((a, b) => b.length - a.length);
+    return letterPrefixSku[0]!;
+  }
 
   // Candidatos tipo código: empiezan por número y pueden llevar sufijo alfanumérico.
   const codeLike = tokens.filter((t) => /^\d+[A-Z0-9]*$/.test(t));
