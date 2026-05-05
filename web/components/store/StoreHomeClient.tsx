@@ -1,12 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
+import banner2Image from "@/app/banner2.webp";
+import logoImage from "@/app/logo.png";
 import { useReveal } from "@/hooks/useReveal";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreProductCard } from "@/components/store/store-product-card";
 import { catKeyFromDisplayName } from "@/lib/category-labels";
 import type { StoreProduct } from "@/lib/types/product";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+const HERO_BANNERS = [banner2Image.src, "/banner.webp"] as const;
 
 export function StoreHomeClient() {
   const {
@@ -24,8 +29,18 @@ export function StoreHomeClient() {
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [manualSub, setManualSub] = useState<string | null>(null);
   const [sortValue, setSortValue] = useState<string>("default");
+  const [heroBannerIndex, setHeroBannerIndex] = useState(0);
+  const isPrimaryOnScreen = heroBannerIndex === 1;
+  const isSecondaryBanner = heroBannerIndex === 0;
 
   useReveal();
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setHeroBannerIndex((prev) => (prev + 1) % HERO_BANNERS.length);
+    }, 12000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const filteredProducts = useMemo(() => {
     let list: StoreProduct[];
@@ -60,24 +75,33 @@ export function StoreHomeClient() {
 
   return (
     <>
-<section className="hero-section">
-        <div className="banner-placeholder-wrapper" id="hero-banner">
-          <div className="banner-note">📌 Espacio para banner personalizado</div>
-          <div className="hero-center-content">
-            <div className="hero-eyebrow-tag">✨ Colección 2025 — Ya disponible</div>
-            <h1 className="hero-main-title">
-              Tu belleza,
-              <br />
-              <em>sin límites</em>
-            </h1>
-            <p className="hero-subtitle">
-              Descubre cosméticos premium, cuidado de piel y capilar curados con amor para realzar tu brillo natural.
-            </p>
+      <section className="hero-section">
+        <div className={`banner-placeholder-wrapper${isSecondaryBanner ? " banner-placeholder-wrapper-secondary" : ""}`} id="hero-banner">
+          <div className={`hero-banner-layer${heroBannerIndex === 0 ? " active" : ""}`} style={{ backgroundImage: `url("${HERO_BANNERS[0]}")` }} />
+          <div className={`hero-banner-layer${heroBannerIndex === 1 ? " active" : ""}`} style={{ backgroundImage: `url("${HERO_BANNERS[1]}")` }} />
+          <div className={`hero-center-content${isPrimaryOnScreen ? "" : " hero-center-content-minimal"}`}>
+            {isPrimaryOnScreen ? (
+              <>
+                <div className="hero-eyebrow-tag">✨ Colección 2025 — Ya disponible</div>
+                <h1 className="hero-main-title">
+                  Tu belleza,
+                  <br />
+                  <em>sin límites</em>
+                </h1>
+                <p className="hero-subtitle">
+                  Descubre cosméticos premium, cuidado de piel y capilar curados con amor para realzar tu brillo natural.
+                </p>
+              </>
+            ) : null}
             <div className="hero-cta-group">
               <button type="button" className="btn btn-primary btn-lg" onClick={() => document.getElementById("featured")?.scrollIntoView({ behavior: "smooth" })}>
                 🛍️ Explorar Colección
               </button>
-              <button type="button" className="btn btn-outline btn-lg" onClick={openSearch}>
+              <button
+                type="button"
+                className={`btn btn-lg ${isSecondaryBanner ? "hero-btn-secondary-solid" : "btn-outline"}`}
+                onClick={openSearch}
+              >
                 ✨ Buscar mi producto
               </button>
             </div>
@@ -381,7 +405,9 @@ export function StoreHomeClient() {
           <div className="footer-grid">
             <div className="footer-brand">
               <Link href="/" className="logo">
-                <div className="logo-icon">🌸</div>
+                <div className="logo-icon">
+                  <Image src={logoImage} alt="Logo GinnaBeauty" className="logo-icon-image" width={88} height={88} />
+                </div>
                 <div className="logo-text">
                   <span className="logo-brand">
                     Ginna<em>Beauty</em>

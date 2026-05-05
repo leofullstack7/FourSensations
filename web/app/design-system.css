@@ -192,14 +192,17 @@ input, select, textarea { font-family: inherit; }
   gap: 10px;
 }
 .logo-icon {
-  width: 44px;
-  height: 44px;
-  background: linear-gradient(135deg, var(--blush) 0%, var(--rose) 100%);
-  border-radius: 50%;
+  width: 86px;
+  height: 86px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+}
+.logo-icon-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 .logo-text {
   display: flex;

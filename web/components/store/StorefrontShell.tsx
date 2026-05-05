@@ -18,6 +18,7 @@ import { computeShippingCop, loadCart, saveCart } from "@/lib/cart-storage";
 import { loadFavorites, saveFavorites } from "@/lib/favorites-storage";
 import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
 import { isHttpImageUrl } from "@/lib/util/image-url";
+import logoImage from "@/app/logo.png";
 
 type ToastItem = { id: number; msg: string; type: string; icon: string };
 
@@ -379,7 +380,16 @@ export function StorefrontShell({
       <header className="header" id="main-header">
         <div className="header-inner">
           <Link href="/" className="logo">
-            <div className="logo-icon">🌸</div>
+            <div className="logo-icon">
+              <Image
+                src={logoImage}
+                alt="Logo GinnaBeauty"
+                className="logo-icon-image"
+                width={96}
+                height={96}
+                priority
+              />
+            </div>
             <div className="logo-text">
               <span className="logo-brand">
                 Ginna<em>Beauty</em>

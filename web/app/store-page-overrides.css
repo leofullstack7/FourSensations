@@ -2,13 +2,7 @@
 .hero-section { position: relative; }
 .banner-placeholder-wrapper {
   width: 100%;
-  min-height: 520px;
-  background-image:
-    linear-gradient(135deg, rgba(245, 230, 224, 0.35) 0%, rgba(212, 232, 228, 0.25) 100%),
-    url("/banner.webp");
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+  min-height: 620px;
   position: relative;
   overflow: hidden;
   display: flex;
@@ -18,25 +12,24 @@
   /* Reserva espacio para la barra de stats y evita que tape CTAs en desktop. */
   padding-bottom: 110px;
 }
-.banner-placeholder-wrapper::before {
-  content: '';
+.hero-banner-layer {
   position: absolute;
-  width: 500px; height: 500px;
-  background: radial-gradient(circle, rgba(232,200,194,0.6) 0%, transparent 70%);
-  top: -100px; left: -100px;
-  animation: floatOrb 8s ease-in-out infinite;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity 0.9s ease-in-out;
+  z-index: 1;
 }
-.banner-placeholder-wrapper::after {
-  content: '';
-  position: absolute;
-  width: 400px; height: 400px;
-  background: radial-gradient(circle, rgba(197,187,218,0.5) 0%, transparent 70%);
-  bottom: -80px; right: -60px;
-  animation: floatOrb 10s ease-in-out infinite reverse;
+.hero-banner-layer.active {
+  opacity: 1;
 }
-@keyframes floatOrb {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(20px, -20px) scale(1.05); }
+.banner-placeholder-wrapper-secondary {
+  min-height: 700px;
+}
+.banner-placeholder-wrapper-secondary .hero-banner-layer.active {
+  background-size: contain;
 }
 .hero-center-content {
   position: relative;
@@ -45,6 +38,27 @@
   max-width: 680px;
   padding: 60px 32px;
   animation: fadeInUp 0.8s ease both;
+}
+.hero-center-content-minimal {
+  width: min(560px, calc(100% - 48px));
+  max-width: 560px;
+  margin-right: auto;
+  margin-left: 28px;
+  padding: 46px 24px;
+  text-align: left;
+}
+.hero-center-content-minimal .hero-cta-group {
+  justify-content: flex-start;
+}
+.hero-btn-secondary-solid {
+  background: #fff;
+  border: 1px solid #fff;
+  color: var(--dusty-rose);
+}
+.hero-btn-secondary-solid:hover {
+  background: #fff7f8;
+  border-color: #fff7f8;
+  color: var(--rose);
 }
 .hero-eyebrow-tag {
   display: inline-flex;
@@ -132,6 +146,10 @@
   .hero-center-content {
     padding: 44px 20px 28px;
   }
+  .hero-center-content-minimal {
+    margin-left: 20px;
+    width: calc(100% - 40px);
+  }
 
   /* En tablet/móvil deja de superponer para no tapar texto/botones. */
   .hero-stats {
@@ -179,6 +197,10 @@
 
   .hero-cta-group {
     gap: 10px;
+  }
+  .hero-center-content-minimal {
+    margin-left: 12px;
+    width: calc(100% - 24px);
   }
 }
 .marquee-strip {
