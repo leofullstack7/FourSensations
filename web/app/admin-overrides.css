@@ -656,3 +656,636 @@
   margin-right: 6px;
   vertical-align: -1px;
 }
+
+/* ——— Panel Crear Combos ——— */
+.admin-combos-root {
+  max-width: 100%;
+  min-width: 0;
+}
+.admin-combos-list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.admin-combos-hero-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 28px 30px;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(245, 230, 224, 0.55) 45%, rgba(232, 200, 194, 0.35) 100%);
+  border: 1px solid rgba(200, 168, 162, 0.35);
+  box-shadow: 0 18px 48px rgba(62, 47, 44, 0.08);
+}
+.admin-combos-kicker {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--dusty-rose);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.admin-combos-list-title {
+  font-family: var(--font-display);
+  font-size: clamp(26px, 3vw, 34px);
+  font-weight: 600;
+  color: var(--dark);
+  margin: 0 0 8px;
+  line-height: 1.15;
+}
+.admin-combos-list-sub {
+  margin: 0;
+  max-width: 560px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+.admin-combos-primary-cta {
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 28px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, var(--rose) 0%, var(--dusty-rose) 55%, #b86b7a 100%);
+  box-shadow: 0 12px 32px rgba(200, 91, 122, 0.35);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.admin-combos-primary-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 40px rgba(200, 91, 122, 0.42);
+}
+.admin-combos-primary-cta-icon {
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 300;
+}
+.admin-combos-alert {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--lavender-light);
+  border: 1px solid var(--dusty-rose);
+  font-size: 13px;
+}
+.admin-combos-muted {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 0;
+}
+.admin-combos-empty {
+  text-align: center;
+  padding: 48px 20px;
+  border-radius: var(--radius-lg);
+  border: 1px dashed rgba(200, 168, 162, 0.55);
+  background: rgba(255, 255, 255, 0.65);
+}
+.admin-combos-empty-icon {
+  font-size: 42px;
+  margin-bottom: 10px;
+}
+.admin-combos-empty-title {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--dark);
+  margin-bottom: 6px;
+}
+.admin-combos-strip-wrap {
+  overflow-x: auto;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+.admin-combos-strip {
+  display: flex;
+  gap: 16px;
+  padding: 4px 2px 12px;
+}
+.admin-combos-strip-card {
+  flex: 0 0 min(360px, 88vw);
+  background: #fff;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--cream);
+  padding: 16px 18px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.06);
+}
+.admin-combos-strip-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.admin-combos-strip-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--dark);
+  line-height: 1.25;
+}
+.admin-combos-strip-price {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--dusty-rose);
+  white-space: nowrap;
+}
+.admin-combos-strip-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.admin-combos-strip-thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--ivory);
+  border: 1px solid var(--cream);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+.admin-combos-strip-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.admin-combos-strip-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.admin-combos-builder-toolbar {
+  margin-bottom: 16px;
+}
+.admin-combos-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 22px;
+  align-items: stretch;
+  min-height: 520px;
+}
+.admin-combos-main {
+  position: relative;
+  min-width: 0;
+  background: #fff;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--cream);
+  padding: 26px 26px 32px;
+  box-shadow: 0 12px 36px rgba(62, 47, 44, 0.06);
+}
+.admin-combos-main-header {
+  margin-bottom: 22px;
+}
+.admin-combos-brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.admin-combos-logo-ring {
+  width: 84px;
+  height: 84px;
+  border-radius: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.95), rgba(232, 200, 194, 0.45));
+  border: 1px solid rgba(200, 168, 162, 0.35);
+  box-shadow: 0 10px 28px rgba(200, 145, 139, 0.22);
+}
+.admin-combos-logo-img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+}
+.admin-combos-brand-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dusty-rose);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.admin-combos-brand-title {
+  font-family: var(--font-display);
+  font-size: clamp(30px, 3.4vw, 40px);
+  font-weight: 600;
+  margin: 0;
+  color: var(--dark);
+  line-height: 1.05;
+}
+.admin-combos-brand-title em {
+  font-style: italic;
+  color: var(--dusty-rose);
+  font-weight: 500;
+}
+.admin-combos-lead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  max-width: 720px;
+}
+.admin-combos-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(200, 168, 162, 0.35);
+  background: rgba(255, 255, 255, 0.95);
+  margin-bottom: 14px;
+  box-shadow: 0 6px 18px rgba(62, 47, 44, 0.05);
+}
+.admin-combos-search-bar svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.admin-combos-search-bar input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--dark);
+  min-width: 0;
+}
+.admin-combos-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.admin-combos-select {
+  font-size: 13px;
+}
+.admin-combos-grid-wrap {
+  min-height: 200px;
+}
+.admin-combos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+}
+.admin-combos-pcard {
+  text-align: left;
+  border: 1px solid var(--cream);
+  border-radius: var(--radius-lg);
+  background: var(--ivory);
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.admin-combos-pcard:hover {
+  transform: translateY(-3px);
+  border-color: rgba(200, 145, 139, 0.45);
+  box-shadow: 0 14px 32px rgba(62, 47, 44, 0.1);
+}
+.admin-combos-pcard-img {
+  aspect-ratio: 1 / 1;
+  background: #fff;
+  position: relative;
+}
+.admin-combos-pcard-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.admin-combos-pcard-emoji {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 44px;
+}
+.admin-combos-pcard-body {
+  padding: 12px 12px 14px;
+}
+.admin-combos-pcard-brand {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.admin-combos-pcard-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--dark);
+  line-height: 1.35;
+  margin-bottom: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.admin-combos-pcard-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.admin-combos-pcard-sold {
+  white-space: nowrap;
+}
+.admin-combos-pcard-price {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--dusty-rose);
+}
+
+.admin-combos-detail-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(62, 47, 44, 0.18);
+  backdrop-filter: blur(3px);
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 24px 20px 32px 18px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.admin-combos-detail-panel {
+  width: min(520px, calc(100vw - 36px));
+  max-height: min(85dvh, 720px);
+  overflow: auto;
+  background: #fff;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--cream);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.14);
+  padding: 20px 20px 22px;
+  position: relative;
+  flex-shrink: 0;
+}
+.admin-combos-detail-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--cream);
+  background: #fff;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--text-muted);
+}
+.admin-combos-detail-close:hover {
+  color: var(--dusty-rose);
+}
+.admin-combos-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.admin-combos-detail-visual {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--ivory);
+  border: 1px solid var(--cream);
+  min-height: 200px;
+}
+.admin-combos-detail-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.admin-combos-detail-emoji {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 72px;
+}
+.admin-combos-detail-brand {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.admin-combos-detail-name {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 10px;
+  color: var(--dark);
+  line-height: 1.2;
+}
+.admin-combos-detail-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.admin-combos-detail-price {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--dusty-rose);
+}
+.admin-combos-detail-stock {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.admin-combos-detail-desc {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  margin: 0 0 16px;
+  max-height: 180px;
+  overflow: auto;
+}
+.admin-combos-add-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.admin-combos-rail {
+  border-radius: var(--radius-xl);
+  background: linear-gradient(165deg, rgba(232, 200, 194, 0.95) 0%, rgba(200, 145, 139, 0.92) 42%, rgba(184, 107, 122, 0.95) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 18px 48px rgba(200, 91, 122, 0.28);
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+.admin-combos-rail::before {
+  content: "";
+  position: absolute;
+  inset: -40% -20% auto -20%;
+  height: 220px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.35) 0%, transparent 65%);
+  pointer-events: none;
+}
+.admin-combos-rail-inner {
+  position: relative;
+  z-index: 1;
+  padding: 22px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+.admin-combos-field-label {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+}
+.admin-combos-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.admin-combos-input-compact {
+  margin-top: 4px;
+}
+.admin-combos-rail .form-input {
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--dark);
+}
+.admin-combos-rail-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 4px;
+}
+.admin-combos-metric-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.78);
+  margin-bottom: 4px;
+}
+.admin-combos-metric-value {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+}
+.admin-combos-rail-lines-head {
+  margin-top: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.95);
+}
+.admin-combos-rail-empty {
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.82);
+  margin: 0;
+}
+.admin-combos-rail-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 340px;
+  overflow: auto;
+}
+.admin-combos-rail-line {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+.admin-combos-rail-line-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+.admin-combos-rail-line-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.admin-combos-rail-line-body {
+  min-width: 0;
+  flex: 1;
+}
+.admin-combos-rail-line-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.3;
+  margin-bottom: 4px;
+}
+.admin-combos-rail-line-price {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 6px;
+}
+.admin-combos-rail-line-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.admin-combos-mini {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.admin-combos-mini:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+.admin-combos-mini.danger {
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(62, 47, 44, 0.18);
+}
+.admin-combos-save {
+  margin-top: auto;
+  width: 100%;
+  justify-content: center;
+  font-weight: 600;
+}
+
+@media (max-width: 1100px) {
+  .admin-combos-split {
+    grid-template-columns: 1fr;
+  }
+  .admin-combos-rail-lines {
+    max-height: 260px;
+  }
+  .admin-combos-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .admin-combos-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-combos-filters {
+    grid-template-columns: 1fr;
+  }
+  .admin-combos-hero-card {
+    padding: 22px 18px;
+  }
+}

@@ -88,6 +88,35 @@ model Product {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   images        ProductImage[]
+  comboItems    ProductComboItem[]
+}
+
+/// Combo promocional creado en el panel (no altera el catálogo público hasta integración explícita).
+model ProductCombo {
+  id         String             @id @default(cuid())
+  name       String
+  slug       String             @unique
+  /// Precio de venta del combo (COP, misma unidad que `Product.price`).
+  comboPrice Int
+  active     Boolean            @default(true)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  items      ProductComboItem[]
+
+  @@index([createdAt])
+}
+
+model ProductComboItem {
+  id        String       @id @default(cuid())
+  comboId   String
+  combo     ProductCombo @relation(fields: [comboId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int          @default(1)
+  sortOrder Int          @default(0)
+
+  @@index([comboId])
+  @@index([productId])
 }
 
 enum BulkImportStatus {

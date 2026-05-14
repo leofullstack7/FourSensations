@@ -48,11 +48,12 @@ import { getDefaultAdminMenu } from "@/data/admin-initial";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import type { AdminProduct, AdminSale, MenuConfig } from "@/lib/types/admin";
 import { formatPrice } from "@/lib/format";
+import { AdminCombosPanel } from "@/components/admin/AdminCombosPanel";
 import { BulkImportProgressOverlay } from "@/components/admin/BulkImportProgressOverlay";
 import { useBufferedProgress } from "@/hooks/useBufferedProgress";
 import { getMenuGroupLabelsForStoreCategory } from "@/lib/menu-config";
 
-type AdminPageId = "dashboard" | "products" | "sales" | "stock" | "categories" | "menu" | "reports";
+type AdminPageId = "dashboard" | "products" | "combos" | "sales" | "stock" | "categories" | "menu" | "reports";
 
 const MENU_TAG_CUSTOM_VALUE = "__custom__";
 
@@ -344,6 +345,7 @@ export function AdminApp() {
   const titles: Record<AdminPageId, string> = {
     dashboard: "Dashboard",
     products: "Gestión de Productos",
+    combos: "Crear Combos",
     sales: "Ventas",
     stock: "Inventario",
     categories: "Categorías y subcategorías",
@@ -742,6 +744,15 @@ export function AdminApp() {
             </button>
             <button
               type="button"
+              className={`sidebar-link ${page === "combos" ? "active" : ""}`}
+              title="Crear Combos"
+              onClick={() => goPage("combos")}
+            >
+              <span className="icon">🧩</span>
+              {navLinkLabel("Crear Combos")}
+            </button>
+            <button
+              type="button"
               className={`sidebar-link ${page === "sales" ? "active" : ""}`}
               title="Ventas"
               onClick={() => goPage("sales")}
@@ -1025,6 +1036,10 @@ export function AdminApp() {
                   }}
                 />
               )}
+            </div>
+
+            <div className={`admin-page ${page === "combos" ? "active" : ""}`} style={{ display: page === "combos" ? "block" : "none" }}>
+              <AdminCombosPanel active={page === "combos"} showToast={showToast} />
             </div>
 
             <div className={`admin-page ${page === "sales" ? "active" : ""}`} style={{ display: page === "sales" ? "block" : "none" }}>
