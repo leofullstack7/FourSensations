@@ -829,7 +829,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
   gap: 22px;
-  align-items: stretch;
+  align-items: flex-start;
   min-height: 520px;
 }
 .admin-combos-main {
@@ -1120,8 +1120,11 @@
   border: 1px solid rgba(255, 255, 255, 0.35);
   box-shadow: 0 18px 48px rgba(200, 91, 122, 0.28);
   color: #fff;
-  position: relative;
-  overflow: hidden;
+  position: sticky;
+  top: 88px;
+  align-self: start;
+  max-height: calc(100dvh - 96px);
+  overflow: visible;
 }
 .admin-combos-rail::before {
   content: "";
@@ -1138,7 +1141,10 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  height: 100%;
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 .admin-combos-field-label {
   font-size: 11px;
@@ -1194,8 +1200,10 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 340px;
-  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  max-height: 280px;
+  overflow-y: auto;
 }
 .admin-combos-rail-line {
   display: flex;
@@ -1260,7 +1268,8 @@
   background: rgba(62, 47, 44, 0.18);
 }
 .admin-combos-save {
-  margin-top: auto;
+  margin-top: 0.25rem;
+  margin-bottom: 0.5rem;
   width: 100%;
   justify-content: center;
   font-weight: 600;

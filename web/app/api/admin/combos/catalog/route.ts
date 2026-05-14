@@ -160,10 +160,10 @@ export async function GET(req: NextRequest) {
     return noStoreJson({
       products,
       filterOptions: {
-        brands: [...brands].sort((a, b) => a.localeCompare(b, "es")),
-        categories: [...categories].sort((a, b) => a.localeCompare(b, "es")),
-        subcategories: [...subcategories].sort((a, b) => a.localeCompare(b, "es")),
-        tags: [...tags].sort((a, b) => a.localeCompare(b, "es")),
+        brands: Array.from(brands).sort((a, b) => a.localeCompare(b, "es")),
+        categories: Array.from(categories).sort((a, b) => a.localeCompare(b, "es")),
+        subcategories: Array.from(subcategories).sort((a, b) => a.localeCompare(b, "es")),
+        tags: Array.from(tags).sort((a, b) => a.localeCompare(b, "es")),
       },
     });
   } catch (e) {

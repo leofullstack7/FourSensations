@@ -460,6 +460,10 @@ export function AdminCombosPanel({
                   </div>
                 </div>
 
+                <button type="button" className="btn btn-primary admin-combos-save" disabled={saving} onClick={() => void handleSaveCombo()}>
+                  {saving ? "Guardando…" : "Guardar combo"}
+                </button>
+
                 <div className="admin-combos-rail-lines-head">Productos en el combo</div>
                 {railLines.length === 0 ? (
                   <p className="admin-combos-rail-empty">Toca un producto y úsalo en el combo desde la vista ampliada.</p>
@@ -494,10 +498,6 @@ export function AdminCombosPanel({
                     ))}
                   </ul>
                 )}
-
-                <button type="button" className="btn btn-primary admin-combos-save" disabled={saving} onClick={() => void handleSaveCombo()}>
-                  {saving ? "Guardando…" : "Guardar combo"}
-                </button>
               </div>
             </aside>
           </div>
