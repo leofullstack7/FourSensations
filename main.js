@@ -29,6 +29,15 @@ const PRODUCTS_DB = [
   { id: 12, name: 'Kit Hombre Cuidado Piel', brand: 'GinnaBeauty', category: 'hombres', subcategory: 'Cuidado piel', price: 85000, originalPrice: 110000, rating: 4.6, reviews: 44, badge: 'hot', description: 'Kit completo: limpiador facial, hidratante con SPF y contorno de ojos. Formulado para pieles masculinas. Sin brillos.', img: 'producto12.jpg', emoji: '🧴', isNew: false },
 ];
 
+/** Franja superior: frases que rotan (misma lógica que `web/lib/store-topbar-messages.ts` en Next). */
+const TOPBAR_MESSAGES = [
+  '✨ ENVÍO GRATIS en compras superiores a $150.000 · Envíos a todo Colombia 🇨🇴',
+  '💄 Maquillaje y skincare premium — descubre tu ritual ideal',
+  '🌿 Productos cruelty-free y marcas seleccionadas con amor',
+  '🛍️ Compra segura: pagos con pasarela encriptada',
+  '♥ GinnaBeauty — cosmética que te hace brillar',
+];
+
 const MENU_CONFIG = {
   'Accesorios': {
     icon: '👜',
@@ -159,7 +168,7 @@ function renderCartItems() {
   }
   // Update summary
   const subtotal = getCartTotal();
-  const shipping = subtotal >= 100000 ? 0 : 9000;
+  const shipping = subtotal >= 150000 ? 0 : 9000;
   $('#cart-subtotal').textContent = formatPrice(subtotal);
   $('#cart-shipping').textContent = shipping === 0 ? 'Gratis 🎉' : formatPrice(shipping);
   $('#cart-total').textContent = formatPrice(subtotal + shipping);
@@ -306,7 +315,7 @@ function openProductModal(productId) {
           </button>
         </div>
         <div style="background:var(--ivory);border-radius:var(--radius-md);padding:14px;margin-top:16px;font-size:13px;color:var(--text-light)">
-          🚚 Envío a todo el país · 🔄 Devoluciones 30 días · ✅ Pago seguro
+          🚚 Envío a todo el país · 🔄 Devoluciones 7 días · ✅ Pago seguro
         </div>
       </div>
     </div>
@@ -366,7 +375,7 @@ function renderCheckoutSummary() {
   const items = $('#checkout-order-items');
   if (!items) return;
   const subtotal = getCartTotal();
-  const shipping = subtotal >= 100000 ? 0 : 9000;
+  const shipping = subtotal >= 150000 ? 0 : 9000;
   items.innerHTML = GB.cart.map(item => `
     <div class="co-item">
       <div class="co-item-img">${item.emoji}</div>
@@ -521,7 +530,22 @@ window.addEventListener('scroll', () => {
 });
 
 // ── INIT ─────────────────────────────────────
+function startTopbarRotation() {
+  const el = $('#gb-topbar-text');
+  if (!el) return;
+  let i = 0;
+  setInterval(() => {
+    i = (i + 1) % TOPBAR_MESSAGES.length;
+    el.style.opacity = '0';
+    setTimeout(() => {
+      el.textContent = TOPBAR_MESSAGES[i];
+      el.style.opacity = '1';
+    }, 220);
+  }, 7500);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  startTopbarRotation();
   buildMegaMenu();
   renderProducts('all');
   updateCartUI();

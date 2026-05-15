@@ -307,9 +307,9 @@
 </head>
 <body>
 
-<!-- TOPBAR -->
-<div class="topbar">
-  ✨ <span>ENVÍO GRATIS</span> en compras superiores a $100.000 · Pago contra entrega disponible 🇨🇴
+<!-- TOPBAR (texto rotativo: main.js → TOPBAR_MESSAGES + #gb-topbar-text) -->
+<div class="topbar" aria-live="polite">
+  <span id="gb-topbar-text" style="transition: opacity 0.35s ease;">✨ ENVÍO GRATIS en compras superiores a $150.000 · Envíos a todo Colombia 🇨🇴</span>
 </div>
 
 <!-- HEADER -->
@@ -412,14 +412,14 @@
     <span class="marquee-item">🌿 Skincare natural</span>
     <span class="marquee-item">💅 Uñas que enamoran</span>
     <span class="marquee-item">📦 Mayorista disponible</span>
-    <span class="marquee-item">🚚 Envío gratis +$100K</span>
+    <span class="marquee-item">🚚 Envío gratis +$150K</span>
     <span class="marquee-item">✨ Maquillaje de larga duración</span>
     <span class="marquee-item">💆 Cuidado capilar premium</span>
     <span class="marquee-item"><span>NUEVO</span> Sérum Vitamina C</span>
     <span class="marquee-item">🌿 Skincare natural</span>
     <span class="marquee-item">💅 Uñas que enamoran</span>
     <span class="marquee-item">📦 Mayorista disponible</span>
-    <span class="marquee-item">🚚 Envío gratis +$100K</span>
+    <span class="marquee-item">🚚 Envío gratis +$150K</span>
   </div>
 </div>
 
@@ -467,20 +467,20 @@
         <div class="trust-icon">🚚</div>
         <div>
           <div class="trust-title">Envío a toda Colombia</div>
-          <div class="trust-desc">Gratis en compras +$100.000</div>
+          <div class="trust-desc">Gratis en compras +$150.000</div>
         </div>
       </div>
       <div class="trust-item">
         <div class="trust-icon">💳</div>
         <div>
-          <div class="trust-title">Pago contra entrega</div>
-          <div class="trust-desc">Paga cuando recibas tu pedido</div>
+          <div class="trust-title">Pago seguro en línea</div>
+          <div class="trust-desc">Pasarela protegida y cifrada</div>
         </div>
       </div>
       <div class="trust-item">
         <div class="trust-icon">🔄</div>
         <div>
-          <div class="trust-title">Devoluciones 30 días</div>
+          <div class="trust-title">Devoluciones 7 días</div>
           <div class="trust-desc">Satisfacción o te devolvemos</div>
         </div>
       </div>
@@ -784,7 +784,7 @@
     <div id="fav-warning-msg" class="fav-warning" style="display:none">
       <p>💝 ¡Guarda tus productos favoritos! <strong>Inicia sesión</strong> para que tu lista se conserve incluso si cierras la página.</p>
     </div>
-    <div class="auth-title">Bienvenida</div>
+    <div class="auth-title">Bienvenido/a</div>
     <p class="auth-sub">Inicia sesión para una experiencia de compra personalizada</p>
     <div class="auth-social-btns">
       <button class="auth-social-btn" onclick="loginWithProvider('Google')">

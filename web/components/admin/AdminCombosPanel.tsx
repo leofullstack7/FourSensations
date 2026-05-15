@@ -61,6 +61,7 @@ export function AdminCombosPanel({
   const [railLines, setRailLines] = useState<RailLine[]>([]);
   const [preview, setPreview] = useState<AdminComboCatalogProduct | null>(null);
   const [saving, setSaving] = useState(false);
+  const [selectedListComboId, setSelectedListComboId] = useState<string | null>(null);
 
   const loadCombos = useCallback(async () => {
     setCombosLoading(true);
@@ -79,6 +80,18 @@ export function AdminCombosPanel({
     if (!active) return;
     void loadCombos();
   }, [active, loadCombos]);
+
+  useEffect(() => {
+    if (!selectedListComboId) return;
+    if (!combos.some((c) => c.id === selectedListComboId)) {
+      setSelectedListComboId(null);
+    }
+  }, [combos, selectedListComboId]);
+
+  const selectedListCombo = useMemo(
+    () => (selectedListComboId ? combos.find((c) => c.id === selectedListComboId) ?? null : null),
+    [combos, selectedListComboId]
+  );
 
   useEffect(() => {
     const t = window.setTimeout(() => setSearchDebounced(searchInput.trim()), 320);
@@ -225,7 +238,7 @@ export function AdminCombosPanel({
                 Agrupa productos con poca rotación, define un precio especial y mantén el control desde un solo lugar.
               </p>
             </div>
-            <button type="button" className="admin-combos-primary-cta" onClick={() => setView("builder")}>
+            <button type="button" className="admin-combos-primary-cta" onClick={() => { setSelectedListComboId(null); setView("builder"); }}>
               <span className="admin-combos-primary-cta-icon">＋</span>
               Añadir nuevo combo
             </button>
@@ -249,10 +262,27 @@ export function AdminCombosPanel({
               <p className="admin-combos-muted">Crea el primero con el botón de arriba.</p>
             </div>
           ) : (
+            <>
             <div className="admin-combos-strip-wrap">
               <div className="admin-combos-strip">
-                {combos.map((c) => (
-                  <article key={c.id} className="admin-combos-strip-card">
+                {combos.map((c) => {
+                  const selected = selectedListComboId === c.id;
+                  return (
+                    <article
+                      key={c.id}
+                      role="button"
+                      aria-label={`Combo: ${c.name}. Pulsa para ver detalle grande.`}
+                      aria-pressed={selected}
+                      tabIndex={0}
+                      className={`admin-combos-strip-card${selected ? " admin-combos-strip-card--selected" : ""}`}
+                      onClick={() => setSelectedListComboId((prev) => (prev === c.id ? null : c.id))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedListComboId((prev) => (prev === c.id ? null : c.id));
+                        }
+                      }}
+                    >
                     <div className="admin-combos-strip-card-head">
                       <div className="admin-combos-strip-name">{c.name}</div>
                       <div className="admin-combos-strip-price">{formatPrice(c.comboPrice)}</div>
@@ -274,9 +304,62 @@ export function AdminCombosPanel({
                       {formatPrice(c.items.reduce((a, it) => a + it.product.price * it.quantity, 0))}
                     </div>
                   </article>
-                ))}
+                  );
+                })}
               </div>
             </div>
+            {selectedListCombo ? (
+              <section className="admin-combos-list-detail" aria-label="Detalle del combo seleccionado">
+                <div className="admin-combos-list-detail-head">
+                  <div>
+                    <div className="admin-combos-list-detail-kicker">Combo seleccionado</div>
+                    <h3 className="admin-combos-list-detail-title">{selectedListCombo.name}</h3>
+                    <p className="admin-combos-list-detail-meta">
+                      Precio del combo: <strong>{formatPrice(selectedListCombo.comboPrice)}</strong>
+                      {" · "}
+                      Valor en catálogo:{" "}
+                      <strong>
+                        {formatPrice(
+                          selectedListCombo.items.reduce((a, it) => a + it.product.price * it.quantity, 0)
+                        )}
+                      </strong>
+                      {" · "}
+                      {selectedListCombo.items.length} producto{selectedListCombo.items.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => setSelectedListComboId(null)}>
+                    Cerrar detalle
+                  </button>
+                </div>
+                <div className="admin-combos-list-detail-grid">
+                  {selectedListCombo.items.map((it) => (
+                    <div key={it.id} className="admin-combos-list-detail-prod">
+                      <div className="admin-combos-list-detail-prod-visual">
+                        {isHttpImageUrl(it.product.imageUrl) ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={it.product.imageUrl!} alt="" />
+                        ) : (
+                          <span className="admin-combos-list-detail-prod-emoji">{it.product.emoji ?? "📦"}</span>
+                        )}
+                      </div>
+                      <div className="admin-combos-list-detail-prod-body">
+                        <div className="admin-combos-list-detail-prod-name">{it.product.name}</div>
+                        <div className="admin-combos-list-detail-prod-row">
+                          <span className="admin-combos-list-detail-prod-price">{formatPrice(it.product.price)}</span>
+                          <span className="admin-combos-list-detail-prod-qty">× {it.quantity}</span>
+                        </div>
+                        <div className="admin-combos-list-detail-prod-sub">
+                          Subtotal: {formatPrice(it.product.price * it.quantity)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <p className="admin-combos-list-hint">Pulsa un combo de la lista para ver aquí los productos en grande.</p>
+            )}
+            </>
           )}
         </div>
       ) : (
