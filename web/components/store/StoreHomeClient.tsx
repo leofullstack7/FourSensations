@@ -12,6 +12,8 @@ import type { StoreProduct } from "@/lib/types/product";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const HERO_BANNERS = [banner2Image.src, "/banner.webp"] as const;
+const INITIAL_VISIBLE_PRODUCTS = 32;
+const LOAD_MORE_PRODUCTS = 20;
 
 export function StoreHomeClient() {
   const {
@@ -30,6 +32,7 @@ export function StoreHomeClient() {
   const [manualSub, setManualSub] = useState<string | null>(null);
   const [sortValue, setSortValue] = useState<string>("default");
   const [heroBannerIndex, setHeroBannerIndex] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_PRODUCTS);
   const isPrimaryOnScreen = heroBannerIndex === 1;
   const isSecondaryBanner = heroBannerIndex === 0;
 
@@ -65,6 +68,10 @@ export function StoreHomeClient() {
     const rest = list.filter((p) => !p.featuredInHome);
     return [...sortWithin(featured), ...sortWithin(rest)];
   }, [products, activeCategory, manualSub, sortValue]);
+
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE_PRODUCTS);
+  }, [activeCategory, manualSub, sortValue]);
 
   const filterByCat = useCallback((cat: string) => {
     document.querySelector("#featured")?.scrollIntoView({ behavior: "smooth" });
@@ -301,7 +308,7 @@ export function StoreHomeClient() {
           </div>
 
           <div className="products-grid" id="products-grid-main">
-            {filteredProducts.map((p, i) => (
+            {filteredProducts.slice(0, visibleCount).map((p, i) => (
               <StoreProductCard
                 key={p.id}
                 product={p}
@@ -309,10 +316,25 @@ export function StoreHomeClient() {
                 onOpen={openProductModal}
                 onToggleFav={toggleFavorite}
                 onAddCart={addToCart}
-                imagePriority={i === 0}
+                imagePriority={i < 4}
               />
             ))}
           </div>
+
+          {filteredProducts.length > visibleCount && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 40 }}>
+              <button
+                type="button"
+                className="btn btn-outline btn-lg"
+                onClick={() => setVisibleCount((c) => c + LOAD_MORE_PRODUCTS)}
+              >
+                Ver más
+              </button>
+              <span style={{ fontSize: 13, color: "var(--text-muted, #888)" }}>
+                Mostrando {Math.min(visibleCount, filteredProducts.length)} de {filteredProducts.length} productos
+              </span>
+            </div>
+          )}
         </div>
       </section>
 
