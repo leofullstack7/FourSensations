@@ -40,7 +40,7 @@ import type {
   BulkPreviewResult,
   BulkTaxonomyRehomeHint,
 } from "@/lib/bulk-import/build-preview";
-import { taxonomyPairKey } from "@/lib/bulk-import/category-resolve";
+import { taxonomyPairKey, normalizeTaxonomyNameForDb } from "@/lib/bulk-import/category-resolve";
 import { effectiveProductTitle } from "@/lib/bulk-import/semantic-map";
 import { isTintesCategory } from "@/lib/bulk-import/tintes";
 
@@ -1833,6 +1833,7 @@ function AdminBulkTab({
     for (const r of preview.matchedRows) {
       const blocking = r.issues.filter((x) => {
         if (x === "Sin imagen en ZIP para este código") return false;
+        if (x === "Sin imagen en ZIP para este nivel") return false;
         if (x === "Producto ya registrado") return false;
         return true;
       });
@@ -1855,6 +1856,7 @@ function AdminBulkTab({
         const previewRowId = bulkImportStableRowId(r);
         const blockingErrors = r.issues.filter((x) => {
           if (x === "Sin imagen en ZIP para este código") return false;
+          if (x === "Sin imagen en ZIP para este nivel") return false;
           if (x === "Producto ya registrado") return false;
           return true;
         });
@@ -1884,7 +1886,9 @@ function AdminBulkTab({
           matchStatus: "valid" as const,
           selected: selectedRowIdSet.has(previewRowId),
           errors: blockingErrors,
-          warnings: r.issues.filter((x) => x === "Sin imagen en ZIP para este código"),
+          warnings: r.issues.filter(
+            (x) => x === "Sin imagen en ZIP para este código" || x === "Sin imagen en ZIP para este nivel"
+          ),
           hasExisting,
           existingProductName: r.existingProductName,
         };
@@ -2319,11 +2323,13 @@ function AdminBulkTab({
                           ? r.matchedImages
                               .map((m) => {
                                 const how =
-                                  m.matchedBy === "numericPrefix"
-                                    ? "prefijo"
-                                    : m.matchedBy === "sixDigitPrefix"
-                                      ? "6 dígitos"
-                                      : "exacto";
+                                  m.matchedBy === "tintLevel"
+                                    ? "nivel"
+                                    : m.matchedBy === "numericPrefix"
+                                      ? "prefijo"
+                                      : m.matchedBy === "sixDigitPrefix"
+                                        ? "6 dígitos"
+                                        : "exacto";
                                 return `${m.imageFilename} (${how})`;
                               })
                               .join(", ")
@@ -2675,10 +2681,13 @@ function AdminBulkTab({
                     tree = await fetchAdminCategories();
                     const p = tree.find((c) => c.id === parent!.id);
                     if (!p) throw new Error(`Categoría padre perdida al crear subcategoría "${subName}".`);
+                    const subDbName = normalizeTaxonomyNameForDb(subName);
                     const existsSub = p.subcategories.some(
-                      (s) => norm(s.name) === norm(subName) || norm(s.slug) === norm(subName)
+                      (s) =>
+                        normalizeTaxonomyNameForDb(s.name) === subDbName ||
+                        norm(s.slug) === norm(subName)
                     );
-                    if (!existsSub) await createAdminSubcategory(p.id, { name: subName });
+                    if (!existsSub) await createAdminSubcategory(p.id, { name: subDbName });
                   }
                 } else {
                   const parent =
@@ -2695,10 +2704,13 @@ function AdminBulkTab({
                     const treeFresh = await fetchAdminCategories();
                     const p = treeFresh.find((c) => c.id === parent.id);
                     if (!p) throw new Error(`Categoría padre perdida al crear subcategoría "${subName}".`);
+                    const subDbName = normalizeTaxonomyNameForDb(subName);
                     const existsSub = p.subcategories.some(
-                      (s) => norm(s.name) === norm(subName) || norm(s.slug) === norm(subName)
+                      (s) =>
+                        normalizeTaxonomyNameForDb(s.name) === subDbName ||
+                        norm(s.slug) === norm(subName)
                     );
-                    if (!existsSub) await createAdminSubcategory(p.id, { name: subName });
+                    if (!existsSub) await createAdminSubcategory(p.id, { name: subDbName });
                   }
                 }
               }

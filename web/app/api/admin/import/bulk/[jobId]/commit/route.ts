@@ -14,6 +14,7 @@ import { bulkImportStableRowId } from "@/lib/bulk-import/bulk-import-row-id";
 import type { BulkPreviewResult, BulkPreviewRow } from "@/lib/bulk-import/build-preview";
 import { effectiveProductTitle, normalizeProductNameForDb } from "@/lib/bulk-import/semantic-map";
 import { isTintesCategory } from "@/lib/bulk-import/tintes";
+import { normalizeTaxonomyNameForDb } from "@/lib/bulk-import/category-resolve";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +34,9 @@ const commitSchema = z
 
 /** «Producto ya registrado» se gestiona en el bucle (omitir o reemplazar), no aquí. */
 const BLOCKING_FILTER = (x: string) =>
-  x !== "Sin imagen en ZIP para este código" && x !== "Producto ya registrado";
+  x !== "Sin imagen en ZIP para este código" &&
+  x !== "Sin imagen en ZIP para este nivel" &&
+  x !== "Producto ya registrado";
 
 function parsePreview(raw: unknown): BulkPreviewResult | null {
   if (!raw || typeof raw !== "object") return null;
@@ -152,7 +155,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
             (m) =>
               m.matchedBy === "exact" ||
               m.matchedBy === "numericPrefix" ||
-              m.matchedBy === "sixDigitPrefix"
+              m.matchedBy === "sixDigitPrefix" ||
+              m.matchedBy === "tintLevel"
           )
           .map((m) => m.imageFilename);
         const uniqueFiles = Array.from(new Set(matchFiles));
@@ -193,7 +197,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
                 name,
                 brand,
                 category: row.mapped.categorySlug!,
-                subcategory: row.mapped.subcategoryName!,
+                subcategory: normalizeTaxonomyNameForDb(row.mapped.subcategoryName!),
                 description,
                 price: row.mapped.price!,
                 originalPrice: row.mapped.originalPrice ?? null,
@@ -217,7 +221,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
                 name,
                 brand,
                 category: row.mapped.categorySlug!,
-                subcategory: row.mapped.subcategoryName!,
+                subcategory: normalizeTaxonomyNameForDb(row.mapped.subcategoryName!),
                 description,
                 price: row.mapped.price!,
                 originalPrice: row.mapped.originalPrice ?? null,

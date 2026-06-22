@@ -116,6 +116,27 @@ function compactText(input: string): string {
   return normalizeTaxonomyText(input).replace(/\s+/g, "");
 }
 
+/** Nombre de categoría/subcategoría persistido: MAYÚSCULAS (importación masiva). */
+export function normalizeTaxonomyNameForDb(raw: string): string {
+  return raw.trim().toUpperCase();
+}
+
+/** Igualdad estricta tras normalizar (sin `includes` para evitar «Permanente» ⊂ «PERMANENTE / SIN AMONIACO»). */
+function taxonomyExactEqual(input: string, candidateSlug: string, candidateName: string): boolean {
+  const key = normalizeTaxonomyText(input);
+  const compactKey = compactText(input);
+  const sSlug = normalizeTaxonomyText(candidateSlug);
+  const sName = normalizeTaxonomyText(candidateName);
+  const compactSlug = compactText(candidateSlug);
+  const compactName = compactText(candidateName);
+  return (
+    sSlug === key ||
+    sName === key ||
+    compactSlug === compactKey ||
+    compactName === compactKey
+  );
+}
+
 function tokenSimilarity(a: string, b: string): number {
   const ta = new Set(a.split(" ").filter(Boolean));
   const tb = new Set(b.split(" ").filter(Boolean));
@@ -188,26 +209,8 @@ export function resolveSubcategoryName(
   const cat = tree.find((c) => c.slug === categorySlug);
   if (!cat) return null;
   const key = normalizeTaxonomyText(input);
-  const compactKey = compactText(input);
   for (const s of cat.subcategories) {
-    const sSlug = normalizeTaxonomyText(s.slug);
-    const sName = normalizeTaxonomyText(s.name);
-    const compactSlug = compactText(s.slug);
-    const compactName = compactText(s.name);
-    if (
-      sSlug === key ||
-      sName === key ||
-      compactSlug === compactKey ||
-      compactName === compactKey ||
-      sSlug.includes(key) ||
-      key.includes(sSlug) ||
-      sName.includes(key) ||
-      key.includes(sName) ||
-      compactSlug.includes(compactKey) ||
-      compactKey.includes(compactSlug) ||
-      compactName.includes(compactKey) ||
-      compactKey.includes(compactName)
-    ) return s.name;
+    if (taxonomyExactEqual(input, s.slug, s.name)) return s.name;
   }
   let best: { name: string; score: number } | null = null;
   for (const s of cat.subcategories) {
@@ -215,7 +218,7 @@ export function resolveSubcategoryName(
       tokenSimilarity(key, normalizeTaxonomyText(s.slug)),
       tokenSimilarity(key, normalizeTaxonomyText(s.name))
     );
-    if (score >= 0.66 && (!best || score > best.score)) {
+    if (score >= 0.9 && (!best || score > best.score)) {
       best = { name: s.name, score };
     }
   }
@@ -231,29 +234,10 @@ export function resolveCategoryBySubcategory(
   tree: CategoryRow[]
 ): { categorySlug: string; subcategoryName: string } | null {
   if (!subInput?.trim()) return null;
-  const key = normalizeTaxonomyText(subInput);
-  const compactKey = compactText(subInput);
   const hits: { categorySlug: string; subcategoryName: string }[] = [];
   for (const c of tree) {
     for (const s of c.subcategories) {
-      const sSlug = normalizeTaxonomyText(s.slug);
-      const sName = normalizeTaxonomyText(s.name);
-      const compactSlug = compactText(s.slug);
-      const compactName = compactText(s.name);
-      if (
-        sSlug === key ||
-        sName === key ||
-        compactSlug === compactKey ||
-        compactName === compactKey ||
-        sSlug.includes(key) ||
-        key.includes(sSlug) ||
-        sName.includes(key) ||
-        key.includes(sName) ||
-        compactSlug.includes(compactKey) ||
-        compactKey.includes(compactSlug) ||
-        compactName.includes(compactKey) ||
-        compactKey.includes(compactName)
-      ) {
+      if (taxonomyExactEqual(subInput, s.slug, s.name)) {
         hits.push({ categorySlug: c.slug, subcategoryName: s.name });
       }
     }
@@ -268,29 +252,10 @@ export function findAllExactGlobalSubcategoryMatches(
   tree: CategoryRow[]
 ): { categorySlug: string; subcategoryName: string }[] {
   if (!subInput?.trim()) return [];
-  const key = normalizeTaxonomyText(subInput);
-  const compactKey = compactText(subInput);
   const hits: { categorySlug: string; subcategoryName: string }[] = [];
   for (const c of tree) {
     for (const s of c.subcategories) {
-      const sSlug = normalizeTaxonomyText(s.slug);
-      const sName = normalizeTaxonomyText(s.name);
-      const compactSlug = compactText(s.slug);
-      const compactName = compactText(s.name);
-      if (
-        sSlug === key ||
-        sName === key ||
-        compactSlug === compactKey ||
-        compactName === compactKey ||
-        sSlug.includes(key) ||
-        key.includes(sSlug) ||
-        sName.includes(key) ||
-        key.includes(sName) ||
-        compactSlug.includes(compactKey) ||
-        compactKey.includes(compactSlug) ||
-        compactName.includes(compactKey) ||
-        compactKey.includes(compactName)
-      ) {
+      if (taxonomyExactEqual(subInput, s.slug, s.name)) {
         hits.push({ categorySlug: c.slug, subcategoryName: s.name });
       }
     }
@@ -299,29 +264,11 @@ export function findAllExactGlobalSubcategoryMatches(
 }
 
 function subMatchScore(subInput: string, s: { slug: string; name: string }): number {
+  if (taxonomyExactEqual(subInput, s.slug, s.name)) return 1;
   const key = normalizeTaxonomyText(subInput);
-  const compactKey = compactText(subInput);
   const sSlug = normalizeTaxonomyText(s.slug);
   const sName = normalizeTaxonomyText(s.name);
-  const compactSlug = compactText(s.slug);
-  const compactName = compactText(s.name);
-  if (sSlug === key || sName === key || compactSlug === compactKey || compactName === compactKey) return 1;
-  if (
-    sSlug.includes(key) ||
-    key.includes(sSlug) ||
-    sName.includes(key) ||
-    key.includes(sName) ||
-    compactSlug.includes(compactKey) ||
-    compactKey.includes(compactSlug) ||
-    compactName.includes(compactKey) ||
-    compactKey.includes(compactName)
-  )
-    return 0.88;
-  return Math.max(
-    tokenSimilarity(key, sSlug),
-    tokenSimilarity(key, sName),
-    tokenSimilarity(normalizeTaxonomyText(subInput), normalizeTaxonomyText(s.name))
-  );
+  return Math.max(tokenSimilarity(key, sSlug), tokenSimilarity(key, sName));
 }
 
 /**

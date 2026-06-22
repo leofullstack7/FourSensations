@@ -19,15 +19,17 @@ import {
   resolveTaxonomyFromCsvFixedMap,
   taxonomyPairKey,
   computeTaxonomyRehomeSuggestion,
+  normalizeTaxonomyNameForDb,
   type TaxonomyRehomeKind,
 } from "./category-resolve";
+import { isTintesCategory, normalizeTintLevelKey } from "./tintes";
 
 export type BulkPreviewImageMatch = {
   imageFilename: string;
   rawImageCode: string;
   numericPrefixCode: string | null;
   matchedCsvCode: string | null;
-  matchedBy: "exact" | "numericPrefix" | "sixDigitPrefix" | "none" | "ambiguous";
+  matchedBy: "exact" | "numericPrefix" | "sixDigitPrefix" | "tintLevel" | "none" | "ambiguous";
 };
 
 /** Dígitos iniciales del código en CSV (ej. "103718CYE" → "103718"). */
@@ -154,8 +156,17 @@ function collectBaseRowIssues(
   return issues;
 }
 
+function isValidImageMatch(m: BulkPreviewImageMatch): boolean {
+  return (
+    m.matchedBy === "exact" ||
+    m.matchedBy === "numericPrefix" ||
+    m.matchedBy === "sixDigitPrefix" ||
+    m.matchedBy === "tintLevel"
+  );
+}
+
 function isBlockingIssue(issue: string): boolean {
-  return issue !== "Sin imagen en ZIP para este código";
+  return issue !== "Sin imagen en ZIP para este código" && issue !== "Sin imagen en ZIP para este nivel";
 }
 
 /** Columnas sin mapeo semántico que parecen listas (misma fila pegada en un solo campo). */
@@ -317,6 +328,17 @@ export function buildBulkPreview(params: {
     rowsByCode.set(r.normalizedCode, list);
   });
 
+  /** Tintes: índice por columna Nivel (no por código de referencia). */
+  const rowsByTintLevel = new Map<string, number[]>();
+  rows.forEach((r) => {
+    if (!isTintesCategory(r.mapped.categorySlug)) return;
+    const nivelKey = normalizeTintLevelKey(r.mapped.tintLevel);
+    if (!nivelKey) return;
+    const list = rowsByTintLevel.get(nivelKey) ?? [];
+    list.push(r.rowIndex);
+    rowsByTintLevel.set(nivelKey, list);
+  });
+
   const ambiguousRowIndexes = new Set<number>();
   const imageMatches: BulkPreviewImageMatch[] = [];
 
@@ -325,6 +347,22 @@ export function buildBulkPreview(params: {
     let matchedCsvCode: string | null = null;
     let matchedRowIndex: number | null = null;
 
+    // Tintes: nombre de archivo ≈ columna Nivel del CSV (prioridad sobre código).
+    const nivelKeyFromImage = normalizeTintLevelKey(img.baseName);
+    if (nivelKeyFromImage) {
+      const tintRows = rowsByTintLevel.get(nivelKeyFromImage) ?? [];
+      if (tintRows.length === 1) {
+        matchedBy = "tintLevel";
+        matchedRowIndex = tintRows[0]!;
+        matchedCsvCode = rows[matchedRowIndex]?.mapped.tintLevel ?? img.baseName;
+      } else if (tintRows.length > 1) {
+        matchedBy = "ambiguous";
+        matchedCsvCode = img.baseName;
+        tintRows.forEach((i) => ambiguousRowIndexes.add(i));
+      }
+    }
+
+    if (matchedBy === "none") {
     const exactRows = rowsByCode.get(img.normalizedRawCode) ?? [];
     if (exactRows.length === 1) {
       matchedBy = "exact";
@@ -368,6 +406,7 @@ export function buildBulkPreview(params: {
         }
       }
     }
+    }
 
     const detail: BulkPreviewImageMatch = {
       imageFilename: img.fileName,
@@ -380,7 +419,7 @@ export function buildBulkPreview(params: {
 
     if (
       matchedRowIndex != null &&
-      (matchedBy === "exact" || matchedBy === "numericPrefix" || matchedBy === "sixDigitPrefix")
+      isValidImageMatch({ ...detail, matchedBy })
     ) {
       const target = rows[matchedRowIndex];
       if (target) {
@@ -397,15 +436,34 @@ export function buildBulkPreview(params: {
     codeCount.set(r.normalizedCode, (codeCount.get(r.normalizedCode) ?? 0) + 1);
   });
 
+  const tintLevelCount = new Map<string, number>();
+  rows.forEach((r) => {
+    if (!isTintesCategory(r.mapped.categorySlug)) return;
+    const tk = normalizeTintLevelKey(r.mapped.tintLevel);
+    if (!tk) return;
+    tintLevelCount.set(tk, (tintLevelCount.get(tk) ?? 0) + 1);
+  });
+
   rows.forEach((r) => {
     r.imageFileNames.sort((a, b) => a.localeCompare(b));
 
-    if (!r.imageFileNames.length && r.codeRaw) {
-      r.issues.push("Sin imagen en ZIP para este código");
+    if (!r.imageFileNames.length) {
+      if (isTintesCategory(r.mapped.categorySlug) && r.mapped.tintLevel?.trim()) {
+        r.issues.push("Sin imagen en ZIP para este nivel");
+      } else if (r.codeRaw) {
+        r.issues.push("Sin imagen en ZIP para este código");
+      }
     }
-    if ((r.normalizedCode && (codeCount.get(r.normalizedCode) ?? 0) > 1)) {
+    if (r.normalizedCode && (codeCount.get(r.normalizedCode) ?? 0) > 1) {
       r.issues.push("Código duplicado en el CSV");
       ambiguousRowIndexes.add(r.rowIndex);
+    }
+    if (isTintesCategory(r.mapped.categorySlug)) {
+      const tk = normalizeTintLevelKey(r.mapped.tintLevel);
+      if (tk && (tintLevelCount.get(tk) ?? 0) > 1) {
+        r.issues.push("Nivel duplicado en el CSV");
+        ambiguousRowIndexes.add(r.rowIndex);
+      }
     }
     if (ambiguousRowIndexes.has(r.rowIndex)) {
       r.issues.push("Match ambiguo con imágenes");
@@ -414,9 +472,7 @@ export function buildBulkPreview(params: {
     const blocking = r.issues.filter(isBlockingIssue);
     /** No bloquea la selección por defecto: la política «skip/replace» se aplica al importar. */
     const blockingForAutoSelect = blocking.filter((x) => x !== "Producto ya registrado");
-    const hasValidMatch = r.imageMatches.some(
-      (m) => m.matchedBy === "exact" || m.matchedBy === "numericPrefix" || m.matchedBy === "sixDigitPrefix"
-    );
+    const hasValidMatch = r.imageMatches.some(isValidImageMatch);
     r.selected =
       hasValidMatch &&
       blockingForAutoSelect.length === 0 &&
@@ -426,22 +482,12 @@ export function buildBulkPreview(params: {
       !!r.mapped.categorySlug;
   });
 
-  const matchedRows = rows.filter((r) =>
-    r.imageMatches.some(
-      (m) => m.matchedBy === "exact" || m.matchedBy === "numericPrefix" || m.matchedBy === "sixDigitPrefix"
-    )
+  const matchedRows = rows.filter((r) => r.imageMatches.some(isValidImageMatch));
+  const ambiguousRows = rows.filter(
+    (r) => !r.imageMatches.some(isValidImageMatch) && r.issues.includes("Match ambiguo con imágenes")
   );
-  const ambiguousRows = rows.filter((r) =>
-    !r.imageMatches.some(
-      (m) => m.matchedBy === "exact" || m.matchedBy === "numericPrefix" || m.matchedBy === "sixDigitPrefix"
-    ) &&
-    r.issues.includes("Match ambiguo con imágenes")
-  );
-  const unmatchedRows = rows.filter((r) =>
-    !r.imageMatches.some(
-      (m) => m.matchedBy === "exact" || m.matchedBy === "numericPrefix" || m.matchedBy === "sixDigitPrefix"
-    ) &&
-    !r.issues.includes("Match ambiguo con imágenes")
+  const unmatchedRows = rows.filter(
+    (r) => !r.imageMatches.some(isValidImageMatch) && !r.issues.includes("Match ambiguo con imágenes")
   );
 
   const unmatchedImages = imageMatches.filter((m) => m.matchedBy === "none");
@@ -461,7 +507,7 @@ export function buildBulkPreview(params: {
     };
     current.rowCount += 1;
     const rawSub = (r.mapped.subcategory ?? "").trim();
-    if (rawSub) current.subs.add(rawSub);
+    if (rawSub) current.subs.add(normalizeTaxonomyNameForDb(rawSub));
     newCategoryMap.set(key, current);
   });
 
@@ -485,7 +531,7 @@ export function buildBulkPreview(params: {
       rowCount: 0,
     };
     current.rowCount += 1;
-    current.subs.add(rawSub);
+    current.subs.add(normalizeTaxonomyNameForDb(rawSub));
     newSubsByParentSlug.set(slug, current);
   });
 
