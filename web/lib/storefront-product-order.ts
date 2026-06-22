@@ -23,21 +23,71 @@ function hashString(input: string): number {
   return h >>> 0;
 }
 
+function sortWithinGroup(products: StoreProduct[], seed: string): StoreProduct[] {
+  return [...products].sort((a, b) => {
+    const scoreDelta = productHighlightScore(b) - productHighlightScore(a);
+    if (scoreDelta !== 0) return scoreDelta;
+    return hashString(`${seed}:${a.id}`) - hashString(`${seed}:${b.id}`);
+  });
+}
+
+/** Reparte productos en round-robin entre categorías para variedad en el home. */
+function interleaveByCategory(products: StoreProduct[], seed: string): StoreProduct[] {
+  if (products.length <= 1) return products;
+
+  const byCategory = new Map<string, StoreProduct[]>();
+  for (const product of products) {
+    const bucket = byCategory.get(product.category) ?? [];
+    bucket.push(product);
+    byCategory.set(product.category, bucket);
+  }
+
+  for (const [category, list] of byCategory) {
+    byCategory.set(category, sortWithinGroup(list, `${seed}:${category}`));
+  }
+
+  const categories = Array.from(byCategory.keys()).sort((a, b) => {
+    const aFeatured = byCategory.get(a)!.some((p) => p.featuredInHome);
+    const bFeatured = byCategory.get(b)!.some((p) => p.featuredInHome);
+    if (aFeatured !== bFeatured) return aFeatured ? -1 : 1;
+    return hashString(`${seed}:cat:${a}`) - hashString(`${seed}:cat:${b}`);
+  });
+
+  const indexByCategory = new Map(categories.map((c) => [c, 0]));
+  const mixed: StoreProduct[] = [];
+
+  let hasMore = true;
+  while (hasMore) {
+    hasMore = false;
+    for (const category of categories) {
+      const list = byCategory.get(category)!;
+      const index = indexByCategory.get(category)!;
+      if (index < list.length) {
+        mixed.push(list[index]!);
+        indexByCategory.set(category, index + 1);
+        hasMore = true;
+      }
+    }
+  }
+
+  return mixed;
+}
+
 /**
- * Orden del home (vista por defecto): primero productos con más atributos destacados,
- * mezclados de forma pseudoaleatoria (no por fecha de creación).
- * La semilla rota cada día para variedad sin saltos en cada render.
+ * Orden del home (vista por defecto): mezcla inteligente entre categorías,
+ * priorizando destacados y atributos fuertes sin seguir fecha de creación.
  */
 export function sortProductsForHomeDisplay(
   products: StoreProduct[],
   seed = new Date().toISOString().slice(0, 10)
 ): StoreProduct[] {
-  return [...products].sort((a, b) => {
-    const scoreA = productHighlightScore(a);
-    const scoreB = productHighlightScore(b);
-    if (scoreA !== scoreB) return scoreB - scoreA;
-    const jitterA = hashString(`${seed}:${a.id}`);
-    const jitterB = hashString(`${seed}:${b.id}`);
-    return jitterA - jitterB;
-  });
+  if (products.length <= 1) return products;
+
+  const featured = products.filter((p) => p.featuredInHome);
+  const regular = products.filter((p) => !p.featuredInHome);
+
+  const featuredMix = interleaveByCategory(featured, `${seed}:featured`);
+  const regularMix = interleaveByCategory(regular, `${seed}:regular`);
+
+  return [...featuredMix, ...regularMix];
 }
