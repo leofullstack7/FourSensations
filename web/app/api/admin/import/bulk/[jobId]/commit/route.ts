@@ -86,9 +86,9 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     return noStoreJson({ error: "Preview no disponible" }, { status: 500 });
   }
 
-  if (preview.tintTypeSelectionResolved === false) {
+  if (preview.tintSelectionResolved === false) {
     return noStoreJson(
-      { error: "Selecciona y confirma el tipo de tinte a importar antes de continuar" },
+      { error: "Selecciona y confirma el tipo y la familia de tinte a importar antes de continuar" },
       { status: 400 }
     );
   }
@@ -200,23 +200,21 @@ export async function POST(req: NextRequest, { params }: Ctx) {
           tintLevel = row.mapped.tintLevel?.trim() || null;
           tintGroup = row.mapped.tintGroup?.trim() || null;
           tintTypeId = preview.activeTintTypeId ?? row.tintTypeId ?? null;
+          tintFamilyId = preview.activeTintFamilyId ?? row.tintFamilyId ?? null;
 
           if (row.mapped.tintType?.trim() && !tintTypeId) {
             errors.push(`Fila ${row.rowIndex + 1} (${ref}): Tipo sin resolver`);
             continue;
           }
 
-          if (row.mapped.tintFamily?.trim()) {
-            tintFamilyId = row.tintFamilyId ?? null;
-            if (!tintFamilyId) {
-              const famName = normalizeTintCatalogName(row.mapped.tintFamily);
-              const fam = await prisma.tintFamily.upsert({
-                where: { name: famName },
-                create: { name: famName },
-                update: {},
-              });
-              tintFamilyId = fam.id;
-            }
+          if (row.mapped.tintFamily?.trim() && !tintFamilyId) {
+            const famName = normalizeTintCatalogName(row.mapped.tintFamily);
+            const fam = await prisma.tintFamily.upsert({
+              where: { name: famName },
+              create: { name: famName },
+              update: {},
+            });
+            tintFamilyId = fam.id;
           }
         }
 

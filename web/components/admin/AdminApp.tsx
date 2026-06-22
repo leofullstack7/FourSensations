@@ -44,7 +44,10 @@ import type {
 import { taxonomyPairKey, normalizeTaxonomyNameForDb } from "@/lib/bulk-import/category-resolve";
 import { effectiveProductTitle } from "@/lib/bulk-import/semantic-map";
 import { isTintesCategory } from "@/lib/bulk-import/tintes";
-import { normalizeTintCatalogName } from "@/lib/bulk-import/tint-catalog";
+import {
+  buildCsvTintFamilyOptions,
+  normalizeTintCatalogName,
+} from "@/lib/bulk-import/tint-catalog";
 import type { CsvTintTypeOption } from "@/lib/bulk-import/tint-catalog";
 
 import { isHttpImageUrl } from "@/lib/util/image-url";
@@ -1811,7 +1814,8 @@ function AdminBulkTab({
     return Array.isArray(raw) ? raw : [];
   }, [preview]);
 
-  const needsTintTypeSelection = preview?.hasTintesRows === true && preview.tintTypeSelectionResolved !== true;
+  const needsTintSelection =
+    preview?.hasTintesRows === true && preview.tintSelectionResolved !== true;
 
   const tintTypeOptions = useMemo(() => preview?.csvTintTypeOptions ?? [], [preview]);
 
@@ -1820,10 +1824,10 @@ function AdminBulkTab({
       setShowTintTypeModal(false);
       return;
     }
-    if (needsTintTypeSelection) {
+    if (needsTintSelection) {
       setShowTintTypeModal(true);
     }
-  }, [preview, needsTintTypeSelection]);
+  }, [preview, needsTintSelection]);
 
   useEffect(() => {
     if (!preview) {
@@ -2263,7 +2267,7 @@ function AdminBulkTab({
             </p>
           </div>
 
-          {preview?.tintTypeSelectionResolved && preview.activeTintTypeLabel ? (
+          {preview?.tintSelectionResolved && preview.activeTintTypeLabel && preview.activeTintFamilyLabel ? (
             <div
               style={{
                 marginBottom: 14,
@@ -2274,9 +2278,12 @@ function AdminBulkTab({
                 fontSize: 13,
               }}
             >
-              <strong>Tipo activo:</strong> {preview.activeTintTypeLabel}
+              <strong>Tipo:</strong> {preview.activeTintTypeLabel}
               <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>
-                ({preview.activeTintTypeRowCount} producto(s) de este tipo)
+                · <strong>Familia:</strong> {preview.activeTintFamilyLabel}
+              </span>
+              <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>
+                ({preview.activeTintFamilyRowCount} producto(s))
               </span>
               <button
                 type="button"
@@ -2285,7 +2292,7 @@ function AdminBulkTab({
                 disabled={saving}
                 onClick={() => setShowTintTypeModal(true)}
               >
-                Cambiar tipo
+                Cambiar tipo / familia
               </button>
             </div>
           ) : null}
@@ -2539,7 +2546,7 @@ function AdminBulkTab({
             disabled={
               saving ||
               selectedRowIds.length === 0 ||
-              needsTintTypeSelection ||
+              needsTintSelection ||
               (pendingNewCategories.length > 0 && !newCategoriesModalAcknowledged) ||
               taxonomyRehomeHints.length > 0
             }
@@ -2595,9 +2602,10 @@ function AdminBulkTab({
               crear categorías nuevas como antes.
             </p>
           )}
-          {needsTintTypeSelection && (
+          {needsTintSelection && (
             <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
-              Selecciona qué tipo de tinte quieres importar de este archivo (solo uno por carga).
+              Este CSV incluye Tintes: elige primero el <strong>tipo</strong> y la <strong>familia</strong> que vas a
+              subir en esta carga.
             </p>
           )}
           {pendingNewCategories.length > 0 && (
@@ -2682,83 +2690,49 @@ function AdminBulkTab({
           })();
         }}
       />
-      <AdminBulkTintTypeModal
+      <AdminBulkTintSetupModal
         open={
           showTintTypeModal &&
-          (needsTintTypeSelection || !!(preview?.hasTintesRows && !preview?.activeTintTypeId))
+          (needsTintSelection ||
+            !!(preview?.hasTintesRows && (!preview?.activeTintTypeId || !preview?.activeTintFamilyId)))
         }
+        previewRows={preview?.rows ?? []}
         typeOptions={tintTypeOptions}
         existingTypes={preview?.existingTintTypes ?? []}
+        existingFamilies={preview?.existingTintFamilies ?? []}
+        tintFamilyLinks={preview?.tintFamilyLinks ?? {}}
         pendingTypeKey={preview?.activeTintTypeCsvKey ?? null}
+        pendingFamilyKey={preview?.activeTintFamilyCsvKey ?? null}
         saving={resolvingTintType || saving}
         onClose={() => setShowTintTypeModal(false)}
-        onConfirmType={async (typeKey, catalogId) => {
+        onConfirm={async ({ typeKey, typeId, familyKey, familyId, typeLinks, familyLinks }) => {
           if (!jobId) return;
           setResolvingTintType(true);
           setMutation("bulk");
           try {
             const { preview: p } = await patchBulkImportJob(jobId, {
               activeTintTypeCsvKey: typeKey,
-              activeTintTypeId: catalogId,
+              activeTintTypeId: typeId,
+              activeTintFamilyCsvKey: familyKey,
+              activeTintFamilyId: familyId,
+              tintTypeLinks: typeLinks,
+              tintFamilyLinks: familyLinks,
               selectedRowIds: [],
             });
             setPreview(p);
             setSelectedRowIds((p.matchedRows ?? []).map(bulkImportStableRowId));
             setShowTintTypeModal(false);
-            showToast(`Importando tipo ${typeKey}`, "success", "✅");
+            showToast(`Listo: ${typeKey} · ${familyKey}`, "success", "✅");
           } catch (err) {
-            showToast(err instanceof Error ? err.message : "Error al seleccionar tipo", "danger", "⚠️");
+            showToast(err instanceof Error ? err.message : "Error al configurar tintes", "danger", "⚠️");
           } finally {
             setResolvingTintType(false);
             setMutation(null);
           }
         }}
-        onCreateType={async (typeKey) => {
-          if (!jobId) return;
-          setResolvingTintType(true);
-          setMutation("bulk");
-          try {
-            const res = await postTintResolveCatalog({ newFamilies: [], newTypes: [typeKey] });
-            const created = res.types.find((t) => normalizeTintCatalogName(t.name) === normalizeTintCatalogName(typeKey));
-            if (!created) throw new Error("No se pudo crear el tipo en catálogo");
-            const { preview: p } = await patchBulkImportJob(jobId, {
-              activeTintTypeCsvKey: normalizeTintCatalogName(typeKey),
-              activeTintTypeId: created.id,
-              selectedRowIds: [],
-            });
-            setPreview(p);
-            setSelectedRowIds((p.matchedRows ?? []).map(bulkImportStableRowId));
-            setShowTintTypeModal(false);
-            showToast(`Tipo ${typeKey} creado y seleccionado`, "success", "✅");
-          } catch (err) {
-            showToast(err instanceof Error ? err.message : "Error al crear tipo", "danger", "⚠️");
-          } finally {
-            setResolvingTintType(false);
-            setMutation(null);
-          }
-        }}
-        onLinkType={async (typeKey, existingId) => {
-          if (!jobId) return;
-          setResolvingTintType(true);
-          setMutation("bulk");
-          try {
-            const key = normalizeTintCatalogName(typeKey);
-            const { preview: p } = await patchBulkImportJob(jobId, {
-              activeTintTypeCsvKey: key,
-              activeTintTypeId: existingId,
-              tintTypeLinks: { [key]: existingId },
-              selectedRowIds: [],
-            });
-            setPreview(p);
-            setSelectedRowIds((p.matchedRows ?? []).map(bulkImportStableRowId));
-            setShowTintTypeModal(false);
-            showToast(`Tipo vinculado: ${key}`, "success", "✅");
-          } catch (err) {
-            showToast(err instanceof Error ? err.message : "Error al vincular tipo", "danger", "⚠️");
-          } finally {
-            setResolvingTintType(false);
-            setMutation(null);
-          }
+        onCreateCatalog={async ({ newFamilies, newTypes }) => {
+          const res = await postTintResolveCatalog({ newFamilies, newTypes });
+          return res;
         }}
       />
       <AdminBulkNewCategoriesModal
@@ -2968,117 +2942,219 @@ function AdminBulkTaxonomyHintsModal({
   );
 }
 
-function AdminBulkTintTypeModal({
+function AdminBulkTintSetupModal({
   open,
+  previewRows,
   typeOptions,
   existingTypes,
+  existingFamilies,
+  tintFamilyLinks,
   pendingTypeKey,
+  pendingFamilyKey,
   saving,
   onClose,
-  onConfirmType,
-  onCreateType,
-  onLinkType,
+  onConfirm,
+  onCreateCatalog,
 }: {
   open: boolean;
+  previewRows: BulkPreviewResult["rows"];
   typeOptions: CsvTintTypeOption[];
   existingTypes: { id: string; name: string }[];
+  existingFamilies: { id: string; name: string }[];
+  tintFamilyLinks: Record<string, string>;
   pendingTypeKey: string | null;
+  pendingFamilyKey: string | null;
   saving: boolean;
   onClose: () => void;
-  onConfirmType: (typeKey: string, catalogId: string) => void | Promise<void>;
-  onCreateType: (typeKey: string) => void | Promise<void>;
-  onLinkType: (typeKey: string, existingId: string) => void | Promise<void>;
+  onConfirm: (plan: {
+    typeKey: string;
+    typeId: string;
+    familyKey: string;
+    familyId: string;
+    typeLinks: Record<string, string>;
+    familyLinks: Record<string, string>;
+  }) => void | Promise<void>;
+  onCreateCatalog: (plan: {
+    newFamilies: string[];
+    newTypes: string[];
+  }) => Promise<{ families: { id: string; name: string }[]; types: { id: string; name: string }[] }>;
 }) {
-  const [selectedKey, setSelectedKey] = useState<string | null>(pendingTypeKey);
-  const [linkId, setLinkId] = useState("");
+  const [selectedTypeKey, setSelectedTypeKey] = useState<string | null>(pendingTypeKey);
+  const [selectedFamilyKey, setSelectedFamilyKey] = useState<string | null>(pendingFamilyKey);
+  const [resolvedTypeId, setResolvedTypeId] = useState<string | null>(null);
+  const [resolvedFamilyId, setResolvedFamilyId] = useState<string | null>(null);
+  const [typeLinkId, setTypeLinkId] = useState("");
+  const [familyLinkId, setFamilyLinkId] = useState("");
+  const [typeLinks, setTypeLinks] = useState<Record<string, string>>({});
+  const [familyLinks, setFamilyLinks] = useState<Record<string, string>>({});
+  const [catalogBusy, setCatalogBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setSelectedKey(pendingTypeKey);
-    setLinkId("");
-  }, [open, pendingTypeKey]);
+    setSelectedTypeKey(pendingTypeKey);
+    setSelectedFamilyKey(pendingFamilyKey);
+    setResolvedTypeId(null);
+    setResolvedFamilyId(null);
+    setTypeLinkId("");
+    setFamilyLinkId("");
+    setTypeLinks({});
+    setFamilyLinks({});
+  }, [open, pendingTypeKey, pendingFamilyKey]);
 
-  const selected = selectedKey
-    ? typeOptions.find((o) => o.name === selectedKey) ?? null
+  const selectedType = selectedTypeKey
+    ? typeOptions.find((o) => o.name === selectedTypeKey) ?? null
     : null;
-  const needsCreate = selected != null && !selected.existsInCatalog && !selected.catalogId;
+
+  const familyOptions = useMemo(() => {
+    if (!selectedTypeKey) return [];
+    return buildCsvTintFamilyOptions(previewRows, selectedTypeKey, existingFamilies, {
+      ...tintFamilyLinks,
+      ...familyLinks,
+    });
+  }, [previewRows, selectedTypeKey, existingFamilies, tintFamilyLinks, familyLinks]);
+
+  const selectedFamily = selectedFamilyKey
+    ? familyOptions.find((o) => o.name === selectedFamilyKey) ?? null
+    : null;
+
+  const effectiveTypeId =
+    resolvedTypeId ?? selectedType?.catalogId ?? (selectedTypeKey ? typeLinks[selectedTypeKey] : null) ?? null;
+  const effectiveFamilyId =
+    resolvedFamilyId ??
+    selectedFamily?.catalogId ??
+    (selectedFamilyKey ? familyLinks[selectedFamilyKey] : null) ??
+    null;
+
+  const typeNeedsCatalog = selectedType != null && !effectiveTypeId;
+  const familyNeedsCatalog = selectedFamily != null && !effectiveFamilyId;
+  const canConfirm =
+    !!selectedTypeKey && !!selectedFamilyKey && !!effectiveTypeId && !!effectiveFamilyId && !catalogBusy;
+
+  const handleCreateType = async () => {
+    if (!selectedTypeKey) return;
+    setCatalogBusy(true);
+    try {
+      const res = await onCreateCatalog({ newFamilies: [], newTypes: [selectedTypeKey] });
+      const created = res.types.find(
+        (t) => normalizeTintCatalogName(t.name) === normalizeTintCatalogName(selectedTypeKey)
+      );
+      if (!created) throw new Error("No se pudo crear el tipo");
+      setResolvedTypeId(created.id);
+    } finally {
+      setCatalogBusy(false);
+    }
+  };
+
+  const handleLinkType = () => {
+    if (!selectedTypeKey || !typeLinkId) return;
+    const key = normalizeTintCatalogName(selectedTypeKey);
+    setTypeLinks((prev) => ({ ...prev, [key]: typeLinkId }));
+    setResolvedTypeId(typeLinkId);
+  };
+
+  const handleCreateFamily = async () => {
+    if (!selectedFamilyKey) return;
+    setCatalogBusy(true);
+    try {
+      const res = await onCreateCatalog({ newFamilies: [selectedFamilyKey], newTypes: [] });
+      const created = res.families.find(
+        (f) => normalizeTintCatalogName(f.name) === normalizeTintCatalogName(selectedFamilyKey)
+      );
+      if (!created) throw new Error("No se pudo crear la familia");
+      setResolvedFamilyId(created.id);
+    } finally {
+      setCatalogBusy(false);
+    }
+  };
+
+  const handleLinkFamily = () => {
+    if (!selectedFamilyKey || !familyLinkId) return;
+    const key = normalizeTintCatalogName(selectedFamilyKey);
+    setFamilyLinks((prev) => ({ ...prev, [key]: familyLinkId }));
+    setResolvedFamilyId(familyLinkId);
+  };
 
   return (
     <div
       className={`admin-modal-overlay${open ? " open" : ""}`}
-      onClick={(e) => e.target === e.currentTarget && !saving && onClose()}
+      onClick={(e) => e.target === e.currentTarget && !saving && !catalogBusy && onClose()}
       role="presentation"
     >
-      <div className="admin-modal" style={{ maxWidth: 640 }}>
-        <button type="button" className="modal-close" onClick={onClose} disabled={saving}>
+      <div className="admin-modal" style={{ maxWidth: 680 }}>
+        <button type="button" className="modal-close" onClick={onClose} disabled={saving || catalogBusy}>
           ✕
         </button>
         <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>
-          Importar Tintes — elegir tipo
+          Importar Tintes — tipo y familia
         </div>
         <p style={{ marginTop: 0, marginBottom: 16, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
-          Los tintes se suben <strong>de a un tipo por carga</strong>. Elige cuál tipo de este archivo quieres importar
-          ahora. Podrás volver a analizar el mismo CSV más tarde para otro tipo.
+          Este archivo incluye tintes. Antes de emparejar imágenes, indica <strong>qué tipo y qué familia</strong> vas
+          a subir en esta carga (por ejemplo ABSOLUTES + IR). Los niveles como 4-22 se repiten entre familias; por eso
+          hay que acotar primero.
         </p>
 
+        <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 13 }}>1. Tipo de tinte</div>
         {typeOptions.length === 0 ? (
-          <p style={{ fontSize: 13, color: "var(--text-muted)" }}>No se detectaron tipos en las filas Tintes del CSV.</p>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>No se detectaron tipos en el CSV.</p>
         ) : (
           <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
             {typeOptions.map((opt) => (
               <button
                 key={opt.name}
                 type="button"
-                className={`btn ${selectedKey === opt.name ? "btn-primary" : "btn-outline"}`}
+                className={`btn ${selectedTypeKey === opt.name ? "btn-primary" : "btn-outline"}`}
                 style={{ justifyContent: "space-between", display: "flex", textAlign: "left" }}
-                disabled={saving}
-                onClick={() => setSelectedKey(opt.name)}
+                disabled={saving || catalogBusy}
+                onClick={() => {
+                  setSelectedTypeKey(opt.name);
+                  setSelectedFamilyKey(null);
+                  setResolvedTypeId(opt.catalogId);
+                  setResolvedFamilyId(null);
+                  setTypeLinkId("");
+                  setFamilyLinkId("");
+                }}
               >
                 <span>
                   <strong>{opt.name}</strong>
                   <span style={{ fontWeight: 400, marginLeft: 8, opacity: 0.85 }}>
-                    ({opt.rowCount} producto{opt.rowCount === 1 ? "" : "s"})
+                    ({opt.rowCount} fila{opt.rowCount === 1 ? "" : "s"})
                   </span>
                 </span>
-                <span style={{ fontSize: 11 }}>
-                  {opt.existsInCatalog ? "✓ En catálogo" : "Nuevo"}
-                </span>
+                <span style={{ fontSize: 11 }}>{opt.existsInCatalog ? "✓ En catálogo" : "Nuevo"}</span>
               </button>
             ))}
           </div>
         )}
 
-        {selected && needsCreate && (
+        {selectedType && typeNeedsCatalog && (
           <div
             style={{
               border: "1px solid var(--dusty-rose)",
               borderRadius: "var(--radius-md)",
-              padding: "14px 16px",
+              padding: "12px 14px",
               marginBottom: 16,
               background: "#fff",
             }}
           >
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>
-              «{selected.name}» no está en el catálogo
-            </div>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Tipo «{selectedType.name}» no está en catálogo</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
-                disabled={saving}
-                onClick={() => void onCreateType(selected.name)}
+                disabled={saving || catalogBusy}
+                onClick={() => void handleCreateType()}
               >
-                Crear como nuevo tipo
+                Crear tipo
               </button>
               <span style={{ fontSize: 12, color: "var(--text-muted)" }}>o vincular a:</span>
               <select
                 className="form-select"
-                style={{ minWidth: 200, minHeight: 36 }}
-                disabled={saving || existingTypes.length === 0}
-                value={linkId}
-                onChange={(e) => setLinkId(e.target.value)}
+                style={{ minWidth: 180, minHeight: 36 }}
+                disabled={saving || catalogBusy || existingTypes.length === 0}
+                value={typeLinkId}
+                onChange={(e) => setTypeLinkId(e.target.value)}
               >
-                <option value="">— Tipo existente —</option>
+                <option value="">— Existente —</option>
                 {existingTypes.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -3088,8 +3164,91 @@ function AdminBulkTintTypeModal({
               <button
                 type="button"
                 className="btn btn-outline btn-sm"
-                disabled={saving || !linkId}
-                onClick={() => void onLinkType(selected.name, linkId)}
+                disabled={saving || catalogBusy || !typeLinkId}
+                onClick={handleLinkType}
+              >
+                Vincular
+              </button>
+            </div>
+          </div>
+        )}
+
+        {selectedTypeKey && (
+          <>
+            <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 13 }}>2. Familia (dentro de {selectedTypeKey})</div>
+            {familyOptions.length === 0 ? (
+              <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
+                No hay familias en el CSV para este tipo.
+              </p>
+            ) : (
+              <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+                {familyOptions.map((opt) => (
+                  <button
+                    key={opt.name}
+                    type="button"
+                    className={`btn ${selectedFamilyKey === opt.name ? "btn-primary" : "btn-outline"}`}
+                    style={{ justifyContent: "space-between", display: "flex", textAlign: "left" }}
+                    disabled={saving || catalogBusy}
+                    onClick={() => {
+                      setSelectedFamilyKey(opt.name);
+                      setResolvedFamilyId(opt.catalogId);
+                      setFamilyLinkId("");
+                    }}
+                  >
+                    <span>
+                      <strong>{opt.name}</strong>
+                      <span style={{ fontWeight: 400, marginLeft: 8, opacity: 0.85 }}>
+                        ({opt.rowCount} producto{opt.rowCount === 1 ? "" : "s"})
+                      </span>
+                    </span>
+                    <span style={{ fontSize: 11 }}>{opt.existsInCatalog ? "✓ En catálogo" : "Nuevo"}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {selectedFamily && familyNeedsCatalog && (
+          <div
+            style={{
+              border: "1px solid var(--dusty-rose)",
+              borderRadius: "var(--radius-md)",
+              padding: "12px 14px",
+              marginBottom: 16,
+              background: "#fff",
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Familia «{selectedFamily.name}» no está en catálogo</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={saving || catalogBusy}
+                onClick={() => void handleCreateFamily()}
+              >
+                Crear familia
+              </button>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>o vincular a:</span>
+              <select
+                className="form-select"
+                style={{ minWidth: 180, minHeight: 36 }}
+                disabled={saving || catalogBusy || existingFamilies.length === 0}
+                value={familyLinkId}
+                onChange={(e) => setFamilyLinkId(e.target.value)}
+              >
+                <option value="">— Existente —</option>
+                {existingFamilies.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={saving || catalogBusy || !familyLinkId}
+                onClick={handleLinkFamily}
               >
                 Vincular
               </button>
@@ -3098,19 +3257,27 @@ function AdminBulkTintTypeModal({
         )}
 
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
-          <button type="button" className="btn btn-outline" disabled={saving} onClick={onClose}>
+          <button type="button" className="btn btn-outline" disabled={saving || catalogBusy} onClick={onClose}>
             Cerrar
           </button>
-          {selected && selected.catalogId && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={saving}
-              onClick={() => void onConfirmType(selected.name, selected.catalogId!)}
-            >
-              {saving ? "Aplicando…" : `Importar tipo ${selected.name}`}
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={saving || catalogBusy || !canConfirm}
+            onClick={() => {
+              if (!selectedTypeKey || !selectedFamilyKey || !effectiveTypeId || !effectiveFamilyId) return;
+              void onConfirm({
+                typeKey: selectedTypeKey,
+                typeId: effectiveTypeId,
+                familyKey: selectedFamilyKey,
+                familyId: effectiveFamilyId,
+                typeLinks,
+                familyLinks,
+              });
+            }}
+          >
+            {saving || catalogBusy ? "Aplicando…" : "Continuar con este tipo y familia"}
+          </button>
         </div>
       </div>
     </div>

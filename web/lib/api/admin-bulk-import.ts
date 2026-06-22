@@ -42,7 +42,10 @@ export async function patchBulkImportJob(
     taxonomyRehomeDismissed?: Record<string, boolean>;
     activeTintTypeCsvKey?: string | null;
     activeTintTypeId?: string | null;
+    activeTintFamilyCsvKey?: string | null;
+    activeTintFamilyId?: string | null;
     tintTypeLinks?: Record<string, string>;
+    tintFamilyLinks?: Record<string, string>;
   }
 ): Promise<{ preview: BulkPreviewResult }> {
   const res = await fetch(`/api/admin/import/bulk/${jobId}`, {

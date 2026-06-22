@@ -4,6 +4,7 @@ import type { CategoryRow } from "./category-resolve";
 import {
   applyTintCatalogToPreview,
   readTintCatalogStateFromPreview,
+  tintMatchScopeFromState,
   type TintCatalogState,
 } from "./tint-catalog";
 
@@ -20,6 +21,9 @@ export function rebuildBulkPreview(params: {
   previousPreview?: BulkPreviewResult | null;
 }): BulkPreviewResult {
   const { entries } = listZipImages(params.zipBuffer);
+  const prevState = params.tintCatalog ?? readTintCatalogStateFromPreview(params.previousPreview ?? null);
+  const tintMatchScope = tintMatchScopeFromState(prevState);
+
   const base = buildBulkPreview({
     headers: params.headers,
     dataRows: params.rows,
@@ -29,8 +33,8 @@ export function rebuildBulkPreview(params: {
     defaultCategorySlug: params.defaultCategorySlug,
     taxonomyOverrides: params.taxonomyOverrides,
     taxonomyRehomeDismissed: params.taxonomyRehomeDismissed,
+    tintMatchScope,
   });
 
-  const prevState = params.tintCatalog ?? readTintCatalogStateFromPreview(params.previousPreview ?? null);
   return applyTintCatalogToPreview(base, prevState);
 }

@@ -23,7 +23,26 @@ import {
   type TaxonomyRehomeKind,
 } from "./category-resolve";
 import { isTintesCategory, normalizeTintLevelKey } from "./tintes";
-import type { TintCatalogEntry, CsvTintTypeOption } from "./tint-catalog";
+import type { TintCatalogEntry, CsvTintTypeOption, CsvTintFamilyOption } from "./tint-catalog";
+
+export type TintMatchScope = {
+  typeKey: string;
+  familyKey: string;
+};
+
+function rowTintCatalogKey(raw: string | null | undefined): string | null {
+  const t = raw?.trim();
+  if (!t) return null;
+  return normalizeTaxonomyNameForDb(t);
+}
+
+function rowInTintMatchScope(row: BulkPreviewRow, scope: TintMatchScope): boolean {
+  if (!isTintesCategory(row.mapped.categorySlug)) return false;
+  return (
+    rowTintCatalogKey(row.mapped.tintType) === scope.typeKey &&
+    rowTintCatalogKey(row.mapped.tintFamily) === scope.familyKey
+  );
+}
 
 export type BulkPreviewImageMatch = {
   imageFilename: string;
@@ -140,25 +159,34 @@ export type BulkPreviewResult = {
   existingTintTypes: TintCatalogEntry[];
   /** Tipos distintos encontrados en filas Tintes del CSV. */
   csvTintTypeOptions: CsvTintTypeOption[];
+  /** Familias del tipo activo en el CSV. */
+  csvTintFamilyOptions: CsvTintFamilyOption[];
   hasTintesRows: boolean;
   /** Tipo del CSV elegido para importar en esta sesión (MAYÚSCULAS). */
   activeTintTypeCsvKey: string | null;
   activeTintTypeId: string | null;
   activeTintTypeLabel: string | null;
   activeTintTypeRowCount: number;
+  /** Familia del CSV elegida para importar en esta sesión (MAYÚSCULAS). */
+  activeTintFamilyCsvKey: string | null;
+  activeTintFamilyId: string | null;
+  activeTintFamilyLabel: string | null;
+  activeTintFamilyRowCount: number;
   /** Vincular nombre CSV de tipo → id existente. */
   tintTypeLinks: Record<string, string>;
-  /** true cuando hay Tintes y ya se eligió + resolvió el tipo activo. */
+  /** Vincular nombre CSV de familia → id existente. */
+  tintFamilyLinks: Record<string, string>;
+  /** true cuando hay Tintes y ya se eligió + resolvió tipo y familia activos. */
+  tintSelectionResolved: boolean;
+  /** @deprecated Compat — usar tintSelectionResolved */
   tintTypeSelectionResolved: boolean;
-  /** @deprecated Compat — usar tintTypeSelectionResolved */
+  /** @deprecated Compat */
   newTintFamilies: string[];
   /** @deprecated Compat */
   newTintTypes: string[];
   /** @deprecated Compat */
-  tintFamilyLinks: Record<string, string>;
-  /** @deprecated Compat */
   tintRowSelections: Record<string, { tintFamilyId: string; tintTypeId: string }>;
-  /** @deprecated Compat — usar tintTypeSelectionResolved */
+  /** @deprecated Compat — usar tintSelectionResolved */
   tintCatalogResolved: boolean;
 };
 
@@ -227,6 +255,8 @@ export function buildBulkPreview(params: {
   defaultCategorySlug: string | null;
   taxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
   taxonomyRehomeDismissed?: Record<string, boolean>;
+  /** Tintes: solo emparejar imágenes por nivel dentro de este tipo+familia. */
+  tintMatchScope?: TintMatchScope | null;
 }): BulkPreviewResult {
   const {
     headers,
@@ -237,6 +267,7 @@ export function buildBulkPreview(params: {
     defaultCategorySlug,
     taxonomyOverrides = {},
     taxonomyRehomeDismissed = {},
+    tintMatchScope = null,
   } = params;
   const headerFieldMap = buildHeaderFieldMap(headers);
   const csvHasTagsColumn = Array.from(headerFieldMap.values()).some((f) => f === "tags");
@@ -360,10 +391,13 @@ export function buildBulkPreview(params: {
     rowsByCode.set(r.normalizedCode, list);
   });
 
-  /** Tintes: índice por columna Nivel (no por código de referencia). */
+  /** Tintes: índice por columna Nivel, solo dentro del tipo+familia activos. */
   const rowsByTintLevel = new Map<string, number[]>();
+  const tintScopeActive = !!(tintMatchScope?.typeKey && tintMatchScope?.familyKey);
   rows.forEach((r) => {
     if (!isTintesCategory(r.mapped.categorySlug)) return;
+    if (!tintScopeActive || !tintMatchScope) return;
+    if (!rowInTintMatchScope(r, tintMatchScope)) return;
     const nivelKey = normalizeTintLevelKey(r.mapped.tintLevel);
     if (!nivelKey) return;
     const list = rowsByTintLevel.get(nivelKey) ?? [];
@@ -471,6 +505,8 @@ export function buildBulkPreview(params: {
   const tintLevelCount = new Map<string, number>();
   rows.forEach((r) => {
     if (!isTintesCategory(r.mapped.categorySlug)) return;
+    if (!tintScopeActive || !tintMatchScope) return;
+    if (!rowInTintMatchScope(r, tintMatchScope)) return;
     const tk = normalizeTintLevelKey(r.mapped.tintLevel);
     if (!tk) return;
     tintLevelCount.set(tk, (tintLevelCount.get(tk) ?? 0) + 1);
@@ -481,7 +517,9 @@ export function buildBulkPreview(params: {
 
     if (!r.imageFileNames.length) {
       if (isTintesCategory(r.mapped.categorySlug) && r.mapped.tintLevel?.trim()) {
-        r.issues.push("Sin imagen en ZIP para este nivel");
+        if (tintScopeActive && tintMatchScope && rowInTintMatchScope(r, tintMatchScope)) {
+          r.issues.push("Sin imagen en ZIP para este nivel");
+        }
       } else if (r.codeRaw) {
         r.issues.push("Sin imagen en ZIP para este código");
       }
@@ -490,7 +528,8 @@ export function buildBulkPreview(params: {
       r.issues.push("Código duplicado en el CSV");
       ambiguousRowIndexes.add(r.rowIndex);
     }
-    if (isTintesCategory(r.mapped.categorySlug)) {
+    if (isTintesCategory(r.mapped.categorySlug) && tintScopeActive && tintMatchScope) {
+      if (!rowInTintMatchScope(r, tintMatchScope)) return;
       const tk = normalizeTintLevelKey(r.mapped.tintLevel);
       if (tk && (tintLevelCount.get(tk) ?? 0) > 1) {
         r.issues.push("Nivel duplicado en el CSV");
@@ -670,16 +709,22 @@ export function buildBulkPreview(params: {
     existingTintFamilies: [],
     existingTintTypes: [],
     csvTintTypeOptions: [],
+    csvTintFamilyOptions: [],
     hasTintesRows: false,
     activeTintTypeCsvKey: null,
     activeTintTypeId: null,
     activeTintTypeLabel: null,
     activeTintTypeRowCount: 0,
+    activeTintFamilyCsvKey: null,
+    activeTintFamilyId: null,
+    activeTintFamilyLabel: null,
+    activeTintFamilyRowCount: 0,
     tintTypeLinks: {},
+    tintFamilyLinks: {},
+    tintSelectionResolved: true,
     tintTypeSelectionResolved: true,
     newTintFamilies: [],
     newTintTypes: [],
-    tintFamilyLinks: {},
     tintRowSelections: {},
     tintCatalogResolved: true,
   };

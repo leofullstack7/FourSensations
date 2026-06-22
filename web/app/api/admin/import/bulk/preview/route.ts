@@ -81,7 +81,10 @@ export async function POST(req: NextRequest) {
       existingTintTypes: tintCatalog.types,
       activeTintTypeCsvKey: null,
       activeTintTypeId: null,
+      activeTintFamilyCsvKey: null,
+      activeTintFamilyId: null,
       tintTypeLinks: {},
+      tintFamilyLinks: {},
     });
 
     const statsStored = {

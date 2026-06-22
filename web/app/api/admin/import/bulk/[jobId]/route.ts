@@ -36,8 +36,9 @@ const patchSchema = z.object({
   /** Tipo Tintes activo para esta importación (un tipo por carga). */
   activeTintTypeCsvKey: z.string().min(1).nullable().optional(),
   activeTintTypeId: z.string().min(1).nullable().optional(),
+  activeTintFamilyCsvKey: z.string().min(1).nullable().optional(),
+  activeTintFamilyId: z.string().min(1).nullable().optional(),
   tintTypeLinks: z.record(z.string(), z.string()).optional(),
-  /** @deprecated */
   tintFamilyLinks: z.record(z.string(), z.string()).optional(),
   tintRowSelections: z.record(z.string(), tintRowSelectionEntry).optional(),
 });
@@ -127,12 +128,30 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   };
   const prevTint = readTintCatalogStateFromPreview(job.previewPayload as BulkPreviewResult);
   const tintTypeLinks = { ...prevTint.tintTypeLinks, ...(parsed.data.tintTypeLinks ?? {}) };
+  const tintFamilyLinks = { ...prevTint.tintFamilyLinks, ...(parsed.data.tintFamilyLinks ?? {}) };
   let activeTintTypeCsvKey =
     parsed.data.activeTintTypeCsvKey !== undefined
       ? parsed.data.activeTintTypeCsvKey
       : prevTint.activeTintTypeCsvKey;
   let activeTintTypeId =
     parsed.data.activeTintTypeId !== undefined ? parsed.data.activeTintTypeId : prevTint.activeTintTypeId;
+  let activeTintFamilyCsvKey =
+    parsed.data.activeTintFamilyCsvKey !== undefined
+      ? parsed.data.activeTintFamilyCsvKey
+      : prevTint.activeTintFamilyCsvKey;
+  let activeTintFamilyId =
+    parsed.data.activeTintFamilyId !== undefined
+      ? parsed.data.activeTintFamilyId
+      : prevTint.activeTintFamilyId;
+
+  if (
+    parsed.data.activeTintTypeCsvKey !== undefined &&
+    parsed.data.activeTintTypeCsvKey !== prevTint.activeTintTypeCsvKey &&
+    parsed.data.activeTintFamilyCsvKey === undefined
+  ) {
+    activeTintFamilyCsvKey = null;
+    activeTintFamilyId = null;
+  }
 
   const tintCatalogDb = await fetchTintCatalogFromDb(prisma);
   const preview = rebuildBulkPreview({
@@ -149,7 +168,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       existingTintTypes: tintCatalogDb.types,
       activeTintTypeCsvKey,
       activeTintTypeId,
+      activeTintFamilyCsvKey,
+      activeTintFamilyId,
       tintTypeLinks,
+      tintFamilyLinks,
     },
   });
   await markBulkPreviewExistingByExternalRef(prisma, preview);
