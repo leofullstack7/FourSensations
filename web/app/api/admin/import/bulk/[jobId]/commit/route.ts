@@ -12,7 +12,8 @@ import { listZipImages } from "@/lib/bulk-import/zip-manifest";
 import { mimeFromImagePath } from "@/lib/bulk-import/mime";
 import { bulkImportStableRowId } from "@/lib/bulk-import/bulk-import-row-id";
 import type { BulkPreviewResult, BulkPreviewRow } from "@/lib/bulk-import/build-preview";
-import { effectiveProductTitle } from "@/lib/bulk-import/semantic-map";
+import { effectiveProductTitle, normalizeProductNameForDb } from "@/lib/bulk-import/semantic-map";
+import { isTintesCategory } from "@/lib/bulk-import/tintes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -167,13 +168,23 @@ export async function POST(req: NextRequest, { params }: Ctx) {
           else galleryUrls.push(publicUrl);
         }
 
-        const name = effectiveProductTitle(row.mapped)!.trim();
+        const name = normalizeProductNameForDb(effectiveProductTitle(row.mapped)!);
         const slug = await allocateUniqueProductSlug(name);
+        /** Descripción del CSV tal cual; fallback genérico si no hay columna mapeada. */
         const description =
           row.mapped.description?.trim() || `Producto: ${name}`;
         const brand = row.mapped.brand?.trim() || "GinnaBeauty";
         const tags = (row.mapped.tags ?? []).map((t) => t.trim()).filter(Boolean);
         const applyTags = preview.csvHasTagsColumn === true;
+
+        /** Atributos Tintes: solo se persisten cuando la fila resuelve a esa categoría. */
+        const tintData = isTintesCategory(row.mapped.categorySlug)
+          ? {
+              tintType: row.mapped.tintType?.trim() || null,
+              tintLevel: row.mapped.tintLevel?.trim() || null,
+              tintGroup: row.mapped.tintGroup?.trim() || null,
+            }
+          : {};
 
         const productRow = clash
           ? await prisma.product.update({
@@ -188,6 +199,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
                 originalPrice: row.mapped.originalPrice ?? null,
                 stock: row.mapped.stock ?? 0,
                 ...(applyTags ? { tags } : {}),
+                ...tintData,
                 imageUrl: mainUrl,
                 active: true,
                 images: {
@@ -220,6 +232,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
                 isNew: false,
                 featuredInHome: false,
                 active: true,
+                ...tintData,
                 ...(galleryUrls.length > 0 && {
                   images: {
                     create: galleryUrls.map((url, i) => ({ url, sortOrder: i })),

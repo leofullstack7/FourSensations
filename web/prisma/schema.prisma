@@ -84,6 +84,12 @@ model Product {
   isNew         Boolean        @default(false)
   /// Prioridad en la grilla "Productos Destacados" del home (sin badge público).
   featuredInHome Boolean       @default(false)
+  /// Línea de tinte (ej. ROYAL, ZERO AMM) — importación masiva categoría Tintes.
+  tintType       String?
+  /// Código de nivel de color (ej. 9,5-1) — texto libre, importación Tintes.
+  tintLevel      String?
+  /// Grupo de color dentro de la línea — importación masiva Tintes.
+  tintGroup      String?
   active        Boolean        @default(true)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt

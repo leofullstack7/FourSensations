@@ -42,6 +42,7 @@ import type {
 } from "@/lib/bulk-import/build-preview";
 import { taxonomyPairKey } from "@/lib/bulk-import/category-resolve";
 import { effectiveProductTitle } from "@/lib/bulk-import/semantic-map";
+import { isTintesCategory } from "@/lib/bulk-import/tintes";
 
 import { isHttpImageUrl } from "@/lib/util/image-url";
 import { getDefaultAdminMenu } from "@/data/admin-initial";
@@ -1858,6 +1859,9 @@ function AdminBulkTab({
           return true;
         });
         const hasExisting = r.issues.includes("Producto ya registrado");
+        const categoryLabel = r.mapped.categorySlug
+          ? categoryDisplayName(r.mapped.categorySlug, categories)
+          : null;
         return {
           previewRowId,
           csvRowIndex: r.rowIndex,
@@ -1865,10 +1869,16 @@ function AdminBulkTab({
           categoryCsv: r.mapped.category,
           subcategoryCsv: r.mapped.subcategory,
           categorySlug: r.mapped.categorySlug,
+          categoryLabel,
           subcategoryValue: r.mapped.subcategoryName,
           priceValue: r.mapped.price,
           stockValue: r.mapped.stock,
           nameValue: effectiveProductTitle(r.mapped) ?? r.mapped.name,
+          descriptionValue: r.mapped.description,
+          tintTypeValue: r.mapped.tintType,
+          tintLevelValue: r.mapped.tintLevel,
+          tintGroupValue: r.mapped.tintGroup,
+          isTintesRow: isTintesCategory(r.mapped.categorySlug, categoryLabel),
           tagsValue: r.mapped.tags ?? [],
           matchedImages: r.imageMatches,
           matchStatus: "valid" as const,
@@ -1879,7 +1889,12 @@ function AdminBulkTab({
           existingProductName: r.existingProductName,
         };
       }),
-    [preview, selectedRowIdSet, existingPolicy]
+    [preview, selectedRowIdSet, existingPolicy, categories]
+  );
+
+  const hasTintesInBatch = useMemo(
+    () => previewTableRows.some((r) => r.isTintesRow),
+    [previewTableRows]
   );
 
   const openManualTaxonomyEditor = useCallback(
@@ -2232,6 +2247,14 @@ function AdminBulkTab({
                   </th>
                   <th>Código</th>
                   <th>Nombre</th>
+                  <th>Descripción</th>
+                  {hasTintesInBatch && (
+                    <>
+                      <th>Tipo</th>
+                      <th>Nivel</th>
+                      <th>Grupo</th>
+                    </>
+                  )}
                   <th>Categoría CSV</th>
                   <th>Subcategoría CSV</th>
                   <th>Categoría</th>
@@ -2272,6 +2295,16 @@ function AdminBulkTab({
                       </td>
                       <td style={{ fontSize: 12, fontFamily: "monospace" }}>{r.codeValue ?? "—"}</td>
                       <td>{r.nameValue ?? "—"}</td>
+                      <td style={{ fontSize: 12, maxWidth: 200 }} title={r.descriptionValue ?? undefined}>
+                        {r.descriptionValue?.trim() ? r.descriptionValue : "—"}
+                      </td>
+                      {hasTintesInBatch && (
+                        <>
+                          <td style={{ fontSize: 12 }}>{r.isTintesRow ? (r.tintTypeValue ?? "—") : "—"}</td>
+                          <td style={{ fontSize: 12, fontFamily: "monospace" }}>{r.isTintesRow ? (r.tintLevelValue ?? "—") : "—"}</td>
+                          <td style={{ fontSize: 12 }}>{r.isTintesRow ? (r.tintGroupValue ?? "—") : "—"}</td>
+                        </>
+                      )}
                       <td style={{ fontSize: 12 }}>{r.categoryCsv ?? "—"}</td>
                       <td style={{ fontSize: 12 }}>{r.subcategoryCsv ?? "—"}</td>
                       <td>{r.categorySlug ? categoryDisplayName(r.categorySlug, categories) : "—"}</td>
@@ -2387,7 +2420,7 @@ function AdminBulkTab({
                 })}
                 {previewTableRows.length === 0 && (
                   <tr>
-                    <td colSpan={13} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>
+                    <td colSpan={hasTintesInBatch ? 17 : 14} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>
                       No hay filas con match válido para importar.
                     </td>
                   </tr>

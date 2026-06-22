@@ -7,8 +7,6 @@ const GROUPS: SynonymGroup[] = [
   {
     field: "name",
     keys: [
-      "descripcion",
-      "descripción",
       "detalle",
       "nombre",
       "nombre del producto",
@@ -26,7 +24,29 @@ const GROUPS: SynonymGroup[] = [
   },
   {
     field: "description",
-    keys: ["descripcion larga", "texto largo", "texto", "notas", "observaciones", "contenido"],
+    keys: [
+      "descripcion",
+      "descripción",
+      "descripcion larga",
+      "texto largo",
+      "texto",
+      "notas",
+      "observaciones",
+      "contenido",
+    ],
+  },
+  /** Atributos específicos de la categoría Tintes (columnas CSV opcionales). */
+  {
+    field: "tintType",
+    keys: ["tipo", "tipo tinte", "linea tinte", "línea tinte"],
+  },
+  {
+    field: "tintLevel",
+    keys: ["nivel", "nivel tinte", "tono", "codigo color", "código color"],
+  },
+  {
+    field: "tintGroup",
+    keys: ["grupo", "grupo tinte"],
   },
   {
     field: "price",
@@ -71,7 +91,6 @@ const GROUPS: SynonymGroup[] = [
       "departamento",
       "division",
       "división",
-      "grupo",
       "familia",
       "seccion",
       "sección",
@@ -107,6 +126,12 @@ export type SemanticMapped = {
   subcategory: string | null;
   /** Etiquetas comerciales del producto (varias columnas CSV se fusionan). */
   tags: string[];
+  /** Línea de tinte (ej. ROYAL, ZERO AMM) — solo categoría Tintes. */
+  tintType: string | null;
+  /** Código de nivel (ej. 9,5-1) — texto libre, no numérico. */
+  tintLevel: string | null;
+  /** Grupo de color dentro de la línea. */
+  tintGroup: string | null;
 };
 
 function headerToField(normalizedHeader: string): keyof SemanticMapped | null {
@@ -271,6 +296,9 @@ export function mapRowValues(
     category: null,
     subcategory: null,
     tags: [],
+    tintType: null,
+    tintLevel: null,
+    tintGroup: null,
   };
   headerFieldMap.forEach((field, col) => {
     const raw = (values[col] ?? "").trim();
@@ -303,6 +331,15 @@ export function mapRowValues(
       case "tags":
         tagChunks.push(parseTagsFromCell(raw));
         break;
+      case "tintType":
+        if (!out.tintType) out.tintType = raw;
+        break;
+      case "tintLevel":
+        if (!out.tintLevel) out.tintLevel = raw;
+        break;
+      case "tintGroup":
+        if (!out.tintGroup) out.tintGroup = raw;
+        break;
       default:
         break;
     }
@@ -312,6 +349,11 @@ export function mapRowValues(
 }
 
 const MAX_TITLE_LEN = 240;
+
+/** Nombre persistido en Product.name: siempre MAYÚSCULAS (importación masiva). */
+export function normalizeProductNameForDb(raw: string): string {
+  return raw.trim().toUpperCase();
+}
 
 /** Título para la tienda: nombre de columna o primera línea de descripción (CSV muy común). */
 export function effectiveProductTitle(m: SemanticMapped): string | null {
