@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useTintPanelPin } from "@/hooks/useTintPanelPin";
 import type { TintBubbleItem } from "@/lib/tints";
 import { TintFilterBar, type TintFilterOption } from "./TintFilterBar";
 import { TintBubbleField } from "./TintBubbleField";
@@ -41,11 +40,6 @@ export function TintCategoryPageClient({
   const [activeSubcategory, setActiveSubcategory] = useState<string | null>(null);
   const [selected, setSelected] = useState<TintBubbleItem | null>(null);
 
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const colRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const spacerRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     const tipoParam = searchParams?.get("tipo");
     if (tipoParam) setActiveType(tipoParam);
@@ -65,14 +59,6 @@ export function TintCategoryPageClient({
       return true;
     });
   }, [initialItems, activeGroup, activeFamily, activeType, activeSubcategory]);
-
-  const { mode, fixedStyle } = useTintPanelPin({
-    bodyRef,
-    colRef,
-    panelRef,
-    spacerRef,
-    deps: [filteredItems.length, activeGroup, activeFamily, activeType, activeSubcategory, selected?.id],
-  });
 
   useEffect(() => {
     if (selected && !filteredItems.some((i) => i.id === selected.id)) {
@@ -109,7 +95,7 @@ export function TintCategoryPageClient({
         onSubcategoryChange={setActiveSubcategory}
       />
 
-      <div className="tint-category__body" ref={bodyRef}>
+      <div className="tint-category__body">
         <div className="tint-category__bubbles">
           <TintBubbleField
             items={filteredItems}
@@ -119,15 +105,8 @@ export function TintCategoryPageClient({
           />
         </div>
 
-        <div className="tint-category__panel-col" ref={colRef}>
-          <div className="tint-category__panel-spacer" ref={spacerRef} aria-hidden="true" />
-          <div
-            ref={panelRef}
-            className={`tint-category__panel${mode === "bottom" ? " tint-category__panel--bottom" : ""}`}
-            style={mode === "fixed" ? fixedStyle : undefined}
-          >
-            <TintShowcasePanel active={selected} onAddToCart={addToCart} formatPrice={formatPrice} />
-          </div>
+        <div className="tint-category__panel">
+          <TintShowcasePanel active={selected} onAddToCart={addToCart} formatPrice={formatPrice} />
         </div>
       </div>
     </main>
