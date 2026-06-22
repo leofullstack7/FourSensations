@@ -1,6 +1,11 @@
 import { buildBulkPreview, type BulkPreviewResult } from "./build-preview";
 import { listZipImages } from "./zip-manifest";
 import type { CategoryRow } from "./category-resolve";
+import {
+  applyTintCatalogToPreview,
+  readTintCatalogStateFromPreview,
+  type TintCatalogState,
+} from "./tint-catalog";
 
 export function rebuildBulkPreview(params: {
   headers: string[];
@@ -11,9 +16,11 @@ export function rebuildBulkPreview(params: {
   categoryTree: CategoryRow[];
   taxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
   taxonomyRehomeDismissed?: Record<string, boolean>;
+  tintCatalog?: TintCatalogState;
+  previousPreview?: BulkPreviewResult | null;
 }): BulkPreviewResult {
   const { entries } = listZipImages(params.zipBuffer);
-  return buildBulkPreview({
+  const base = buildBulkPreview({
     headers: params.headers,
     dataRows: params.rows,
     codeColumnIndex: params.codeColumnIndex,
@@ -22,5 +29,12 @@ export function rebuildBulkPreview(params: {
     defaultCategorySlug: params.defaultCategorySlug,
     taxonomyOverrides: params.taxonomyOverrides,
     taxonomyRehomeDismissed: params.taxonomyRehomeDismissed,
+  });
+
+  const prevState = params.tintCatalog ?? readTintCatalogStateFromPreview(params.previousPreview ?? null);
+  return applyTintCatalogToPreview(base, {
+    ...prevState,
+    existingTintFamilies: prevState.existingTintFamilies,
+    existingTintTypes: prevState.existingTintTypes,
   });
 }

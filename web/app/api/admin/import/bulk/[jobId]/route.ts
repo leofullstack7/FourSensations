@@ -9,6 +9,8 @@ import { rebuildBulkPreview } from "@/lib/bulk-import/rebuild";
 import { bulkImportStableRowId } from "@/lib/bulk-import/bulk-import-row-id";
 import type { BulkPreviewResult } from "@/lib/bulk-import/build-preview";
 import { markBulkPreviewExistingByExternalRef } from "@/lib/server/bulk-import-mark-existing";
+import { fetchTintCatalogFromDb } from "@/lib/server/tint-catalog-db";
+import { readTintCatalogStateFromPreview } from "@/lib/bulk-import/tint-catalog";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -20,6 +22,11 @@ const taxonomyOverrideEntry = z.object({
   subcategoryName: z.string().min(1),
 });
 
+const tintRowSelectionEntry = z.object({
+  tintFamilyId: z.string().min(1),
+  tintTypeId: z.string().min(1),
+});
+
 const patchSchema = z.object({
   codeColumnIndex: z.number().int().min(0).optional(),
   selection: z.array(z.boolean()).optional(),
@@ -28,6 +35,10 @@ const patchSchema = z.object({
   taxonomyOverrides: z.record(z.string(), taxonomyOverrideEntry).optional(),
   /** Pares CSV para los que el usuario rechazó la sugerencia de reubicación. */
   taxonomyRehomeDismissed: z.record(z.string(), z.boolean()).optional(),
+  /** Catálogo Tintes: valor CSV (MAYÚSCULAS) → id existente. */
+  tintFamilyLinks: z.record(z.string(), z.string()).optional(),
+  tintTypeLinks: z.record(z.string(), z.string()).optional(),
+  tintRowSelections: z.record(z.string(), tintRowSelectionEntry).optional(),
 });
 
 function readTaxonomyStateFromJob(jobPreview: unknown): {
@@ -113,6 +124,12 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     ...prevTax.dismissed,
     ...(parsed.data.taxonomyRehomeDismissed ?? {}),
   };
+  const prevTint = readTintCatalogStateFromPreview(job.previewPayload as BulkPreviewResult);
+  const tintFamilyLinks = { ...prevTint.tintFamilyLinks, ...(parsed.data.tintFamilyLinks ?? {}) };
+  const tintTypeLinks = { ...prevTint.tintTypeLinks, ...(parsed.data.tintTypeLinks ?? {}) };
+  const tintRowSelections = { ...prevTint.tintRowSelections, ...(parsed.data.tintRowSelections ?? {}) };
+
+  const tintCatalogDb = await fetchTintCatalogFromDb(prisma);
   const preview = rebuildBulkPreview({
     headers,
     rows,
@@ -122,6 +139,13 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     categoryTree,
     taxonomyOverrides,
     taxonomyRehomeDismissed,
+    tintCatalog: {
+      existingTintFamilies: tintCatalogDb.families,
+      existingTintTypes: tintCatalogDb.types,
+      tintFamilyLinks,
+      tintTypeLinks,
+      tintRowSelections,
+    },
   });
   await markBulkPreviewExistingByExternalRef(prisma, preview);
 

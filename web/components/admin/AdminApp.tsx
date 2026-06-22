@@ -33,6 +33,7 @@ import {
   patchBulkImportJob,
   postBulkImportCommit,
   postBulkImportPreview,
+  postTintResolveCatalog,
 } from "@/lib/api/admin-bulk-import";
 import { bulkImportStableRowId } from "@/lib/bulk-import/bulk-import-row-id";
 import type {
@@ -43,6 +44,7 @@ import type {
 import { taxonomyPairKey, normalizeTaxonomyNameForDb } from "@/lib/bulk-import/category-resolve";
 import { effectiveProductTitle } from "@/lib/bulk-import/semantic-map";
 import { isTintesCategory } from "@/lib/bulk-import/tintes";
+import { normalizeTintCatalogName } from "@/lib/bulk-import/tint-catalog";
 
 import { isHttpImageUrl } from "@/lib/util/image-url";
 import { getDefaultAdminMenu } from "@/data/admin-initial";
@@ -1733,6 +1735,8 @@ function AdminBulkTab({
   /** Tras «Continuar sin crear» o cerrar el modal, se permite importar filas válidas aunque el preview siga listando novedades. */
   const [newCategoriesModalAcknowledged, setNewCategoriesModalAcknowledged] = useState(false);
   const [showTaxonomyHintsModal, setShowTaxonomyHintsModal] = useState(false);
+  const [showTintCatalogModal, setShowTintCatalogModal] = useState(false);
+  const [resolvingTintCatalog, setResolvingTintCatalog] = useState(false);
   const [editingTaxonomyRowId, setEditingTaxonomyRowId] = useState<string | null>(null);
   const [manualCategorySlug, setManualCategorySlug] = useState("");
   const [manualSubcategoryName, setManualSubcategoryName] = useState("");
@@ -1772,6 +1776,8 @@ function AdminBulkTab({
     setApplyingNewCategories(false);
     setNewCategoriesModalAcknowledged(false);
     setShowTaxonomyHintsModal(false);
+    setShowTintCatalogModal(false);
+    setResolvingTintCatalog(false);
   };
 
   useEffect(() => {
@@ -1803,6 +1809,22 @@ function AdminBulkTab({
     const raw = preview?.taxonomyRehomeHints;
     return Array.isArray(raw) ? raw : [];
   }, [preview]);
+
+  const pendingTintCatalog =
+    (preview?.newTintFamilies?.length ?? 0) > 0 || (preview?.newTintTypes?.length ?? 0) > 0;
+
+  const tintFamilyOptions = useMemo(() => preview?.existingTintFamilies ?? [], [preview]);
+  const tintTypeOptions = useMemo(() => preview?.existingTintTypes ?? [], [preview]);
+
+  useEffect(() => {
+    if (!preview) {
+      setShowTintCatalogModal(false);
+      return;
+    }
+    if (pendingTintCatalog) {
+      setShowTintCatalogModal(true);
+    }
+  }, [preview, pendingTintCatalog]);
 
   useEffect(() => {
     if (!preview) {
@@ -1850,6 +1872,25 @@ function AdminBulkTab({
     return cat ? [...cat.subcategories].sort((a, b) => a.sortOrder - b.sortOrder) : [];
   }, [sortedCats, manualCategorySlug]);
 
+  const applyTintRowSelection = useCallback(
+    async (previewRowId: string, tintFamilyId: string, tintTypeId: string) => {
+      if (!jobId || !tintFamilyId || !tintTypeId) return;
+      setMutation("bulk");
+      try {
+        const { preview: p } = await patchBulkImportJob(jobId, {
+          tintRowSelections: { [previewRowId]: { tintFamilyId, tintTypeId } },
+          selectedRowIds,
+        });
+        setPreview(p);
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "No se pudo actualizar Familia/Tipo", "danger", "⚠️");
+      } finally {
+        setMutation(null);
+      }
+    },
+    [jobId, selectedRowIds, setMutation, showToast]
+  );
+
   const previewTableRows = useMemo(
     () =>
       (preview?.matchedRows ?? []).map((r) => {
@@ -1877,7 +1918,10 @@ function AdminBulkTab({
           stockValue: r.mapped.stock,
           nameValue: effectiveProductTitle(r.mapped) ?? r.mapped.name,
           descriptionValue: r.mapped.description,
+          tintFamilyValue: r.mapped.tintFamily,
           tintTypeValue: r.mapped.tintType,
+          tintFamilyId: r.tintFamilyId,
+          tintTypeId: r.tintTypeId,
           tintLevelValue: r.mapped.tintLevel,
           tintGroupValue: r.mapped.tintGroup,
           isTintesRow: isTintesCategory(r.mapped.categorySlug, categoryLabel),
@@ -2254,6 +2298,7 @@ function AdminBulkTab({
                   <th>Descripción</th>
                   {hasTintesInBatch && (
                     <>
+                      <th>Familia</th>
                       <th>Tipo</th>
                       <th>Nivel</th>
                       <th>Grupo</th>
@@ -2304,8 +2349,59 @@ function AdminBulkTab({
                       </td>
                       {hasTintesInBatch && (
                         <>
-                          <td style={{ fontSize: 12 }}>{r.isTintesRow ? (r.tintTypeValue ?? "—") : "—"}</td>
-                          <td style={{ fontSize: 12, fontFamily: "monospace" }}>{r.isTintesRow ? (r.tintLevelValue ?? "—") : "—"}</td>
+                          <td style={{ minWidth: 140 }}>
+                            {r.isTintesRow ? (
+                              <select
+                                className="form-select"
+                                style={{ fontSize: 12, minHeight: 34 }}
+                                value={r.tintFamilyId ?? ""}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  const famId = e.target.value;
+                                  const typeId = r.tintTypeId ?? tintTypeOptions[0]?.id ?? "";
+                                  if (famId && typeId) void applyTintRowSelection(r.previewRowId, famId, typeId);
+                                }}
+                                disabled={saving || tintFamilyOptions.length === 0}
+                              >
+                                <option value="">— Elegir —</option>
+                                {tintFamilyOptions.map((f) => (
+                                  <option key={f.id} value={f.id}>
+                                    {f.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td style={{ minWidth: 140 }}>
+                            {r.isTintesRow ? (
+                              <select
+                                className="form-select"
+                                style={{ fontSize: 12, minHeight: 34 }}
+                                value={r.tintTypeId ?? ""}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  const typeId = e.target.value;
+                                  const famId = r.tintFamilyId ?? tintFamilyOptions[0]?.id ?? "";
+                                  if (famId && typeId) void applyTintRowSelection(r.previewRowId, famId, typeId);
+                                }}
+                                disabled={saving || tintTypeOptions.length === 0}
+                              >
+                                <option value="">— Elegir —</option>
+                                {tintTypeOptions.map((t) => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td style={{ fontSize: 12, fontFamily: "monospace" }}>
+                            {r.isTintesRow ? (r.tintLevelValue ?? "—") : "—"}
+                          </td>
                           <td style={{ fontSize: 12 }}>{r.isTintesRow ? (r.tintGroupValue ?? "—") : "—"}</td>
                         </>
                       )}
@@ -2426,7 +2522,7 @@ function AdminBulkTab({
                 })}
                 {previewTableRows.length === 0 && (
                   <tr>
-                    <td colSpan={hasTintesInBatch ? 17 : 14} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>
+                    <td colSpan={hasTintesInBatch ? 18 : 14} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>
                       No hay filas con match válido para importar.
                     </td>
                   </tr>
@@ -2486,6 +2582,7 @@ function AdminBulkTab({
             disabled={
               saving ||
               selectedRowIds.length === 0 ||
+              pendingTintCatalog ||
               (pendingNewCategories.length > 0 && !newCategoriesModalAcknowledged) ||
               taxonomyRehomeHints.length > 0
             }
@@ -2539,6 +2636,11 @@ function AdminBulkTab({
             <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
               Hay sugerencias de reubicación de categoría/subcategoría: revísalas en el modal. Si las rechazas, podrás
               crear categorías nuevas como antes.
+            </p>
+          )}
+          {pendingTintCatalog && (
+            <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
+              Resuelve primero las Familias y Tipos nuevos del catálogo Tintes (modal o panel superior).
             </p>
           )}
           {pendingNewCategories.length > 0 && (
@@ -2621,6 +2723,41 @@ function AdminBulkTab({
               setMutation(null);
             }
           })();
+        }}
+      />
+      <AdminBulkTintCatalogModal
+        open={showTintCatalogModal && pendingTintCatalog}
+        newFamilies={preview?.newTintFamilies ?? []}
+        newTypes={preview?.newTintTypes ?? []}
+        existingFamilies={tintFamilyOptions}
+        existingTypes={tintTypeOptions}
+        saving={resolvingTintCatalog || saving}
+        onClose={() => setShowTintCatalogModal(false)}
+        onConfirm={async (plan) => {
+          if (!jobId) return;
+          setResolvingTintCatalog(true);
+          setMutation("bulk");
+          try {
+            if (plan.createFamilies.length > 0 || plan.createTypes.length > 0) {
+              await postTintResolveCatalog({
+                newFamilies: plan.createFamilies,
+                newTypes: plan.createTypes,
+              });
+            }
+            const { preview: p } = await patchBulkImportJob(jobId, {
+              tintFamilyLinks: plan.familyLinks,
+              tintTypeLinks: plan.typeLinks,
+              selectedRowIds,
+            });
+            setPreview(p);
+            setShowTintCatalogModal(false);
+            showToast("Catálogo Tintes actualizado", "success", "✅");
+          } catch (err) {
+            showToast(err instanceof Error ? err.message : "Error al resolver catálogo Tintes", "danger", "⚠️");
+          } finally {
+            setResolvingTintCatalog(false);
+            setMutation(null);
+          }
         }}
       />
       <AdminBulkNewCategoriesModal
@@ -2825,6 +2962,174 @@ function AdminBulkTaxonomyHintsModal({
         <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
           Si respondes <strong>No</strong>, podrás confirmar después la creación de categorías nuevas como hasta ahora.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function AdminBulkTintCatalogModal({
+  open,
+  newFamilies,
+  newTypes,
+  existingFamilies,
+  existingTypes,
+  saving,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  newFamilies: string[];
+  newTypes: string[];
+  existingFamilies: { id: string; name: string }[];
+  existingTypes: { id: string; name: string }[];
+  saving: boolean;
+  onClose: () => void;
+  onConfirm: (plan: {
+    createFamilies: string[];
+    createTypes: string[];
+    familyLinks: Record<string, string>;
+    typeLinks: Record<string, string>;
+  }) => void | Promise<void>;
+}) {
+  type RowPlan = { mode: "pending" | "create" | "link"; linkId?: string };
+  const [familyPlan, setFamilyPlan] = useState<Record<string, RowPlan>>({});
+  const [typePlan, setTypePlan] = useState<Record<string, RowPlan>>({});
+
+  useEffect(() => {
+    if (!open) return;
+    const fp: Record<string, RowPlan> = {};
+    for (const v of newFamilies) fp[normalizeTintCatalogName(v)] = { mode: "pending" };
+    const tp: Record<string, RowPlan> = {};
+    for (const v of newTypes) tp[normalizeTintCatalogName(v)] = { mode: "pending" };
+    setFamilyPlan(fp);
+    setTypePlan(tp);
+  }, [open, newFamilies, newTypes]);
+
+  const allResolved =
+    newFamilies.every((v) => {
+      const p = familyPlan[normalizeTintCatalogName(v)];
+      return p?.mode === "create" || (p?.mode === "link" && !!p.linkId);
+    }) &&
+    newTypes.every((v) => {
+      const p = typePlan[normalizeTintCatalogName(v)];
+      return p?.mode === "create" || (p?.mode === "link" && !!p.linkId);
+    });
+
+  const renderValueBlock = (
+    label: string,
+    values: string[],
+    plan: Record<string, RowPlan>,
+    setPlan: React.Dispatch<React.SetStateAction<Record<string, RowPlan>>>,
+    existing: { id: string; name: string }[]
+  ) => {
+    if (values.length === 0) return null;
+    return (
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>{label}</div>
+        {values.map((raw) => {
+          const key = normalizeTintCatalogName(raw);
+          const row = plan[key] ?? { mode: "pending" as const };
+          return (
+            <div
+              key={key}
+              style={{
+                border: "1px solid var(--line, #e7d9d4)",
+                borderRadius: "var(--radius-md)",
+                padding: "12px 14px",
+                marginBottom: 10,
+                background: "#fff",
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>{key}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${row.mode === "create" ? "btn-primary" : "btn-outline"}`}
+                  disabled={saving}
+                  onClick={() => setPlan((prev) => ({ ...prev, [key]: { mode: "create" } }))}
+                >
+                  Crear como nueva {label === "Familias nuevas" ? "Familia" : "Tipo"}
+                </button>
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>o ya existe, vincular a:</span>
+                <select
+                  className="form-select"
+                  style={{ minWidth: 200, minHeight: 36 }}
+                  disabled={saving || existing.length === 0}
+                  value={row.mode === "link" ? row.linkId ?? "" : ""}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (!id) {
+                      setPlan((prev) => ({ ...prev, [key]: { mode: "pending" } }));
+                      return;
+                    }
+                    setPlan((prev) => ({ ...prev, [key]: { mode: "link", linkId: id } }));
+                  }}
+                >
+                  <option value="">— Elegir existente —</option>
+                  {existing.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div
+      className={`admin-modal-overlay${open ? " open" : ""}`}
+      onClick={(e) => e.target === e.currentTarget && !saving && onClose()}
+      role="presentation"
+    >
+      <div className="admin-modal" style={{ maxWidth: 720 }}>
+        <button type="button" className="modal-close" onClick={onClose} disabled={saving}>
+          ✕
+        </button>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>
+          Familias y Tipos nuevos (Tintes)
+        </div>
+        <p style={{ marginTop: 0, marginBottom: 16, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
+          Se encontraron Familias y/o Tipos en tu archivo que aún no están en el catálogo. Crea cada valor como nuevo
+          registro o vincúlalo a uno existente antes de importar.
+        </p>
+        {renderValueBlock("Familias nuevas", newFamilies, familyPlan, setFamilyPlan, existingFamilies)}
+        {renderValueBlock("Tipos nuevos", newTypes, typePlan, setTypePlan, existingTypes)}
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <button type="button" className="btn btn-outline" disabled={saving} onClick={onClose}>
+            Cerrar
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={saving || !allResolved}
+            onClick={() => {
+              const createFamilies: string[] = [];
+              const familyLinks: Record<string, string> = {};
+              for (const v of newFamilies) {
+                const key = normalizeTintCatalogName(v);
+                const p = familyPlan[key];
+                if (p?.mode === "create") createFamilies.push(key);
+                if (p?.mode === "link" && p.linkId) familyLinks[key] = p.linkId;
+              }
+              const createTypes: string[] = [];
+              const typeLinks: Record<string, string> = {};
+              for (const v of newTypes) {
+                const key = normalizeTintCatalogName(v);
+                const p = typePlan[key];
+                if (p?.mode === "create") createTypes.push(key);
+                if (p?.mode === "link" && p.linkId) typeLinks[key] = p.linkId;
+              }
+              void onConfirm({ createFamilies, createTypes, familyLinks, typeLinks });
+            }}
+          >
+            {saving ? "Guardando…" : "✅ Confirmar catálogo"}
+          </button>
+        </div>
       </div>
     </div>
   );

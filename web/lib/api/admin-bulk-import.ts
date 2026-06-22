@@ -40,6 +40,9 @@ export async function patchBulkImportJob(
     selectedRowIds?: string[];
     taxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
     taxonomyRehomeDismissed?: Record<string, boolean>;
+    tintFamilyLinks?: Record<string, string>;
+    tintTypeLinks?: Record<string, string>;
+    tintRowSelections?: Record<string, { tintFamilyId: string; tintTypeId: string }>;
   }
 ): Promise<{ preview: BulkPreviewResult }> {
   const res = await fetch(`/api/admin/import/bulk/${jobId}`, {
@@ -83,5 +86,26 @@ export async function postBulkImportCommit(
   });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as BulkCommitResponse;
+}
+
+export type TintCatalogResolveResponse = {
+  ok: boolean;
+  families: { id: string; name: string }[];
+  types: { id: string; name: string }[];
+};
+
+/** Crea familias/tipos de tinte en catálogo maestro (upsert, MAYÚSCULAS). */
+export async function postTintResolveCatalog(body: {
+  newFamilies: string[];
+  newTypes: string[];
+}): Promise<TintCatalogResolveResponse> {
+  const res = await fetch("/api/admin/tints/resolve-catalog", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as TintCatalogResolveResponse;
 }
 

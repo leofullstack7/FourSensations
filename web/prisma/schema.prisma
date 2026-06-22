@@ -84,17 +84,37 @@ model Product {
   isNew         Boolean        @default(false)
   /// Prioridad en la grilla "Productos Destacados" del home (sin badge público).
   featuredInHome Boolean       @default(false)
-  /// Línea de tinte (ej. ROYAL, ZERO AMM) — importación masiva categoría Tintes.
-  tintType       String?
+  /// Catálogo Tintes: familia (relación maestra).
+  tintFamilyId   String?
+  tintFamily     TintFamily?    @relation(fields: [tintFamilyId], references: [id])
+  /// Catálogo Tintes: tipo/línea (relación maestra).
+  tintTypeId     String?
+  tintType       TintType?      @relation(fields: [tintTypeId], references: [id])
   /// Código de nivel de color (ej. 9,5-1) — texto libre, importación Tintes.
   tintLevel      String?
-  /// Grupo de color dentro de la línea — importación masiva Tintes.
+  /// Grupo de color dentro de la línea — texto libre, importación Tintes.
   tintGroup      String?
   active        Boolean        @default(true)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   images        ProductImage[]
   comboItems    ProductComboItem[]
+}
+
+/// Familia de tinte (catálogo maestro para importación Tintes).
+model TintFamily {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  products  Product[]
+}
+
+/// Tipo / línea de tinte (catálogo maestro para importación Tintes).
+model TintType {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  products  Product[]
 }
 
 /// Combo promocional creado en el panel (no altera el catálogo público hasta integración explícita).

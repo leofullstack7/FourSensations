@@ -36,7 +36,9 @@ const commitSchema = z
 const BLOCKING_FILTER = (x: string) =>
   x !== "Sin imagen en ZIP para este código" &&
   x !== "Sin imagen en ZIP para este nivel" &&
-  x !== "Producto ya registrado";
+  x !== "Producto ya registrado" &&
+  !x.startsWith("Familia sin resolver") &&
+  !x.startsWith("Tipo sin resolver");
 
 function parsePreview(raw: unknown): BulkPreviewResult | null {
   if (!raw || typeof raw !== "object") return null;
@@ -81,6 +83,13 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const preview = parsePreview(job.previewPayload);
   if (!preview?.rows?.length) {
     return noStoreJson({ error: "Preview no disponible" }, { status: 500 });
+  }
+
+  if (preview.tintCatalogResolved === false) {
+    return noStoreJson(
+      { error: "Resuelve primero las Familias y Tipos nuevos del catálogo Tintes" },
+      { status: 400 }
+    );
   }
 
   const idSet = new Set(parsed.data.rowIds ?? []);
@@ -181,14 +190,26 @@ export async function POST(req: NextRequest, { params }: Ctx) {
         const tags = (row.mapped.tags ?? []).map((t) => t.trim()).filter(Boolean);
         const applyTags = preview.csvHasTagsColumn === true;
 
-        /** Atributos Tintes: solo se persisten cuando la fila resuelve a esa categoría. */
+        /** Atributos Tintes: ids de catálogo resueltos en preview + nivel/grupo texto libre. */
         const tintData = isTintesCategory(row.mapped.categorySlug)
           ? {
-              tintType: row.mapped.tintType?.trim() || null,
+              tintFamilyId: row.tintFamilyId ?? null,
+              tintTypeId: row.tintTypeId ?? null,
               tintLevel: row.mapped.tintLevel?.trim() || null,
               tintGroup: row.mapped.tintGroup?.trim() || null,
             }
           : {};
+
+        if (isTintesCategory(row.mapped.categorySlug)) {
+          if (row.mapped.tintFamily?.trim() && !row.tintFamilyId) {
+            errors.push(`Fila ${row.rowIndex + 1} (${ref}): Familia sin resolver`);
+            continue;
+          }
+          if (row.mapped.tintType?.trim() && !row.tintTypeId) {
+            errors.push(`Fila ${row.rowIndex + 1} (${ref}): Tipo sin resolver`);
+            continue;
+          }
+        }
 
         const productRow = clash
           ? await prisma.product.update({

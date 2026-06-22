@@ -23,6 +23,7 @@ import {
   type TaxonomyRehomeKind,
 } from "./category-resolve";
 import { isTintesCategory, normalizeTintLevelKey } from "./tintes";
+import type { TintCatalogEntry } from "./tint-catalog";
 
 export type BulkPreviewImageMatch = {
   imageFilename: string;
@@ -63,6 +64,10 @@ export type BulkPreviewRow = {
   selected: boolean;
   /** Resolución antes de aplicar override manual (CSV + inferencia). */
   taxonomyBeforeOverride: { categorySlug: string | null; subcategoryName: string | null };
+  /** Catálogo Tintes: id resuelto de Familia (null si no aplica o sin resolver). */
+  tintFamilyId: string | null;
+  /** Catálogo Tintes: id resuelto de Tipo (null si no aplica o sin resolver). */
+  tintTypeId: string | null;
 };
 
 export type BulkPreviewStats = {
@@ -130,6 +135,21 @@ export type BulkPreviewResult = {
   taxonomyRehomeHints: BulkTaxonomyRehomeHint[];
   stats: BulkPreviewStats;
   orphanFileNames: string[];
+  /** Catálogo Tintes — familias/tipos ya en DB. */
+  existingTintFamilies: TintCatalogEntry[];
+  existingTintTypes: TintCatalogEntry[];
+  /** Valores Familia del CSV que aún no tienen entrada en catálogo ni vínculo manual. */
+  newTintFamilies: string[];
+  /** Valores Tipo del CSV que aún no tienen entrada en catálogo ni vínculo manual. */
+  newTintTypes: string[];
+  /** Valor CSV (MAYÚSCULAS) → id de TintFamily existente (vincular sin crear). */
+  tintFamilyLinks: Record<string, string>;
+  /** Valor CSV (MAYÚSCULAS) → id de TintType existente (vincular sin crear). */
+  tintTypeLinks: Record<string, string>;
+  /** Selección manual por fila (previewRowId) en la tabla de preview. */
+  tintRowSelections: Record<string, { tintFamilyId: string; tintTypeId: string }>;
+  /** true cuando newTintFamilies y newTintTypes están vacíos. */
+  tintCatalogResolved: boolean;
 };
 
 function collectBaseRowIssues(
@@ -317,6 +337,8 @@ export function buildBulkPreview(params: {
       issues,
       selected: false,
       taxonomyBeforeOverride,
+      tintFamilyId: null,
+      tintTypeId: null,
     };
   });
 
@@ -635,5 +657,13 @@ export function buildBulkPreview(params: {
       unmatchedImages: unmatchedImages.length,
       existingProductRows: 0,
     },
+    existingTintFamilies: [],
+    existingTintTypes: [],
+    newTintFamilies: [],
+    newTintTypes: [],
+    tintFamilyLinks: {},
+    tintTypeLinks: {},
+    tintRowSelections: {},
+    tintCatalogResolved: true,
   };
 }

@@ -37,6 +37,10 @@ const GROUPS: SynonymGroup[] = [
   },
   /** Atributos específicos de la categoría Tintes (columnas CSV opcionales). */
   {
+    field: "tintFamily",
+    keys: ["familia", "familia tinte"],
+  },
+  {
     field: "tintType",
     keys: ["tipo", "tipo tinte", "linea tinte", "línea tinte"],
   },
@@ -91,7 +95,6 @@ const GROUPS: SynonymGroup[] = [
       "departamento",
       "division",
       "división",
-      "familia",
       "seccion",
       "sección",
       "linea principal",
@@ -126,7 +129,9 @@ export type SemanticMapped = {
   subcategory: string | null;
   /** Etiquetas comerciales del producto (varias columnas CSV se fusionan). */
   tags: string[];
-  /** Línea de tinte (ej. ROYAL, ZERO AMM) — solo categoría Tintes. */
+  /** Familia de tinte (catálogo) — valor CSV antes de resolver a id. */
+  tintFamily: string | null;
+  /** Tipo/línea de tinte (catálogo) — valor CSV antes de resolver a id. */
   tintType: string | null;
   /** Código de nivel (ej. 9,5-1) — texto libre, no numérico. */
   tintLevel: string | null;
@@ -296,6 +301,7 @@ export function mapRowValues(
     category: null,
     subcategory: null,
     tags: [],
+    tintFamily: null,
     tintType: null,
     tintLevel: null,
     tintGroup: null,
@@ -330,6 +336,9 @@ export function mapRowValues(
         break;
       case "tags":
         tagChunks.push(parseTagsFromCell(raw));
+        break;
+      case "tintFamily":
+        if (!out.tintFamily) out.tintFamily = raw;
         break;
       case "tintType":
         if (!out.tintType) out.tintType = raw;

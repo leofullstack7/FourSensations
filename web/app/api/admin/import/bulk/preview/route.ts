@@ -7,6 +7,8 @@ import { fetchCategoryTreeForImport } from "@/lib/server/admin-category-tree";
 import { parseCsv, pickCodeColumnIndex } from "@/lib/bulk-import/csv";
 import { listZipImages } from "@/lib/bulk-import/zip-manifest";
 import { buildBulkPreview } from "@/lib/bulk-import/build-preview";
+import { applyTintCatalogToPreview } from "@/lib/bulk-import/tint-catalog";
+import { fetchTintCatalogFromDb } from "@/lib/server/tint-catalog-db";
 import { markBulkPreviewExistingByExternalRef } from "@/lib/server/bulk-import-mark-existing";
 import {
   BULK_CSV_MAX_BYTES,
@@ -63,7 +65,7 @@ export async function POST(req: NextRequest) {
     const codeColumnIndex = pickCodeColumnIndex(headers, rows);
     const categoryTree = await fetchCategoryTreeForImport();
 
-    const preview = buildBulkPreview({
+    const previewBase = buildBulkPreview({
       headers,
       dataRows: rows,
       codeColumnIndex,
@@ -71,7 +73,16 @@ export async function POST(req: NextRequest) {
       categoryTree,
       defaultCategorySlug: null,
     });
-    await markBulkPreviewExistingByExternalRef(prisma, preview);
+    await markBulkPreviewExistingByExternalRef(prisma, previewBase);
+
+    const tintCatalog = await fetchTintCatalogFromDb(prisma);
+    const preview = applyTintCatalogToPreview(previewBase, {
+      existingTintFamilies: tintCatalog.families,
+      existingTintTypes: tintCatalog.types,
+      tintFamilyLinks: {},
+      tintTypeLinks: {},
+      tintRowSelections: {},
+    });
 
     const statsStored = {
       ...preview.stats,
