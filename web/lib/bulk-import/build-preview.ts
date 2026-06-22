@@ -23,7 +23,7 @@ import {
   type TaxonomyRehomeKind,
 } from "./category-resolve";
 import { isTintesCategory, normalizeTintLevelKey } from "./tintes";
-import type { TintCatalogEntry } from "./tint-catalog";
+import type { TintCatalogEntry, CsvTintTypeOption } from "./tint-catalog";
 
 export type BulkPreviewImageMatch = {
   imageFilename: string;
@@ -138,17 +138,27 @@ export type BulkPreviewResult = {
   /** Catálogo Tintes — familias/tipos ya en DB. */
   existingTintFamilies: TintCatalogEntry[];
   existingTintTypes: TintCatalogEntry[];
-  /** Valores Familia del CSV que aún no tienen entrada en catálogo ni vínculo manual. */
-  newTintFamilies: string[];
-  /** Valores Tipo del CSV que aún no tienen entrada en catálogo ni vínculo manual. */
-  newTintTypes: string[];
-  /** Valor CSV (MAYÚSCULAS) → id de TintFamily existente (vincular sin crear). */
-  tintFamilyLinks: Record<string, string>;
-  /** Valor CSV (MAYÚSCULAS) → id de TintType existente (vincular sin crear). */
+  /** Tipos distintos encontrados en filas Tintes del CSV. */
+  csvTintTypeOptions: CsvTintTypeOption[];
+  hasTintesRows: boolean;
+  /** Tipo del CSV elegido para importar en esta sesión (MAYÚSCULAS). */
+  activeTintTypeCsvKey: string | null;
+  activeTintTypeId: string | null;
+  activeTintTypeLabel: string | null;
+  activeTintTypeRowCount: number;
+  /** Vincular nombre CSV de tipo → id existente. */
   tintTypeLinks: Record<string, string>;
-  /** Selección manual por fila (previewRowId) en la tabla de preview. */
+  /** true cuando hay Tintes y ya se eligió + resolvió el tipo activo. */
+  tintTypeSelectionResolved: boolean;
+  /** @deprecated Compat — usar tintTypeSelectionResolved */
+  newTintFamilies: string[];
+  /** @deprecated Compat */
+  newTintTypes: string[];
+  /** @deprecated Compat */
+  tintFamilyLinks: Record<string, string>;
+  /** @deprecated Compat */
   tintRowSelections: Record<string, { tintFamilyId: string; tintTypeId: string }>;
-  /** true cuando newTintFamilies y newTintTypes están vacíos. */
+  /** @deprecated Compat — usar tintTypeSelectionResolved */
   tintCatalogResolved: boolean;
 };
 
@@ -659,10 +669,17 @@ export function buildBulkPreview(params: {
     },
     existingTintFamilies: [],
     existingTintTypes: [],
+    csvTintTypeOptions: [],
+    hasTintesRows: false,
+    activeTintTypeCsvKey: null,
+    activeTintTypeId: null,
+    activeTintTypeLabel: null,
+    activeTintTypeRowCount: 0,
+    tintTypeLinks: {},
+    tintTypeSelectionResolved: true,
     newTintFamilies: [],
     newTintTypes: [],
     tintFamilyLinks: {},
-    tintTypeLinks: {},
     tintRowSelections: {},
     tintCatalogResolved: true,
   };

@@ -79,9 +79,9 @@ export async function POST(req: NextRequest) {
     const preview = applyTintCatalogToPreview(previewBase, {
       existingTintFamilies: tintCatalog.families,
       existingTintTypes: tintCatalog.types,
-      tintFamilyLinks: {},
+      activeTintTypeCsvKey: null,
+      activeTintTypeId: null,
       tintTypeLinks: {},
-      tintRowSelections: {},
     });
 
     const statsStored = {

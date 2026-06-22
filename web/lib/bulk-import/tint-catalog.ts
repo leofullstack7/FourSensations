@@ -1,9 +1,16 @@
 import type { BulkPreviewResult, BulkPreviewRow } from "./build-preview";
 import { normalizeTaxonomyNameForDb } from "./category-resolve";
 import { isTintesCategory } from "./tintes";
-import { bulkImportStableRowId } from "./bulk-import-row-id";
 
 export type TintCatalogEntry = { id: string; name: string };
+
+export type CsvTintTypeOption = {
+  /** Nombre normalizado (MAYÚSCULAS). */
+  name: string;
+  rowCount: number;
+  existsInCatalog: boolean;
+  catalogId: string | null;
+};
 
 /** Nombre de catálogo Tintes: siempre MAYÚSCULAS. */
 export function normalizeTintCatalogName(raw: string): string {
@@ -13,9 +20,11 @@ export function normalizeTintCatalogName(raw: string): string {
 export type TintCatalogState = {
   existingTintFamilies: TintCatalogEntry[];
   existingTintTypes: TintCatalogEntry[];
-  tintFamilyLinks: Record<string, string>;
+  /** Tipo del CSV elegido para esta sesión de importación (un solo tipo por carga). */
+  activeTintTypeCsvKey: string | null;
+  activeTintTypeId: string | null;
+  /** Vincular nombre CSV de tipo → id existente (sin crear). */
   tintTypeLinks: Record<string, string>;
-  tintRowSelections: Record<string, { tintFamilyId: string; tintTypeId: string }>;
 };
 
 function catalogNameKey(name: string): string {
@@ -28,84 +37,73 @@ function findIdByCatalogName(name: string, catalog: TintCatalogEntry[]): string 
   return hit?.id ?? null;
 }
 
-function collectUniqueCsvTintValues(rows: BulkPreviewRow[], field: "tintFamily" | "tintType"): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
+function countTintRowsByType(rows: BulkPreviewRow[]): Map<string, number> {
+  const counts = new Map<string, number>();
   for (const r of rows) {
     if (!isTintesCategory(r.mapped.categorySlug)) continue;
-    const raw = (r.mapped[field] ?? "").trim();
+    const raw = (r.mapped.tintType ?? "").trim();
     if (!raw) continue;
     const key = catalogNameKey(raw);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(key);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  return out.sort((a, b) => a.localeCompare(b));
+  return counts;
 }
 
-function isCsvValueResolved(
-  csvKey: string,
-  catalog: TintCatalogEntry[],
-  links: Record<string, string>
-): boolean {
-  if (links[csvKey]) return true;
-  return findIdByCatalogName(csvKey, catalog) != null;
-}
-
-function computeNewCatalogValues(
-  csvValues: string[],
-  catalog: TintCatalogEntry[],
-  links: Record<string, string>
-): string[] {
-  return csvValues.filter((v) => !isCsvValueResolved(v, catalog, links));
-}
-
-function resolveTintIdForRow(
-  row: BulkPreviewRow,
-  field: "tintFamily" | "tintType",
-  catalog: TintCatalogEntry[],
-  links: Record<string, string>,
-  rowSelections: Record<string, { tintFamilyId: string; tintTypeId: string }>
-): string | null {
-  const rowId = bulkImportStableRowId(row);
-  const manual = rowSelections[rowId];
-  if (field === "tintFamily" && manual?.tintFamilyId) return manual.tintFamilyId;
-  if (field === "tintType" && manual?.tintTypeId) return manual.tintTypeId;
-
-  const raw = (row.mapped[field] ?? "").trim();
+function rowTintTypeKey(row: BulkPreviewRow): string | null {
+  const raw = (row.mapped.tintType ?? "").trim();
   if (!raw) return null;
+  return catalogNameKey(raw);
+}
 
-  const csvKey = catalogNameKey(raw);
-  const linked = links[csvKey];
-  if (linked) return linked;
+function isTintRowVisible(row: BulkPreviewRow, activeKey: string | null, activeTypeId: string | null): boolean {
+  if (!isTintesCategory(row.mapped.categorySlug)) return true;
+  if (!activeKey || !activeTypeId) return false;
+  return rowTintTypeKey(row) === activeKey;
+}
 
-  return findIdByCatalogName(csvKey, catalog);
+function filterRowLists(preview: BulkPreviewResult, activeKey: string | null, activeTypeId: string | null) {
+  const keep = (r: BulkPreviewRow) => isTintRowVisible(r, activeKey, activeTypeId);
+  return {
+    matchedRows: preview.matchedRows.filter(keep),
+    unmatchedRows: preview.unmatchedRows.filter(keep),
+    ambiguousRows: preview.ambiguousRows.filter(keep),
+  };
 }
 
 /**
- * Enriquece el preview con listas de catálogo Tintes, resuelve IDs por fila
- * y marca issues si Familia/Tipo del CSV no tienen id asignado.
+ * Enriquece el preview Tintes: un solo tipo por importación, filas filtradas al tipo activo.
+ * Familia se auto-empareja con catálogo; si no existe, se crea en el commit (sin modal).
  */
 export function applyTintCatalogToPreview(
   preview: BulkPreviewResult,
   state: TintCatalogState
 ): BulkPreviewResult {
-  const {
-    existingTintFamilies,
-    existingTintTypes,
-    tintFamilyLinks,
-    tintTypeLinks,
-    tintRowSelections,
-  } = state;
+  const { existingTintFamilies, existingTintTypes, tintTypeLinks } = state;
+  let { activeTintTypeCsvKey, activeTintTypeId } = state;
 
-  const allRows = preview.rows;
-  const csvFamilies = collectUniqueCsvTintValues(allRows, "tintFamily");
-  const csvTypes = collectUniqueCsvTintValues(allRows, "tintType");
+  const typeCounts = countTintRowsByType(preview.rows);
+  const hasTintesRows = typeCounts.size > 0 || preview.rows.some((r) => isTintesCategory(r.mapped.categorySlug));
 
-  const newTintFamilies = computeNewCatalogValues(csvFamilies, existingTintFamilies, tintFamilyLinks);
-  const newTintTypes = computeNewCatalogValues(csvTypes, existingTintTypes, tintTypeLinks);
+  const csvTintTypeOptions: CsvTintTypeOption[] = Array.from(typeCounts.entries())
+    .map(([name, rowCount]) => {
+      const linkedId = tintTypeLinks[name] ?? null;
+      const catalogId = linkedId ?? findIdByCatalogName(name, existingTintTypes);
+      return {
+        name,
+        rowCount,
+        existsInCatalog: catalogId != null,
+        catalogId,
+      };
+    })
+    .sort((a, b) => b.rowCount - a.rowCount || a.name.localeCompare(b.name));
 
-  const tintCatalogResolved = newTintFamilies.length === 0 && newTintTypes.length === 0;
+  if (activeTintTypeCsvKey && !activeTintTypeId) {
+    activeTintTypeId =
+      tintTypeLinks[activeTintTypeCsvKey] ??
+      findIdByCatalogName(activeTintTypeCsvKey, existingTintTypes);
+  }
+
+  const tintTypeSelectionResolved = !hasTintesRows || (!!activeTintTypeCsvKey && !!activeTintTypeId);
 
   const applyToRow = (r: BulkPreviewRow) => {
     if (!isTintesCategory(r.mapped.categorySlug)) {
@@ -114,48 +112,66 @@ export function applyTintCatalogToPreview(
       return;
     }
 
-    const familyId = resolveTintIdForRow(r, "tintFamily", existingTintFamilies, tintFamilyLinks, tintRowSelections);
-    const typeId = resolveTintIdForRow(r, "tintType", existingTintTypes, tintTypeLinks, tintRowSelections);
-    r.tintFamilyId = familyId;
-    r.tintTypeId = typeId;
+    const familyRaw = r.mapped.tintFamily?.trim();
+    r.tintFamilyId = familyRaw ? findIdByCatalogName(familyRaw, existingTintFamilies) : null;
 
-    const stripIssue = (prefix: string) => {
-      r.issues = r.issues.filter((x) => !x.startsWith(prefix));
-    };
-
-    if (r.mapped.tintFamily?.trim()) {
-      if (!familyId) {
-        stripIssue("Familia sin resolver");
-        r.issues.push("Familia sin resolver");
-      } else {
-        stripIssue("Familia sin resolver");
-      }
+    if (activeTintTypeCsvKey && activeTintTypeId && rowTintTypeKey(r) === activeTintTypeCsvKey) {
+      r.tintTypeId = activeTintTypeId;
+    } else {
+      r.tintTypeId = null;
     }
-    if (r.mapped.tintType?.trim()) {
-      if (!typeId) {
-        stripIssue("Tipo sin resolver");
-        r.issues.push("Tipo sin resolver");
-      } else {
-        stripIssue("Tipo sin resolver");
-      }
+
+    r.issues = r.issues.filter(
+      (x) =>
+        !x.startsWith("Familia sin resolver") &&
+        !x.startsWith("Tipo sin resolver") &&
+        x !== "Selecciona un tipo de tinte para importar"
+    );
+
+    if (!tintTypeSelectionResolved) {
+      r.issues.push("Selecciona un tipo de tinte para importar");
     }
   };
 
   for (const r of preview.rows) applyToRow(r);
-  for (const r of preview.matchedRows) applyToRow(r);
-  for (const r of preview.unmatchedRows) applyToRow(r);
-  for (const r of preview.ambiguousRows) applyToRow(r);
+
+  const filtered =
+    activeTintTypeCsvKey && activeTintTypeId
+      ? filterRowLists(preview, activeTintTypeCsvKey, activeTintTypeId)
+      : hasTintesRows
+        ? filterRowLists(preview, null, null)
+        : {
+            matchedRows: preview.matchedRows,
+            unmatchedRows: preview.unmatchedRows,
+            ambiguousRows: preview.ambiguousRows,
+          };
+
+  for (const r of filtered.matchedRows) applyToRow(r);
+  for (const r of filtered.unmatchedRows) applyToRow(r);
+  for (const r of filtered.ambiguousRows) applyToRow(r);
+
+  const activeOption = activeTintTypeCsvKey
+    ? csvTintTypeOptions.find((o) => o.name === activeTintTypeCsvKey) ?? null
+    : null;
 
   return {
     ...preview,
+    ...filtered,
     existingTintFamilies,
     existingTintTypes,
-    newTintFamilies,
-    newTintTypes,
-    tintFamilyLinks,
+    csvTintTypeOptions,
+    hasTintesRows,
+    activeTintTypeCsvKey,
+    activeTintTypeId,
+    activeTintTypeLabel: activeOption?.name ?? activeTintTypeCsvKey,
+    activeTintTypeRowCount: activeOption?.rowCount ?? 0,
     tintTypeLinks,
-    tintRowSelections,
-    tintCatalogResolved,
+    tintTypeSelectionResolved,
+    newTintFamilies: [],
+    newTintTypes: [],
+    tintFamilyLinks: {},
+    tintRowSelections: {},
+    tintCatalogResolved: tintTypeSelectionResolved,
   };
 }
 
@@ -164,16 +180,24 @@ export function readTintCatalogStateFromPreview(preview: BulkPreviewResult | nul
     return {
       existingTintFamilies: [],
       existingTintTypes: [],
-      tintFamilyLinks: {},
+      activeTintTypeCsvKey: null,
+      activeTintTypeId: null,
       tintTypeLinks: {},
-      tintRowSelections: {},
     };
   }
   return {
     existingTintFamilies: preview.existingTintFamilies ?? [],
     existingTintTypes: preview.existingTintTypes ?? [],
-    tintFamilyLinks: preview.tintFamilyLinks ?? {},
+    activeTintTypeCsvKey: preview.activeTintTypeCsvKey ?? null,
+    activeTintTypeId: preview.activeTintTypeId ?? null,
     tintTypeLinks: preview.tintTypeLinks ?? {},
-    tintRowSelections: preview.tintRowSelections ?? {},
   };
+}
+
+/** ¿El tipo activo del CSV aún no está en catálogo? */
+export function activeTintTypeNeedsCatalogAction(preview: BulkPreviewResult | null): boolean {
+  if (!preview?.activeTintTypeCsvKey) return false;
+  if (preview.activeTintTypeId) return false;
+  const opt = preview.csvTintTypeOptions?.find((o) => o.name === preview.activeTintTypeCsvKey);
+  return opt ? !opt.existsInCatalog : true;
 }

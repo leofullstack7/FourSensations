@@ -14,6 +14,7 @@ import { bulkImportStableRowId } from "@/lib/bulk-import/bulk-import-row-id";
 import type { BulkPreviewResult, BulkPreviewRow } from "@/lib/bulk-import/build-preview";
 import { effectiveProductTitle, normalizeProductNameForDb } from "@/lib/bulk-import/semantic-map";
 import { isTintesCategory } from "@/lib/bulk-import/tintes";
+import { normalizeTintCatalogName } from "@/lib/bulk-import/tint-catalog";
 import { normalizeTaxonomyNameForDb } from "@/lib/bulk-import/category-resolve";
 
 export const runtime = "nodejs";
@@ -85,9 +86,9 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     return noStoreJson({ error: "Preview no disponible" }, { status: 500 });
   }
 
-  if (preview.tintCatalogResolved === false) {
+  if (preview.tintTypeSelectionResolved === false) {
     return noStoreJson(
-      { error: "Resuelve primero las Familias y Tipos nuevos del catálogo Tintes" },
+      { error: "Selecciona y confirma el tipo de tinte a importar antes de continuar" },
       { status: 400 }
     );
   }
@@ -190,26 +191,38 @@ export async function POST(req: NextRequest, { params }: Ctx) {
         const tags = (row.mapped.tags ?? []).map((t) => t.trim()).filter(Boolean);
         const applyTags = preview.csvHasTagsColumn === true;
 
-        /** Atributos Tintes: ids de catálogo resueltos en preview + nivel/grupo texto libre. */
-        const tintData = isTintesCategory(row.mapped.categorySlug)
-          ? {
-              tintFamilyId: row.tintFamilyId ?? null,
-              tintTypeId: row.tintTypeId ?? null,
-              tintLevel: row.mapped.tintLevel?.trim() || null,
-              tintGroup: row.mapped.tintGroup?.trim() || null,
-            }
-          : {};
+        let tintFamilyId: string | null = null;
+        let tintTypeId: string | null = null;
+        let tintLevel: string | null = null;
+        let tintGroup: string | null = null;
 
         if (isTintesCategory(row.mapped.categorySlug)) {
-          if (row.mapped.tintFamily?.trim() && !row.tintFamilyId) {
-            errors.push(`Fila ${row.rowIndex + 1} (${ref}): Familia sin resolver`);
-            continue;
-          }
-          if (row.mapped.tintType?.trim() && !row.tintTypeId) {
+          tintLevel = row.mapped.tintLevel?.trim() || null;
+          tintGroup = row.mapped.tintGroup?.trim() || null;
+          tintTypeId = preview.activeTintTypeId ?? row.tintTypeId ?? null;
+
+          if (row.mapped.tintType?.trim() && !tintTypeId) {
             errors.push(`Fila ${row.rowIndex + 1} (${ref}): Tipo sin resolver`);
             continue;
           }
+
+          if (row.mapped.tintFamily?.trim()) {
+            tintFamilyId = row.tintFamilyId ?? null;
+            if (!tintFamilyId) {
+              const famName = normalizeTintCatalogName(row.mapped.tintFamily);
+              const fam = await prisma.tintFamily.upsert({
+                where: { name: famName },
+                create: { name: famName },
+                update: {},
+              });
+              tintFamilyId = fam.id;
+            }
+          }
         }
+
+        const tintData = isTintesCategory(row.mapped.categorySlug)
+          ? { tintFamilyId, tintTypeId, tintLevel, tintGroup }
+          : {};
 
         const productRow = clash
           ? await prisma.product.update({

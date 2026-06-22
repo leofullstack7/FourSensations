@@ -31,13 +31,14 @@ const patchSchema = z.object({
   codeColumnIndex: z.number().int().min(0).optional(),
   selection: z.array(z.boolean()).optional(),
   selectedRowIds: z.array(z.string().min(1)).optional(),
-  /** Clave `taxonomyPairKey(cat, sub)` → destino en el sistema. */
   taxonomyOverrides: z.record(z.string(), taxonomyOverrideEntry).optional(),
-  /** Pares CSV para los que el usuario rechazó la sugerencia de reubicación. */
   taxonomyRehomeDismissed: z.record(z.string(), z.boolean()).optional(),
-  /** Catálogo Tintes: valor CSV (MAYÚSCULAS) → id existente. */
-  tintFamilyLinks: z.record(z.string(), z.string()).optional(),
+  /** Tipo Tintes activo para esta importación (un tipo por carga). */
+  activeTintTypeCsvKey: z.string().min(1).nullable().optional(),
+  activeTintTypeId: z.string().min(1).nullable().optional(),
   tintTypeLinks: z.record(z.string(), z.string()).optional(),
+  /** @deprecated */
+  tintFamilyLinks: z.record(z.string(), z.string()).optional(),
   tintRowSelections: z.record(z.string(), tintRowSelectionEntry).optional(),
 });
 
@@ -125,9 +126,13 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     ...(parsed.data.taxonomyRehomeDismissed ?? {}),
   };
   const prevTint = readTintCatalogStateFromPreview(job.previewPayload as BulkPreviewResult);
-  const tintFamilyLinks = { ...prevTint.tintFamilyLinks, ...(parsed.data.tintFamilyLinks ?? {}) };
   const tintTypeLinks = { ...prevTint.tintTypeLinks, ...(parsed.data.tintTypeLinks ?? {}) };
-  const tintRowSelections = { ...prevTint.tintRowSelections, ...(parsed.data.tintRowSelections ?? {}) };
+  let activeTintTypeCsvKey =
+    parsed.data.activeTintTypeCsvKey !== undefined
+      ? parsed.data.activeTintTypeCsvKey
+      : prevTint.activeTintTypeCsvKey;
+  let activeTintTypeId =
+    parsed.data.activeTintTypeId !== undefined ? parsed.data.activeTintTypeId : prevTint.activeTintTypeId;
 
   const tintCatalogDb = await fetchTintCatalogFromDb(prisma);
   const preview = rebuildBulkPreview({
@@ -142,9 +147,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     tintCatalog: {
       existingTintFamilies: tintCatalogDb.families,
       existingTintTypes: tintCatalogDb.types,
-      tintFamilyLinks,
+      activeTintTypeCsvKey,
+      activeTintTypeId,
       tintTypeLinks,
-      tintRowSelections,
     },
   });
   await markBulkPreviewExistingByExternalRef(prisma, preview);

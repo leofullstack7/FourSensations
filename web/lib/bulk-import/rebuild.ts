@@ -32,9 +32,5 @@ export function rebuildBulkPreview(params: {
   });
 
   const prevState = params.tintCatalog ?? readTintCatalogStateFromPreview(params.previousPreview ?? null);
-  return applyTintCatalogToPreview(base, {
-    ...prevState,
-    existingTintFamilies: prevState.existingTintFamilies,
-    existingTintTypes: prevState.existingTintTypes,
-  });
+  return applyTintCatalogToPreview(base, prevState);
 }
