@@ -6,6 +6,7 @@ export const TINTES_CATEGORY_SLUG = "tintes";
 /**
  * Clave normalizada para emparejar columna «Nivel» del CSV con el nombre del archivo en el ZIP.
  * Conserva guiones; unifica coma/punto decimal para tolerar variantes (9,5-1 ↔ 9.5-1).
+ * Sufijos de variante en imágenes (p. ej. 1-0_color.webp) se ignoran → misma clave que 1-0.
  */
 export function normalizeTintLevelKey(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null;
@@ -14,6 +15,8 @@ export function normalizeTintLevelKey(raw: string | null | undefined): string | 
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+  // Variante muestra de color: 1-0_color, 5-6-color → mismo nivel que 1-0, 5-6.
+  s = s.replace(/[-_]color$/i, "");
   s = s.replace(/\s+/g, "");
   s = s.replace(/[._]/g, "");
   s = s.replace(/,/g, ".");
