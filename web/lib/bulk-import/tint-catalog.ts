@@ -1,6 +1,6 @@
 import type { BulkPreviewResult, BulkPreviewRow } from "./build-preview";
 import { normalizeTaxonomyNameForDb } from "./category-resolve";
-import { isTintesCategory } from "./tintes";
+import { isTintesCategory, effectiveTintFamily } from "./tintes";
 
 export type TintCatalogEntry = { id: string; name: string };
 
@@ -62,7 +62,7 @@ function countTintFamiliesForType(rows: BulkPreviewRow[], typeKey: string): Map<
   for (const r of rows) {
     if (!isTintesCategory(r.mapped.categorySlug)) continue;
     if (rowTintTypeKey(r) !== typeKey) continue;
-    const raw = (r.mapped.tintFamily ?? "").trim();
+    const raw = effectiveTintFamily(r.mapped);
     if (!raw) continue;
     const key = catalogNameKey(raw);
     counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -77,7 +77,7 @@ function rowTintTypeKey(row: BulkPreviewRow): string | null {
 }
 
 function rowTintFamilyKey(row: BulkPreviewRow): string | null {
-  const raw = (row.mapped.tintFamily ?? "").trim();
+  const raw = effectiveTintFamily(row.mapped);
   if (!raw) return null;
   return catalogNameKey(raw);
 }
@@ -210,7 +210,7 @@ export function applyTintCatalogToPreview(
     ) {
       r.tintFamilyId = activeTintFamilyId;
     } else {
-      const familyRaw = r.mapped.tintFamily?.trim();
+      const familyRaw = effectiveTintFamily(r.mapped);
       r.tintFamilyId = familyRaw ? findIdByCatalogName(familyRaw, existingTintFamilies) : null;
     }
 

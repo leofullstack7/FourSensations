@@ -43,7 +43,7 @@ import type {
 } from "@/lib/bulk-import/build-preview";
 import { taxonomyPairKey, normalizeTaxonomyNameForDb } from "@/lib/bulk-import/category-resolve";
 import { effectiveProductTitle } from "@/lib/bulk-import/semantic-map";
-import { isTintesCategory } from "@/lib/bulk-import/tintes";
+import { isTintesCategory, effectiveTintFamily } from "@/lib/bulk-import/tintes";
 import {
   buildCsvTintFamilyOptions,
   normalizeTintCatalogName,
@@ -1902,7 +1902,7 @@ function AdminBulkTab({
           stockValue: r.mapped.stock,
           nameValue: effectiveProductTitle(r.mapped) ?? r.mapped.name,
           descriptionValue: r.mapped.description,
-          tintFamilyValue: r.mapped.tintFamily,
+          tintFamilyValue: effectiveTintFamily(r.mapped),
           tintTypeValue: r.mapped.tintType,
           tintFamilyId: r.tintFamilyId,
           tintTypeId: r.tintTypeId,

@@ -38,7 +38,7 @@ const GROUPS: SynonymGroup[] = [
   /** Atributos específicos de la categoría Tintes (columnas CSV opcionales). */
   {
     field: "tintFamily",
-    keys: ["familia", "familia tinte"],
+    keys: ["familia", "familia tinte", "marca tinte", "marca familia"],
   },
   {
     field: "tintType",
@@ -129,7 +129,7 @@ export type SemanticMapped = {
   subcategory: string | null;
   /** Etiquetas comerciales del producto (varias columnas CSV se fusionan). */
   tags: string[];
-  /** Familia de tinte (catálogo) — valor CSV antes de resolver a id. */
+  /** Familia de tinte (catálogo). Si el CSV solo tiene «Marca», se usa vía effectiveTintFamily. */
   tintFamily: string | null;
   /** Tipo/línea de tinte (catálogo) — valor CSV antes de resolver a id. */
   tintType: string | null;

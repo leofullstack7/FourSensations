@@ -13,7 +13,7 @@ import { mimeFromImagePath } from "@/lib/bulk-import/mime";
 import { bulkImportStableRowId } from "@/lib/bulk-import/bulk-import-row-id";
 import type { BulkPreviewResult, BulkPreviewRow } from "@/lib/bulk-import/build-preview";
 import { effectiveProductTitle, normalizeProductNameForDb } from "@/lib/bulk-import/semantic-map";
-import { isTintesCategory } from "@/lib/bulk-import/tintes";
+import { isTintesCategory, effectiveTintFamily } from "@/lib/bulk-import/tintes";
 import { normalizeTintCatalogName } from "@/lib/bulk-import/tint-catalog";
 import { normalizeTaxonomyNameForDb } from "@/lib/bulk-import/category-resolve";
 
@@ -207,14 +207,17 @@ export async function POST(req: NextRequest, { params }: Ctx) {
             continue;
           }
 
-          if (row.mapped.tintFamily?.trim() && !tintFamilyId) {
-            const famName = normalizeTintCatalogName(row.mapped.tintFamily);
-            const fam = await prisma.tintFamily.upsert({
-              where: { name: famName },
-              create: { name: famName },
-              update: {},
-            });
-            tintFamilyId = fam.id;
+          if (!tintFamilyId) {
+            const familyRaw = effectiveTintFamily(row.mapped);
+            if (familyRaw) {
+              const famName = normalizeTintCatalogName(familyRaw);
+              const fam = await prisma.tintFamily.upsert({
+                where: { name: famName },
+                create: { name: famName },
+                update: {},
+              });
+              tintFamilyId = fam.id;
+            }
           }
         }
 

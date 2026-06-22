@@ -22,7 +22,7 @@ import {
   normalizeTaxonomyNameForDb,
   type TaxonomyRehomeKind,
 } from "./category-resolve";
-import { isTintesCategory, normalizeTintLevelKey } from "./tintes";
+import { isTintesCategory, normalizeTintLevelKey, effectiveTintFamily } from "./tintes";
 import type { TintCatalogEntry, CsvTintTypeOption, CsvTintFamilyOption } from "./tint-catalog";
 
 export type TintMatchScope = {
@@ -40,7 +40,7 @@ function rowInTintMatchScope(row: BulkPreviewRow, scope: TintMatchScope): boolea
   if (!isTintesCategory(row.mapped.categorySlug)) return false;
   return (
     rowTintCatalogKey(row.mapped.tintType) === scope.typeKey &&
-    rowTintCatalogKey(row.mapped.tintFamily) === scope.familyKey
+    rowTintCatalogKey(effectiveTintFamily(row.mapped)) === scope.familyKey
   );
 }
 

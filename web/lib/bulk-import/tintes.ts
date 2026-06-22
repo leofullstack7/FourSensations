@@ -32,3 +32,14 @@ export function isTintesCategory(
   if (categoryDisplayName && normalizeKey(categoryDisplayName) === TINTES_CATEGORY_SLUG) return true;
   return false;
 }
+
+/** Familia de tinte en CSV: columna «Familia» o, si falta, «Marca» (mismo concepto en catálogo). */
+export function effectiveTintFamily(mapped: {
+  tintFamily?: string | null;
+  brand?: string | null;
+}): string | null {
+  const fromFamily = mapped.tintFamily?.trim();
+  if (fromFamily) return fromFamily;
+  const fromBrand = mapped.brand?.trim();
+  return fromBrand || null;
+}
