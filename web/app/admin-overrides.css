@@ -657,6 +657,23 @@
   vertical-align: -1px;
 }
 
+@keyframes admin-btn-loading-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(184, 112, 112, 0.55);
+  }
+  50% {
+    opacity: 0.78;
+    box-shadow: 0 0 0 10px rgba(184, 112, 112, 0);
+  }
+}
+
+.admin-btn--loading-pulse {
+  animation: admin-btn-loading-pulse 0.95s ease-in-out infinite;
+  pointer-events: none;
+}
+
 /* ——— Panel Crear Combos ——— */
 .admin-combos-root {
   max-width: 100%;

@@ -1,8 +1,11 @@
 import { notFound } from "next/navigation";
 import { CategoryLandingClient } from "@/components/store/CategoryLandingClient";
 import { StorefrontShell } from "@/components/store/StorefrontShell";
+import { TintCategoryPageBridge } from "@/components/store/tints/TintCategoryPageBridge";
+import { TINTES_CATEGORY_SLUG } from "@/lib/bulk-import/tintes";
 import { getStorefrontProducts } from "@/lib/products";
 import { getStorefrontCategoryBySlug, getStorefrontCategoryMenu, type StoreCategoryWithSubs } from "@/lib/store-categories";
+import { getTintBubbleItems } from "@/lib/tints";
 import { getMenuCategoryBySlug } from "@/lib/menu-config";
 import { slugify } from "@/lib/slugify";
 
@@ -45,6 +48,20 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   if (!cat) return notFound();
 
   const [allProducts, menuPayload] = await Promise.all([getStorefrontProducts(), getStorefrontCategoryMenu()]);
+
+  if (cat.slug === TINTES_CATEGORY_SLUG) {
+    const tintItems = await getTintBubbleItems();
+    return (
+      <StorefrontShell
+        catalogProducts={allProducts}
+        initialMenuConfig={menuPayload.config}
+        categorySlugByName={menuPayload.slugByCategoryName}
+      >
+        <TintCategoryPageBridge initialItems={tintItems} />
+      </StorefrontShell>
+    );
+  }
+
   const categoryProducts = allProducts.filter((p) => p.category === cat.slug);
 
   const dbSubNames = cat.subcategories.map((s) => s.name);

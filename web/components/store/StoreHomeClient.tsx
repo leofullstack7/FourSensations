@@ -7,8 +7,11 @@ import logoImage from "@/app/logo.png";
 import { useReveal } from "@/hooks/useReveal";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreProductCard } from "@/components/store/store-product-card";
+import { TintHomePreview } from "@/components/store/tints/TintHomePreview";
+import { sortProductsForHomeDisplay } from "@/lib/storefront-product-order";
 import { catKeyFromDisplayName } from "@/lib/category-labels";
 import type { StoreProduct } from "@/lib/types/product";
+import type { TintBubbleItem } from "@/lib/tints";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const HERO_BANNERS = [banner2Image.src, "/banner.webp"] as const;
@@ -35,7 +38,11 @@ function categoryStripLabel(name: string): string {
   return name;
 }
 
-export function StoreHomeClient() {
+type StoreHomeClientProps = {
+  tintItems?: TintBubbleItem[];
+};
+
+export function StoreHomeClient({ tintItems = [] }: StoreHomeClientProps) {
   const {
     catalogProducts: products,
     menuConfig,
@@ -75,18 +82,16 @@ export function StoreHomeClient() {
       list = products.filter((p) => p.category === activeCategory);
     }
 
-    const sortWithin = (arr: StoreProduct[]) => {
-      const copy = [...arr];
-      if (sortValue === "price-asc") copy.sort((a, b) => a.price - b.price);
-      else if (sortValue === "price-desc") copy.sort((a, b) => b.price - a.price);
-      else if (sortValue === "rating") copy.sort((a, b) => b.rating - a.rating);
-      else if (sortValue === "new") copy.sort((a, b) => Number(b.isNew) - Number(a.isNew));
-      return copy;
-    };
+    if (sortValue === "default") {
+      return sortProductsForHomeDisplay(list);
+    }
 
-    const featured = list.filter((p) => p.featuredInHome);
-    const rest = list.filter((p) => !p.featuredInHome);
-    return [...sortWithin(featured), ...sortWithin(rest)];
+    const copy = [...list];
+    if (sortValue === "price-asc") copy.sort((a, b) => a.price - b.price);
+    else if (sortValue === "price-desc") copy.sort((a, b) => b.price - a.price);
+    else if (sortValue === "rating") copy.sort((a, b) => b.rating - a.rating);
+    else if (sortValue === "new") copy.sort((a, b) => Number(b.isNew) - Number(a.isNew));
+    return copy;
   }, [products, activeCategory, manualSub, sortValue]);
 
   useEffect(() => {
@@ -199,6 +204,8 @@ export function StoreHomeClient() {
           </div>
         </div>
       </section>
+
+      {tintItems.length > 0 && <TintHomePreview items={tintItems} />}
 
       <section className="trust-section">
         <div className="container">

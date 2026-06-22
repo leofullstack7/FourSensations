@@ -1740,7 +1740,10 @@ function AdminBulkTab({
   const [newCategoriesModalAcknowledged, setNewCategoriesModalAcknowledged] = useState(false);
   const [showTaxonomyHintsModal, setShowTaxonomyHintsModal] = useState(false);
   const [showTintTypeModal, setShowTintTypeModal] = useState(false);
+  const [tintModalDismissed, setTintModalDismissed] = useState(false);
   const [resolvingTintType, setResolvingTintType] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [editingTaxonomyRowId, setEditingTaxonomyRowId] = useState<string | null>(null);
   const [manualCategorySlug, setManualCategorySlug] = useState("");
   const [manualSubcategoryName, setManualSubcategoryName] = useState("");
@@ -1781,8 +1784,36 @@ function AdminBulkTab({
     setNewCategoriesModalAcknowledged(false);
     setShowTaxonomyHintsModal(false);
     setShowTintTypeModal(false);
+    setTintModalDismissed(false);
     setResolvingTintType(false);
+    setIsAnalyzing(false);
+    bulkProgress.reset();
+    setFileInputKey((k) => k + 1);
   };
+
+  const prepareForNewAnalyze = useCallback(
+    (previousJobId: string | null) => {
+      bulkProgress.reset();
+      setIsAnalyzing(false);
+      setResolvingTintType(false);
+      setShowTintTypeModal(false);
+      setTintModalDismissed(false);
+      setShowTaxonomyHintsModal(false);
+      setShowNewCategoriesModal(false);
+      setNewCategoriesModalAcknowledged(false);
+      setEditingTaxonomyRowId(null);
+      setJobId(null);
+      setPreview(null);
+      setExpiresAt(null);
+      setSelectedRowIds([]);
+      if (previousJobId) {
+        void deleteBulkImportJob(previousJobId).catch(() => {
+          /* sesión anterior ya expirada o eliminada */
+        });
+      }
+    },
+    [bulkProgress]
+  );
 
   useEffect(() => {
     setNewCategoriesModalAcknowledged(false);
@@ -1824,10 +1855,10 @@ function AdminBulkTab({
       setShowTintTypeModal(false);
       return;
     }
-    if (needsTintSelection) {
+    if (needsTintSelection && !tintModalDismissed) {
       setShowTintTypeModal(true);
     }
-  }, [preview, needsTintSelection]);
+  }, [preview, needsTintSelection, tintModalDismissed]);
 
   useEffect(() => {
     if (!preview) {
@@ -2038,10 +2069,11 @@ function AdminBulkTab({
         >
           <label className="form-label">1. Archivo CSV</label>
           <input
+            key={`csv-${fileInputKey}`}
             type="file"
             accept=".csv,text/csv"
             className="form-input"
-            disabled={saving}
+            disabled={saving || isAnalyzing}
             onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
           />
           {csvFile && (
@@ -2060,10 +2092,11 @@ function AdminBulkTab({
         >
           <label className="form-label">2. Archivo ZIP (imágenes)</label>
           <input
+            key={`zip-${fileInputKey}`}
             type="file"
             accept=".zip,application/zip"
             className="form-input"
-            disabled={saving}
+            disabled={saving || isAnalyzing}
             onChange={(e) => setZipFile(e.target.files?.[0] ?? null)}
           />
           {zipFile && (
@@ -2076,13 +2109,16 @@ function AdminBulkTab({
         <button
           type="button"
           className="btn btn-rose"
-          disabled={saving || !csvFile || !zipFile || sortedCats.length === 0}
+          disabled={isAnalyzing || saving || !csvFile || !zipFile || sortedCats.length === 0}
           onClick={() => {
             void (async () => {
-              if (!csvFile || !zipFile) return;
+              if (!csvFile || !zipFile || isAnalyzing) return;
+              const previousJobId = jobId;
+              prepareForNewAnalyze(previousJobId);
+              setIsAnalyzing(true);
               setMutation("bulk");
               setBulkProgressLabel("Analizando CSV y ZIP en el servidor…");
-              bulkProgress.start();
+              bulkProgress.start("analyze");
               try {
                 const fd = new FormData();
                 fd.append("csv", csvFile);
@@ -2110,12 +2146,20 @@ function AdminBulkTab({
                 bulkProgress.reset();
                 showToast(e instanceof Error ? e.message : "Error al analizar", "danger", "⚠️");
               } finally {
+                setIsAnalyzing(false);
                 setMutation(null);
               }
             })();
           }}
         >
-          {saving ? "Analizando…" : "🔍 Analizar CSV y ZIP"}
+          {isAnalyzing ? (
+            <>
+              <span className="admin-inline-spinner" aria-hidden />
+              Analizando…
+            </>
+          ) : (
+            "🔍 Analizar CSV y ZIP"
+          )}
         </button>
         {jobId && (
           <button
@@ -2290,7 +2334,10 @@ function AdminBulkTab({
                 className="btn btn-outline btn-sm"
                 style={{ marginLeft: 12 }}
                 disabled={saving}
-                onClick={() => setShowTintTypeModal(true)}
+                onClick={() => {
+                  setTintModalDismissed(false);
+                  setShowTintTypeModal(true);
+                }}
               >
                 Cambiar tipo / familia
               </button>
@@ -2554,7 +2601,7 @@ function AdminBulkTab({
               void (async () => {
                 setMutation("bulk");
                 setBulkProgressLabel("Importando productos y subiendo imágenes…");
-                bulkProgress.start();
+                bulkProgress.start("import");
                 try {
                   const res = await postBulkImportCommit(jobId, [...selectedRowIds].sort(), existingPolicy);
                   bulkProgress.finish();
@@ -2704,7 +2751,10 @@ function AdminBulkTab({
         pendingTypeKey={preview?.activeTintTypeCsvKey ?? null}
         pendingFamilyKey={preview?.activeTintFamilyCsvKey ?? null}
         saving={resolvingTintType || saving}
-        onClose={() => setShowTintTypeModal(false)}
+        onClose={() => {
+          setTintModalDismissed(true);
+          setShowTintTypeModal(false);
+        }}
         onConfirm={async ({ typeKey, typeId, familyKey, familyId, typeLinks, familyLinks }) => {
           if (!jobId) return;
           setResolvingTintType(true);
@@ -2721,6 +2771,7 @@ function AdminBulkTab({
             });
             setPreview(p);
             setSelectedRowIds((p.matchedRows ?? []).map(bulkImportStableRowId));
+            setTintModalDismissed(false);
             setShowTintTypeModal(false);
             showToast(`Listo: ${typeKey} · ${familyKey}`, "success", "✅");
           } catch (err) {
@@ -3262,7 +3313,7 @@ function AdminBulkTintSetupModal({
           </button>
           <button
             type="button"
-            className="btn btn-primary"
+            className={`btn btn-primary${saving || catalogBusy ? " admin-btn--loading-pulse" : ""}`}
             disabled={saving || catalogBusy || !canConfirm}
             onClick={() => {
               if (!selectedTypeKey || !selectedFamilyKey || !effectiveTypeId || !effectiveFamilyId) return;
@@ -3276,7 +3327,14 @@ function AdminBulkTintSetupModal({
               });
             }}
           >
-            {saving || catalogBusy ? "Aplicando…" : "Continuar con este tipo y familia"}
+            {saving || catalogBusy ? (
+              <>
+                <span className="admin-inline-spinner" aria-hidden />
+                Aplicando…
+              </>
+            ) : (
+              "Continuar con este tipo y familia"
+            )}
           </button>
         </div>
       </div>

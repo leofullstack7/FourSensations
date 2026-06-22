@@ -54,7 +54,7 @@ const getCachedStorefrontProducts = unstable_cache(
   async (): Promise<StoreProduct[]> => {
     const rows = await prisma.product.findMany({
       where: { active: true },
-      orderBy: [{ featuredInHome: "desc" }, { createdAt: "desc" }],
+      orderBy: [{ featuredInHome: "desc" }, { updatedAt: "desc" }],
       include: { images: { orderBy: { sortOrder: "asc" } } },
     });
     if (rows.length === 0) return mockProducts;

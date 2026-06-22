@@ -53,7 +53,7 @@ export function BulkImportProgressOverlay({ open, percent, label }: Props) {
             transform="rotate(-90 60 60)"
             strokeDasharray={C}
             strokeDashoffset={offset}
-            style={{ transition: "stroke-dashoffset 0.12s ease-out" }}
+            style={{ transition: "stroke-dashoffset 0.35s ease-out" }}
           />
         </svg>
         <div style={{ fontSize: 26, fontWeight: 800, color: "var(--dark, #2D1F1A)", fontVariantNumeric: "tabular-nums" }}>

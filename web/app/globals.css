@@ -2,3 +2,4 @@
 @import "./design-system.css";
 @import "./store-page-overrides.css";
 @import "./admin-overrides.css";
+@import "../components/store/tints/tints.css";
