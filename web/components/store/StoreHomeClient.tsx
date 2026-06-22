@@ -15,6 +15,26 @@ const HERO_BANNERS = [banner2Image.src, "/banner.webp"] as const;
 const INITIAL_VISIBLE_PRODUCTS = 32;
 const LOAD_MORE_PRODUCTS = 20;
 
+const CATEGORY_STRIP_GRADIENTS: Record<string, string> = {
+  Accesorios: "linear-gradient(135deg,#F5E6E0,#E8C8C2)",
+  Mayorista: "linear-gradient(135deg,#E2DCF0,#C5BBDA)",
+  "Cuidado capilar": "linear-gradient(135deg,#C8DAD7,#A8BFBB)",
+  "Cuidado piel": "linear-gradient(135deg,#F5E6E0,#EDCBB5)",
+  Maquillaje: "linear-gradient(135deg,#E8C8C2,#C9918B)",
+  Hombres: "linear-gradient(135deg,#D4E8E4,#A8BFBB)",
+  Uñas: "linear-gradient(135deg,#E2DCF0,#C5BBDA)",
+  Tintes: "linear-gradient(135deg,#3D2314,#8B5E4A)",
+  STYLING: "linear-gradient(135deg,#E2DCF0,#B8A8C8)",
+};
+
+const DEFAULT_CATEGORY_GRADIENT = "linear-gradient(135deg,#F5E6E0,#E8C8C2)";
+
+function categoryStripLabel(name: string): string {
+  if (name === "Cuidado capilar") return "Capilar";
+  if (name === "Cuidado piel") return "Cuidado Piel";
+  return name;
+}
+
 export function StoreHomeClient() {
   const {
     catalogProducts: products,
@@ -160,25 +180,20 @@ export function StoreHomeClient() {
       <section className="categories-strip">
         <div className="container">
           <div className="cat-grid">
-            {[
-              ["Accesorios", "👜", "linear-gradient(135deg,#F5E6E0,#E8C8C2)"],
-              ["Mayorista", "📦", "linear-gradient(135deg,#E2DCF0,#C5BBDA)"],
-              ["Cuidado capilar", "💇", "linear-gradient(135deg,#C8DAD7,#A8BFBB)"],
-              ["Cuidado piel", "🌿", "linear-gradient(135deg,#F5E6E0,#EDCBB5)"],
-              ["Maquillaje", "💄", "linear-gradient(135deg,#E8C8C2,#C9918B)"],
-              ["Hombres", "🧔", "linear-gradient(135deg,#D4E8E4,#A8BFBB)"],
-              ["Uñas", "💅", "linear-gradient(135deg,#E2DCF0,#C5BBDA)"],
-            ].map(([label, icon, bg]) => (
+            {Object.entries(menuConfig).map(([label, data]) => (
               <Link
                 key={label}
-                href={`/categoria/${categoryPath(label as string)}`}
+                href={`/categoria/${categoryPath(label)}`}
                 className="cat-card"
                 prefetch
               >
-                <div className="cat-icon" style={{ background: bg as string }}>
-                  {icon}
+                <div
+                  className="cat-icon"
+                  style={{ background: CATEGORY_STRIP_GRADIENTS[label] ?? DEFAULT_CATEGORY_GRADIENT }}
+                >
+                  {data.icon}
                 </div>
-                <span className="cat-label">{label === "Cuidado capilar" ? "Capilar" : label === "Cuidado piel" ? "Cuidado Piel" : label}</span>
+                <span className="cat-label">{categoryStripLabel(label)}</span>
               </Link>
             ))}
           </div>

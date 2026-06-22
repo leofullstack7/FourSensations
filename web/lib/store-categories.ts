@@ -22,32 +22,34 @@ function menuFromDefault(): StorefrontMenuPayload {
   return { config: defaultMenuConfig, slugByCategoryName };
 }
 
-/** Mega menú desde Prisma: categorías + subcategorías en una query; caché 1 h. */
-const getCachedStorefrontCategoryMenu = unstable_cache(
-  async (): Promise<StorefrontMenuPayload> => {
-    const rows = await prisma.category.findMany({
-      orderBy: { sortOrder: "asc" },
-      include: { subcategories: { orderBy: { sortOrder: "asc" } } },
-    });
-    if (rows.length === 0) return menuFromDefault();
+async function fetchStorefrontCategoryMenuFromDb(): Promise<StorefrontMenuPayload> {
+  const rows = await prisma.category.findMany({
+    orderBy: { sortOrder: "asc" },
+    include: { subcategories: { orderBy: { sortOrder: "asc" } } },
+  });
+  if (rows.length === 0) return menuFromDefault();
 
-    const out: MenuConfig = {};
-    const slugByCategoryName: Record<string, string> = {};
-    for (const c of rows) {
-      const subsRecord: Record<string, string[]> = {};
-      for (const s of c.subcategories) {
-        const group = (s.menuTag?.trim() || "General").trim();
-        if (!subsRecord[group]) subsRecord[group] = [];
-        subsRecord[group].push(s.name);
-      }
-      out[c.name] = {
-        icon: c.icon ?? "📦",
-        subs: subsRecord,
-      };
-      slugByCategoryName[c.name] = c.slug;
+  const out: MenuConfig = {};
+  const slugByCategoryName: Record<string, string> = {};
+  for (const c of rows) {
+    const subsRecord: Record<string, string[]> = {};
+    for (const s of c.subcategories) {
+      const group = (s.menuTag?.trim() || "General").trim();
+      if (!subsRecord[group]) subsRecord[group] = [];
+      subsRecord[group].push(s.name);
     }
-    return { config: out, slugByCategoryName };
-  },
+    out[c.name] = {
+      icon: c.icon ?? "📦",
+      subs: subsRecord,
+    };
+    slugByCategoryName[c.name] = c.slug;
+  }
+  return { config: out, slugByCategoryName };
+}
+
+/** Mega menú desde Prisma: categorías + subcategorías en una query; caché 1 h (prod). */
+const getCachedStorefrontCategoryMenu = unstable_cache(
+  async (): Promise<StorefrontMenuPayload> => fetchStorefrontCategoryMenuFromDb(),
   ["storefront-category-menu-v1"],
   { revalidate: 3600 }
 );
@@ -59,6 +61,10 @@ const getCachedStorefrontCategoryMenu = unstable_cache(
 export async function getStorefrontCategoryMenu(): Promise<StorefrontMenuPayload> {
   if (!process.env.DATABASE_URL) return menuFromDefault();
   try {
+    // En local, leer siempre de DB (evita menú viejo en caché tras crear categorías nuevas).
+    if (process.env.NODE_ENV === "development") {
+      return await fetchStorefrontCategoryMenuFromDb();
+    }
     return await getCachedStorefrontCategoryMenu();
   } catch {
     return menuFromDefault();
