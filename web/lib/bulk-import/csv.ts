@@ -83,6 +83,7 @@ export const CODE_HEADER_PATTERNS: string[] = [
 
 export function nameScoreForColumn(normalizedHeader: string): number {
   const h = normalizeKey(normalizedHeader);
+  if (h.includes("barras")) return 9999;
   for (let i = 0; i < CODE_HEADER_PATTERNS.length; i++) {
     const p = CODE_HEADER_PATTERNS[i]!;
     if (h === p || h.includes(p)) return i;

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import banner2Image from "@/app/banner2.webp";
+import banner2MovilImage from "@/app/banner2-movil.webp";
 import logoImage from "@/app/logo.png";
 import { useReveal } from "@/hooks/useReveal";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
@@ -14,7 +15,8 @@ import type { StoreProduct } from "@/lib/types/product";
 import type { TintBubbleItem } from "@/lib/tints";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-const HERO_BANNERS = [banner2Image.src, "/banner.webp"] as const;
+const HERO_BANNERS_DESKTOP = [banner2Image.src, "/banner.webp"] as const;
+const HERO_BANNERS_MOBILE = [banner2MovilImage.src, "/banner-movil.webp"] as const;
 const INITIAL_VISIBLE_PRODUCTS = 32;
 const LOAD_MORE_PRODUCTS = 20;
 
@@ -67,7 +69,7 @@ export function StoreHomeClient({ tintItems = [] }: StoreHomeClientProps) {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setHeroBannerIndex((prev) => (prev + 1) % HERO_BANNERS.length);
+      setHeroBannerIndex((prev) => (prev + 1) % HERO_BANNERS_DESKTOP.length);
     }, 12000);
     return () => window.clearInterval(timer);
   }, []);
@@ -109,8 +111,22 @@ export function StoreHomeClient({ tintItems = [] }: StoreHomeClientProps) {
     <>
       <section className="hero-section">
         <div className={`banner-placeholder-wrapper${isSecondaryBanner ? " banner-placeholder-wrapper-secondary" : ""}`} id="hero-banner">
-          <div className={`hero-banner-layer${heroBannerIndex === 0 ? " active" : ""}`} style={{ backgroundImage: `url("${HERO_BANNERS[0]}")` }} />
-          <div className={`hero-banner-layer${heroBannerIndex === 1 ? " active" : ""}`} style={{ backgroundImage: `url("${HERO_BANNERS[1]}")` }} />
+          <div
+            className={`hero-banner-layer hero-banner-layer--desktop${heroBannerIndex === 0 ? " active" : ""}`}
+            style={{ backgroundImage: `url("${HERO_BANNERS_DESKTOP[0]}")` }}
+          />
+          <div
+            className={`hero-banner-layer hero-banner-layer--mobile${heroBannerIndex === 0 ? " active" : ""}`}
+            style={{ backgroundImage: `url("${HERO_BANNERS_MOBILE[0]}")` }}
+          />
+          <div
+            className={`hero-banner-layer hero-banner-layer--desktop${heroBannerIndex === 1 ? " active" : ""}`}
+            style={{ backgroundImage: `url("${HERO_BANNERS_DESKTOP[1]}")` }}
+          />
+          <div
+            className={`hero-banner-layer hero-banner-layer--mobile${heroBannerIndex === 1 ? " active" : ""}`}
+            style={{ backgroundImage: `url("${HERO_BANNERS_MOBILE[1]}")` }}
+          />
           <div className={`hero-center-content${isPrimaryOnScreen ? "" : " hero-center-content-minimal"}`}>
             {isPrimaryOnScreen ? (
               <>

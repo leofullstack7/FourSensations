@@ -16,6 +16,7 @@ import { effectiveProductTitle, normalizeProductNameForDb } from "@/lib/bulk-imp
 import { isTintesCategory, effectiveTintFamily } from "@/lib/bulk-import/tintes";
 import { normalizeTintCatalogName } from "@/lib/bulk-import/tint-catalog";
 import { normalizeTaxonomyNameForDb } from "@/lib/bulk-import/category-resolve";
+import { normalizeKey } from "@/lib/bulk-import/normalize";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,8 +39,20 @@ const BLOCKING_FILTER = (x: string) =>
   x !== "Sin imagen en ZIP para este código" &&
   x !== "Sin imagen en ZIP para este nivel" &&
   x !== "Producto ya registrado" &&
+  x !== "Código de barras distinto al registrado en tienda" &&
   !x.startsWith("Familia sin resolver") &&
   !x.startsWith("Tipo sin resolver");
+
+function variantGroupFieldsFromRow(row: BulkPreviewRow): {
+  variantGroupCode: string | null;
+  variantGroupOrder: number | null;
+} {
+  const variantGroupRaw = row.mapped.variantGroupCode?.trim() || null;
+  const variantGroupCode = variantGroupRaw ? normalizeKey(variantGroupRaw) : null;
+  const variantGroupOrder =
+    variantGroupCode != null && row.variantGroupOrder != null ? row.variantGroupOrder : null;
+  return { variantGroupCode, variantGroupOrder };
+}
 
 function parsePreview(raw: unknown): BulkPreviewResult | null {
   if (!raw || typeof raw !== "object") return null;
@@ -96,7 +109,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const idSet = new Set(parsed.data.rowIds ?? []);
   const indexSet = new Set(parsed.data.rowIndexes ?? []);
   const existingPolicy = parsed.data.existingPolicy ?? "skip";
-  const sourceRows = preview.matchedRows?.length ? preview.matchedRows : preview.rows;
+  /** Todas las filas del CSV (necesario para grupos de barras y filas ya registradas). */
+  const sourceRows = preview.rows;
   const toImport: BulkPreviewRow[] = [];
   const seenRefInSelection = new Set<string>();
   for (const row of sourceRows) {
@@ -111,7 +125,18 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       );
     }
     const title = effectiveProductTitle(row.mapped);
-    if (!row.normalizedCode || !title || row.mapped.price == null || !row.mapped.categorySlug || !row.mapped.subcategoryName) {
+    const isExistingVariantGroupAssign =
+      existingPolicy === "skip" &&
+      row.isExistingProduct &&
+      !!row.mapped.variantGroupCode?.trim();
+
+    if (!row.normalizedCode) {
+      return noStoreJson({ error: `Fila ${row.rowIndex + 1}: código vacío` }, { status: 400 });
+    }
+    if (
+      !isExistingVariantGroupAssign &&
+      (!title || row.mapped.price == null || !row.mapped.categorySlug || !row.mapped.subcategoryName)
+    ) {
       return noStoreJson({ error: `Fila ${row.rowIndex + 1}: datos incompletos` }, { status: 400 });
     }
     const ref = row.normalizedCode;
@@ -147,17 +172,28 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const createdProducts: ReturnType<typeof prismaProductToAdmin>[] = [];
   const errors: string[] = [];
   let skippedExistingDuplicates = 0;
+  let variantGroupsAssigned = 0;
 
   try {
     for (const row of toImport) {
       const ref = row.normalizedCode!;
       try {
         const clash = clashByRef.get(ref) ?? null;
-        if (clash) {
-          if (existingPolicy === "skip") {
+        const { variantGroupCode, variantGroupOrder } = variantGroupFieldsFromRow(row);
+
+        if (clash && existingPolicy === "skip") {
+          if (variantGroupCode) {
+            const productRow = await prisma.product.update({
+              where: { id: clash.id },
+              data: { variantGroupCode, variantGroupOrder },
+              include: { images: true },
+            });
+            createdProducts.push(prismaProductToAdmin(productRow));
+            variantGroupsAssigned += 1;
+          } else {
             skippedExistingDuplicates += 1;
-            continue;
           }
+          continue;
         }
 
         const matchFiles = (row.imageMatches ?? [])
@@ -239,6 +275,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
                 stock: row.mapped.stock ?? 0,
                 ...(applyTags ? { tags } : {}),
                 ...tintData,
+                variantGroupCode,
+                variantGroupOrder,
                 imageUrl: mainUrl,
                 active: true,
                 images: {
@@ -271,6 +309,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
                 isNew: false,
                 featuredInHome: false,
                 active: true,
+                variantGroupCode,
+                variantGroupOrder,
                 ...tintData,
                 ...(galleryUrls.length > 0 && {
                   images: {
@@ -301,6 +341,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       imported: createdProducts.length,
       failed: errors.length,
       skippedExistingDuplicates,
+      variantGroupsAssigned,
       errors,
     };
 
@@ -334,6 +375,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       errors,
       products: createdProducts,
       skippedExistingDuplicates,
+      variantGroupsAssigned,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error en importaciÃ³n";

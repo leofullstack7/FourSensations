@@ -11,6 +11,10 @@ export type AdminProduct = {
   slug: string;
   /** Código / referencia (CSV, importación). */
   externalRef?: string | null;
+  /** Código de grupo de variantes (columna CSV «Barras»). */
+  variantGroupCode?: string | null;
+  /** Orden dentro del grupo (0 = primera variante en CSV). */
+  variantGroupOrder?: number | null;
   name: string;
   brand: string;
   category: string;

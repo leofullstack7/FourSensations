@@ -22,6 +22,14 @@ import {
   postSyncProductTagsFromMenu,
   updateAdminProduct,
 } from "@/lib/api/admin-products";
+import {
+  buildPrimaryVariantByGroup,
+  buildVariantCountByGroup,
+  collapseProductsForAdminList,
+  groupListThumbnail,
+  resolveAdminListRowsAfterFilter,
+} from "@/lib/admin/variant-groups";
+import { AdminProductVariantsModal } from "@/components/admin/AdminProductVariantsModal";
 import { fetchAdminPaidOrders } from "@/lib/api/admin-orders";
 import {
   addProductGalleryImage,
@@ -36,6 +44,7 @@ import {
   postTintResolveCatalog,
 } from "@/lib/api/admin-bulk-import";
 import { bulkImportStableRowId } from "@/lib/bulk-import/bulk-import-row-id";
+import { normalizeKey } from "@/lib/bulk-import/normalize";
 import type {
   BulkPreviewNewTaxonomyItem,
   BulkPreviewResult,
@@ -434,6 +443,8 @@ export function AdminApp() {
     return out;
   }, [products, productFilterCategorySlug]);
 
+  const catalogListProducts = useMemo(() => collapseProductsForAdminList(products), [products]);
+
   const filteredProducts = useMemo(() => {
     let list = products;
     const q = productSearch.trim().toLowerCase();
@@ -454,7 +465,7 @@ export function AdminApp() {
         (x.tags ?? []).some((t) => t.trim().toLowerCase() === productFilterTag.toLowerCase())
       );
     }
-    return list;
+    return resolveAdminListRowsAfterFilter(list, products);
   }, [
     products,
     productSearch,
@@ -959,7 +970,8 @@ export function AdminApp() {
                   tagOptions={productFilterTagOptions}
                   sortedCategories={productListSortedCategories}
                   filteredProducts={filteredProducts}
-                  totalProductCount={products.length}
+                  allProducts={products}
+                  totalProductCount={catalogListProducts.length}
                   listLoading={productsLoading}
                   categoryTree={categoriesTree}
                   selectedIds={productListSelectedIds}
@@ -1003,6 +1015,16 @@ export function AdminApp() {
                       showToast(e instanceof Error ? e.message : "No se pudo eliminar", "danger", "⚠️");
                     }
                   }}
+                  onDeleteVariant={async (id) => {
+                    await deleteAdminProduct(id);
+                    setProductListSelectedIds((prev) => {
+                      const n = new Set(prev);
+                      n.delete(id);
+                      return n;
+                    });
+                    await loadProducts();
+                  }}
+                  showToast={showToast}
                 />
               )}
               {productTab === "add" && (
@@ -1192,6 +1214,7 @@ function AdminProductListTab({
   tagOptions,
   sortedCategories,
   filteredProducts,
+  allProducts,
   totalProductCount,
   listLoading,
   categoryTree,
@@ -1202,6 +1225,8 @@ function AdminProductListTab({
   onToggleFeaturedInHome,
   onView,
   onDelete,
+  onDeleteVariant,
+  showToast,
 }: {
   productSearch: string;
   setProductSearch: (v: string) => void;
@@ -1218,6 +1243,7 @@ function AdminProductListTab({
   tagOptions: string[];
   sortedCategories: AdminCategoryTree[];
   filteredProducts: AdminProduct[];
+  allProducts: AdminProduct[];
   totalProductCount: number;
   listLoading: boolean;
   categoryTree: AdminCategoryTree[];
@@ -1228,7 +1254,28 @@ function AdminProductListTab({
   onToggleFeaturedInHome: (id: string, value: boolean) => void | Promise<void>;
   onView: (p: AdminProduct) => void;
   onDelete: (id: string) => void | Promise<void>;
+  onDeleteVariant: (id: string) => void | Promise<void>;
+  showToast: (msg: string, type?: string, icon?: string) => void;
 }) {
+  const [variantsModalProduct, setVariantsModalProduct] = useState<AdminProduct | null>(null);
+  const [variantDeletingId, setVariantDeletingId] = useState<string | null>(null);
+
+  const variantCountByGroup = useMemo(() => buildVariantCountByGroup(allProducts), [allProducts]);
+  const primaryByGroup = useMemo(() => buildPrimaryVariantByGroup(allProducts), [allProducts]);
+
+  useEffect(() => {
+    if (!variantsModalProduct?.variantGroupCode?.trim()) return;
+    const code = variantsModalProduct.variantGroupCode.trim();
+    const inGroup = allProducts.filter((p) => p.variantGroupCode?.trim() === code);
+    if (inGroup.length < 1) {
+      setVariantsModalProduct(null);
+      return;
+    }
+    if (!inGroup.some((p) => p.id === variantsModalProduct.id)) {
+      setVariantsModalProduct(inGroup[0] ?? null);
+    }
+  }, [allProducts, variantsModalProduct]);
+
   const hasActiveFilters =
     !!filterBrand || !!filterCategorySlug || !!filterSubcategory || !!filterTag || !!productSearch.trim();
 
@@ -1370,6 +1417,7 @@ function AdminProductListTab({
               <th title="Orden en la sección Productos Destacados del home (sin etiqueta pública)">Prioridad home</th>
               <th>Precio</th>
               <th>Stock</th>
+              <th style={{ textAlign: "center" }}>Variantes</th>
               <th>Estado</th>
               <th>Acciones</th>
             </tr>
@@ -1377,13 +1425,13 @@ function AdminProductListTab({
           <tbody>
             {listLoading && filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                <td colSpan={10} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   Cargando…
                 </td>
               </tr>
             ) : filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                <td colSpan={10} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   {totalProductCount === 0
                     ? "Sin productos"
                     : "Ningún producto coincide con la búsqueda o los filtros seleccionados."}
@@ -1393,6 +1441,10 @@ function AdminProductListTab({
               filteredProducts.map((p) => {
                 const stockStatus = p.stock === 0 ? "status-out" : p.stock < 5 ? "status-low" : "status-active";
                 const stockLabel = p.stock === 0 ? "Sin stock" : p.stock < 5 ? "Stock bajo" : "Disponible";
+                const groupCode = p.variantGroupCode?.trim() ?? "";
+                const variantCount = groupCode ? (variantCountByGroup.get(groupCode) ?? 0) : 0;
+                const listThumb = groupListThumbnail(p, primaryByGroup);
+                const isGroupRow = variantCount >= 2;
                 return (
                   <tr key={p.id}>
                     <td style={{ textAlign: "center", verticalAlign: "middle" }}>
@@ -1406,10 +1458,12 @@ function AdminProductListTab({
                     </td>
                     <td>
                       <div className="table-product-cell" style={{ cursor: "pointer" }} onClick={() => onView(p)} title="Ver detalle">
-                        <AdminProductThumb imageUrl={p.imageUrl} emoji={p.emoji} />
+                        <AdminProductThumb imageUrl={listThumb} emoji={p.emoji} />
                         <div>
                           <div className="table-product-name">{p.name}</div>
-                          <div className="table-product-cat">{p.subcategory}</div>
+                          <div className="table-product-cat">
+                            {isGroupRow ? `Grupo · ${variantCount} variantes` : p.subcategory}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -1429,6 +1483,36 @@ function AdminProductListTab({
                     </td>
                     <td>{formatPrice(p.price)}</td>
                     <td>{p.stock}</td>
+                    <td style={{ textAlign: "center", verticalAlign: "middle" }}>
+                      {isGroupRow ? (
+                        <button
+                          type="button"
+                          title={`Ver ${variantCount} variantes`}
+                          aria-label={`Ver ${variantCount} variantes del grupo`}
+                          onClick={() => setVariantsModalProduct(p)}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            minWidth: 32,
+                            height: 32,
+                            padding: "0 10px",
+                            borderRadius: 999,
+                            border: "none",
+                            background: "var(--rose)",
+                            color: "white",
+                            fontWeight: 700,
+                            fontSize: 13,
+                            cursor: "pointer",
+                            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                          }}
+                        >
+                          {variantCount}
+                        </button>
+                      ) : (
+                        <span style={{ color: "var(--text-muted)" }}>—</span>
+                      )}
+                    </td>
                     <td>
                       <span className={`status-chip ${stockStatus}`}>{stockLabel}</span>
                     </td>
@@ -1445,6 +1529,27 @@ function AdminProductListTab({
           </tbody>
         </table>
       </div>
+      <AdminProductVariantsModal
+        open={variantsModalProduct != null}
+        anchorProduct={variantsModalProduct}
+        allProducts={allProducts}
+        categoryTree={categoryTree}
+        deletingId={variantDeletingId}
+        onClose={() => setVariantsModalProduct(null)}
+        categoryDisplayName={categoryDisplayName}
+        onDeleteVariant={async (id) => {
+          if (!confirm("¿Eliminar esta variante del producto?")) return;
+          setVariantDeletingId(id);
+          try {
+            await onDeleteVariant(id);
+            showToast("Variante eliminada", "default", "🗑️");
+          } catch (e) {
+            showToast(e instanceof Error ? e.message : "No se pudo eliminar", "danger", "⚠️");
+          } finally {
+            setVariantDeletingId(null);
+          }
+        }}
+      />
     </>
   );
 }
@@ -1885,17 +1990,27 @@ function AdminBulkTab({
 
   const selectAllValid = () => {
     if (!preview) return;
+    const sourceRows = preview.csvHasVariantGroupColumn ? preview.rows : preview.matchedRows;
     const next = new Set<string>();
-    for (const r of preview.matchedRows) {
+    for (const r of sourceRows) {
       const blocking = r.issues.filter((x) => {
         if (x === "Sin imagen en ZIP para este código") return false;
         if (x === "Sin imagen en ZIP para este nivel") return false;
         if (x === "Producto ya registrado") return false;
+        if (x === "Código de barras distinto al registrado en tienda") return false;
         return true;
       });
       if (blocking.length === 0 && r.normalizedCode) next.add(bulkImportStableRowId(r));
     }
     setSelectedRowIds(Array.from(next));
+  };
+
+  const selectAllForVariantGroups = () => {
+    if (!preview?.csvHasVariantGroupColumn) return;
+    const next = (preview.rows ?? [])
+      .filter((r) => r.mapped.variantGroupCode?.trim() && r.normalizedCode)
+      .map(bulkImportStableRowId);
+    setSelectedRowIds(next);
   };
 
   const clearSelection = () => setSelectedRowIds([]);
@@ -1906,24 +2021,38 @@ function AdminBulkTab({
     return cat ? [...cat.subcategories].sort((a, b) => a.sortOrder - b.sortOrder) : [];
   }, [sortedCats, manualCategorySlug]);
 
-  const previewTableRows = useMemo(
-    () =>
-      (preview?.matchedRows ?? []).map((r) => {
+  const previewTableRows = useMemo(() => {
+    const sourceRows = preview?.csvHasVariantGroupColumn
+      ? preview.rows ?? []
+      : preview?.matchedRows ?? [];
+    return sourceRows.map((r) => {
         const previewRowId = bulkImportStableRowId(r);
         const blockingErrors = r.issues.filter((x) => {
           if (x === "Sin imagen en ZIP para este código") return false;
           if (x === "Sin imagen en ZIP para este nivel") return false;
           if (x === "Producto ya registrado") return false;
+          if (x === "Código de barras distinto al registrado en tienda") return false;
           return true;
         });
-        const hasExisting = r.issues.includes("Producto ya registrado");
+        const hasExisting = r.isExistingProduct;
+        const hasImageMatch = r.imageMatches.some(
+          (m) =>
+            m.matchedBy === "exact" ||
+            m.matchedBy === "numericPrefix" ||
+            m.matchedBy === "sixDigitPrefix" ||
+            m.matchedBy === "tintLevel"
+        );
         const categoryLabel = r.mapped.categorySlug
           ? categoryDisplayName(r.mapped.categorySlug, categories)
           : null;
+        const barcodeRaw = r.mapped.variantGroupCode?.trim() || null;
         return {
           previewRowId,
           csvRowIndex: r.rowIndex,
           codeValue: r.codeRaw,
+          barcodeRaw,
+          barcodeGroupKey: barcodeRaw ? normalizeKey(barcodeRaw) : null,
+          variantGroupOrder: r.variantGroupOrder,
           categoryCsv: r.mapped.category,
           subcategoryCsv: r.mapped.subcategory,
           categorySlug: r.mapped.categorySlug,
@@ -1942,18 +2071,50 @@ function AdminBulkTab({
           isTintesRow: isTintesCategory(r.mapped.categorySlug, categoryLabel),
           tagsValue: r.mapped.tags ?? [],
           matchedImages: r.imageMatches,
+          hasImageMatch,
           matchStatus: "valid" as const,
           selected: selectedRowIdSet.has(previewRowId),
           errors: blockingErrors,
           warnings: r.issues.filter(
-            (x) => x === "Sin imagen en ZIP para este código" || x === "Sin imagen en ZIP para este nivel"
+            (x) =>
+              x === "Sin imagen en ZIP para este código" ||
+              x === "Sin imagen en ZIP para este nivel" ||
+              x === "Código de barras distinto al registrado en tienda"
           ),
           hasExisting,
           existingProductName: r.existingProductName,
+          existingVariantGroupCode: r.existingVariantGroupCode,
         };
-      }),
-    [preview, selectedRowIdSet, existingPolicy, categories]
-  );
+      });
+  }, [preview, selectedRowIdSet, categories]);
+
+  const previewRowsByBarcodeGroup = useMemo(() => {
+    if (!preview?.csvHasVariantGroupColumn) return null;
+    const byKey = new Map<string, typeof previewTableRows>();
+    const ungrouped: typeof previewTableRows = [];
+    for (const row of previewTableRows) {
+      const key = row.barcodeGroupKey;
+      if (!key) {
+        ungrouped.push(row);
+        continue;
+      }
+      const list = byKey.get(key) ?? [];
+      list.push(row);
+      byKey.set(key, list);
+    }
+    const groups = (preview.variantGroups ?? [])
+      .map((g) => ({
+        meta: g,
+        rows: (byKey.get(g.groupKey) ?? []).sort(
+          (a, b) => (a.variantGroupOrder ?? 9999) - (b.variantGroupOrder ?? 9999) || a.csvRowIndex - b.csvRowIndex
+        ),
+        dbOnly: (preview.dbVariantsByGroup?.[g.groupKey] ?? []).filter(
+          (p) => p.externalRef && !byKey.get(g.groupKey)?.some((r) => r.codeValue === p.externalRef)
+        ),
+      }))
+      .filter((g) => g.rows.length > 0 || g.dbOnly.length > 0);
+    return { groups, ungrouped };
+  }, [preview, previewTableRows]);
 
   const hasTintesInBatch = useMemo(
     () => previewTableRows.some((r) => r.isTintesRow),
@@ -2008,6 +2169,173 @@ function AdminBulkTab({
     [jobId, manualCategorySlug, manualSubcategoryName, selectedRowIds, setMutation, showToast]
   );
 
+  type BulkPreviewTableRow = (typeof previewTableRows)[number];
+
+  const bulkPreviewTableColSpan =
+    (hasTintesInBatch ? 17 : 14) + (preview?.csvHasVariantGroupColumn ? 1 : 0);
+
+  const renderBulkPreviewDataRow = (r: BulkPreviewTableRow) => {
+    const warnOnly = r.warnings.length > 0;
+    const ok = r.errors.length === 0;
+    return (
+      <tr
+        key={r.previewRowId}
+        style={{
+          opacity: ok ? 1 : 0.75,
+          background: r.hasExisting ? "rgba(255, 84, 84, 0.10)" : undefined,
+        }}
+        onClick={(e) => {
+          const el = e.target as HTMLElement;
+          if (el.closest("input, button, a, label, select, textarea")) return;
+          toggleRow(r.previewRowId);
+        }}
+      >
+        <td className="admin-bulk-check-cell">
+          <input
+            type="checkbox"
+            checked={r.selected}
+            onChange={() => toggleRow(r.previewRowId)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Seleccionar fila ${r.csvRowIndex + 1}`}
+          />
+        </td>
+        {preview?.csvHasVariantGroupColumn && (
+          <td style={{ textAlign: "center", fontSize: 12, color: "var(--text-muted)" }}>
+            {r.variantGroupOrder != null ? r.variantGroupOrder + 1 : "—"}
+          </td>
+        )}
+        <td style={{ fontSize: 12, fontFamily: "monospace" }}>{r.codeValue ?? "—"}</td>
+        <td>{r.nameValue ?? "—"}</td>
+        <td style={{ fontSize: 12, maxWidth: 200 }} title={r.descriptionValue ?? undefined}>
+          {r.descriptionValue?.trim() ? r.descriptionValue : "—"}
+        </td>
+        {hasTintesInBatch && (
+          <>
+            <td style={{ fontSize: 12 }}>{r.isTintesRow ? (r.tintFamilyValue ?? "—") : "—"}</td>
+            <td style={{ fontSize: 12, fontFamily: "monospace" }}>
+              {r.isTintesRow ? (r.tintLevelValue ?? "—") : "—"}
+            </td>
+            <td style={{ fontSize: 12 }}>{r.isTintesRow ? (r.tintGroupValue ?? "—") : "—"}</td>
+          </>
+        )}
+        <td style={{ fontSize: 12 }}>{r.categoryCsv ?? "—"}</td>
+        <td style={{ fontSize: 12 }}>{r.subcategoryCsv ?? "—"}</td>
+        <td>{r.categorySlug ? categoryDisplayName(r.categorySlug, categories) : "—"}</td>
+        <td>{r.subcategoryValue ?? "—"}</td>
+        <td>{r.priceValue != null ? formatPrice(r.priceValue) : "—"}</td>
+        <td>{r.stockValue ?? "—"}</td>
+        <td style={{ fontSize: 11, maxWidth: 160, color: "var(--text-muted)" }} title={(r.tagsValue ?? []).join(", ")}>
+          {(r.tagsValue ?? []).length ? (r.tagsValue ?? []).join(", ") : "—"}
+        </td>
+        <td style={{ fontSize: 12 }}>
+          {r.matchedImages.length
+            ? r.matchedImages
+                .map((m) => {
+                  const how =
+                    m.matchedBy === "tintLevel"
+                      ? "nivel"
+                      : m.matchedBy === "numericPrefix"
+                        ? "prefijo"
+                        : m.matchedBy === "sixDigitPrefix"
+                          ? "6 dígitos"
+                          : "exacto";
+                  return `${m.imageFilename} (${how})`;
+                })
+                .join(", ")
+            : "—"}
+        </td>
+        <td style={{ fontSize: 12 }}>
+          {ok ? (
+            <span style={{ color: r.hasExisting ? "#b00020" : "green" }}>
+              {r.hasExisting
+                ? existingPolicy === "replace"
+                  ? "↺ Reemplazar"
+                  : "⛔ Ya registrado"
+                : !r.hasImageMatch
+                  ? "⚠ Sin foto"
+                  : warnOnly
+                    ? "⚠ Aviso"
+                    : "✓ OK"}
+            </span>
+          ) : (
+            <span style={{ color: "var(--danger, #b00020)" }} title={r.errors.join(" · ")}>
+              ✗ {r.errors[0] ?? "Error"}
+            </span>
+          )}
+        </td>
+        <td style={{ minWidth: 220 }}>
+          {r.errors.length > 0 ? (
+            editingTaxonomyRowId === r.previewRowId ? (
+              <div style={{ display: "grid", gap: 6 }}>
+                <select
+                  className="form-select"
+                  value={manualCategorySlug}
+                  onChange={(e) => {
+                    const slug = e.target.value;
+                    setManualCategorySlug(slug);
+                    const cat = sortedCats.find((c) => c.slug === slug);
+                    setManualSubcategoryName(cat?.subcategories?.[0]?.name ?? "");
+                  }}
+                  disabled={saving}
+                >
+                  {sortedCats.map((c) => (
+                    <option key={c.id} value={c.slug}>
+                      {c.icon ? `${c.icon} ` : ""}
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="form-select"
+                  value={manualSubcategoryName}
+                  onChange={(e) => setManualSubcategoryName(e.target.value)}
+                  disabled={saving || manualSubcategoryOptions.length === 0}
+                >
+                  {manualSubcategoryOptions.map((s) => (
+                    <option key={s.id} value={s.name}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={saving || !manualCategorySlug || !manualSubcategoryName}
+                    onClick={() => {
+                      void applyManualTaxonomyOverride(r);
+                    }}
+                  >
+                    Aplicar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    disabled={saving}
+                    onClick={() => setEditingTaxonomyRowId(null)}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={saving || sortedCats.length === 0}
+                onClick={() => openManualTaxonomyEditor(r)}
+              >
+                Editar categoría/subcategoría
+              </button>
+            )
+          ) : (
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>—</span>
+          )}
+        </td>
+      </tr>
+    );
+  };
+
   return (
     <div className="admin-bulk-tab">
       <div className="admin-card">
@@ -2043,9 +2371,11 @@ function AdminBulkTab({
         }}
       >
         <strong>Flujo:</strong> sube un <strong>CSV</strong> (encabezados en la primera fila) y un <strong>ZIP</strong> con fotos cuyo{" "}
-        <strong>nombre de archivo</strong> (sin extensión) coincide con la <strong>columna de código</strong> del CSV. Pulsa{" "}
-        <strong>Analizar</strong> para ver el resumen y la tabla; luego <strong>Importar seleccionados</strong> crea productos y sube
-        imágenes a Bunny. Si el CSV incluye una columna de <strong>etiquetas</strong> (p. ej. &quot;Etiquetas&quot;, &quot;Tags&quot;),
+        <strong>nombre de archivo</strong> (sin extensión) coincide con la <strong>columna de código</strong> del CSV. Si incluyes una columna de{" "}
+        <strong>código de barras</strong> (p. ej. «Barras», «Código de barras»), las filas con el mismo valor se agrupan como{" "}
+        <strong>variantes del mismo producto</strong>. Al volver a subir un CSV, el sistema detecta códigos ya registrados y los muestra
+        organizados por grupo. Pulsa <strong>Analizar</strong> para ver el resumen y la tabla; luego <strong>Importar seleccionados</strong> crea
+        productos y sube imágenes a Bunny. Si el CSV incluye una columna de <strong>etiquetas</strong> (p. ej. &quot;Etiquetas&quot;, &quot;Tags&quot;),
         puedes listar varias separadas por coma, punto y coma o |. Máx. 500 filas y 2&nbsp;MB CSV / 50&nbsp;MB ZIP.
       </div>
 
@@ -2128,7 +2458,15 @@ function AdminBulkTab({
                 setJobId(res.jobId);
                 setPreview(res.preview);
                 setExpiresAt(res.expiresAt);
-                setSelectedRowIds((res.preview.matchedRows ?? []).map(bulkImportStableRowId));
+                setSelectedRowIds(
+                  res.preview.csvHasVariantGroupColumn
+                    ? (res.preview.rows ?? [])
+                        .filter((r) => r.mapped.variantGroupCode?.trim() && r.normalizedCode)
+                        .map(bulkImportStableRowId)
+                    : (res.preview.matchedRows ?? [])
+                        .filter((r) => !r.isExistingProduct)
+                        .map(bulkImportStableRowId)
+                );
                 const hintN = res.preview.taxonomyRehomeHints?.length ?? 0;
                 const newN = res.preview.newCategories?.length ?? 0;
                 if (hintN > 0) {
@@ -2202,6 +2540,12 @@ function AdminBulkTab({
                 ["Imágenes sin fila", preview.stats.unmatchedImages],
                 ["Con errores", preview.stats.rowsWithErrors],
                 ["Ya en tienda (código)", preview.stats.existingProductRows ?? 0],
+                ...(preview.csvHasVariantGroupColumn
+                  ? ([
+                      ["Grupos de barras", preview.stats.variantGroupCount ?? 0],
+                      ["Variantes ya en tienda", preview.stats.existingInVariantGroups ?? 0],
+                    ] as const)
+                  : []),
               ] as const
             ).map(([label, n]) => (
               <div
@@ -2285,13 +2629,41 @@ function AdminBulkTab({
             <button type="button" className="btn btn-outline btn-sm" onClick={selectAllValid}>
               Seleccionar filas importables
             </button>
+            {preview?.csvHasVariantGroupColumn && (
+              <button type="button" className="btn btn-outline btn-sm" onClick={selectAllForVariantGroups}>
+                Seleccionar todos los grupos de barras
+              </button>
+            )}
             <button type="button" className="btn btn-outline btn-sm" onClick={clearSelection}>
               Quitar selección
             </button>
             <span style={{ fontSize: 13, color: "var(--text-muted)", alignSelf: "center" }}>
-              {selectedRowIds.length} fila(s) seleccionada(s) de {previewTableRows.length} con match de imagen
+              {selectedRowIds.length} fila(s) seleccionada(s) de {previewTableRows.length}
+              {preview.csvHasVariantGroupColumn ? " en CSV" : " con match de imagen"}
             </span>
           </div>
+
+          {preview.csvHasVariantGroupColumn && (preview.variantGroups?.length ?? 0) > 0 && (
+            <div
+              style={{
+                marginBottom: 14,
+                padding: "12px 16px",
+                borderRadius: "var(--radius-md)",
+                background: "linear-gradient(135deg, #f0f4ff 0%, #fff5f8 100%)",
+                border: "1px solid var(--dusty-rose)",
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}
+            >
+              <strong>Grupos de variantes (código de barras):</strong> {preview.stats.variantGroupCount ?? 0} grupo(s) ·{" "}
+              {preview.stats.existingInVariantGroups ?? 0} variante(s) del CSV ya registrada(s) en tienda.
+              {previewTableRows.some((r) => r.warnings.some((w) => w.includes("Código de barras distinto"))) && (
+                <span style={{ display: "block", marginTop: 6, color: "var(--dusty-rose)" }}>
+                  Algunas filas tienen un código de barras distinto al guardado; con «Reemplazar» se actualizará al del CSV.
+                </span>
+              )}
+            </div>
+          )}
 
           <div className="admin-bulk-policy-row">
             <label className="form-label" style={{ marginBottom: 6, display: "block" }}>
@@ -2303,11 +2675,13 @@ function AdminBulkTab({
               value={existingPolicy}
               onChange={(e) => setExistingPolicy(e.target.value as "skip" | "replace")}
             >
-              <option value="skip">Omitir filas ya registradas (no reemplazar)</option>
+              <option value="skip">Omitir existentes y solo asignar grupo de barras / variantes</option>
               <option value="replace">Reemplazar datos del producto ya registrado</option>
             </select>
             <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "10px 0 0", lineHeight: 1.45 }}>
-              Si eliges omitir, esas filas se saltan al importar; si eliges reemplazar, se actualizan nombre, precio, imágenes, etc.
+              Con «Omitir…», los productos que ya existen no cambian nombre, precio ni imágenes, pero sí se les asigna el
+              código de barras del CSV para agruparlos como variantes. Usa «Reemplazar» solo si quieres actualizar todo el
+              producto desde el CSV.
             </p>
           </div>
 
@@ -2354,6 +2728,11 @@ function AdminBulkTab({
                   <th style={{ width: 44 }} className="admin-bulk-check-cell">
                     Sel.
                   </th>
+                  {preview.csvHasVariantGroupColumn && (
+                    <th style={{ width: 36, textAlign: "center" }} title="Orden de variante en el grupo">
+                      #
+                    </th>
+                  )}
                   <th>Código</th>
                   <th>Nombre</th>
                   <th>Descripción</th>
@@ -2377,164 +2756,67 @@ function AdminBulkTab({
                 </tr>
               </thead>
               <tbody>
-                {previewTableRows.map((r) => {
-                  const warnOnly = r.warnings.length > 0;
-                  const ok = r.errors.length === 0;
-                  return (
-                    <tr
-                      key={r.previewRowId}
-                      style={{
-                        opacity: ok ? 1 : 0.75,
-                        background: r.hasExisting ? "rgba(255, 84, 84, 0.10)" : undefined,
-                      }}
-                      onClick={(e) => {
-                        const el = e.target as HTMLElement;
-                        if (el.closest("input, button, a, label, select, textarea")) return;
-                        toggleRow(r.previewRowId);
-                      }}
-                    >
-                      <td className="admin-bulk-check-cell">
-                        <input
-                          type="checkbox"
-                          checked={r.selected}
-                          onChange={() => toggleRow(r.previewRowId)}
-                          onClick={(e) => e.stopPropagation()}
-                          aria-label={`Seleccionar fila ${r.csvRowIndex + 1}`}
-                        />
-                      </td>
-                      <td style={{ fontSize: 12, fontFamily: "monospace" }}>{r.codeValue ?? "—"}</td>
-                      <td>{r.nameValue ?? "—"}</td>
-                      <td style={{ fontSize: 12, maxWidth: 200 }} title={r.descriptionValue ?? undefined}>
-                        {r.descriptionValue?.trim() ? r.descriptionValue : "—"}
-                      </td>
-                      {hasTintesInBatch && (
-                        <>
-                          <td style={{ fontSize: 12 }}>{r.isTintesRow ? (r.tintFamilyValue ?? "—") : "—"}</td>
-                          <td style={{ fontSize: 12, fontFamily: "monospace" }}>
-                            {r.isTintesRow ? (r.tintLevelValue ?? "—") : "—"}
+                {previewRowsByBarcodeGroup
+                  ? previewRowsByBarcodeGroup.groups.flatMap(({ meta, rows, dbOnly }) => [
+                      <tr key={`group-${meta.groupKey}`} style={{ background: "var(--lavender-light)" }}>
+                        <td
+                          colSpan={bulkPreviewTableColSpan}
+                          style={{
+                            padding: "10px 14px",
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: "var(--dark)",
+                            borderBottom: "2px solid var(--dusty-rose)",
+                          }}
+                        >
+                          <span style={{ fontFamily: "monospace", marginRight: 10 }}>📦 {meta.groupLabel}</span>
+                          <span style={{ fontWeight: 500, color: "var(--text-muted)", fontSize: 12 }}>
+                            {meta.rowCount} en CSV
+                            {meta.existingInCsvCount > 0 && ` · ${meta.existingInCsvCount} ya en tienda`}
+                            {meta.newInCsvCount > 0 && ` · ${meta.newInCsvCount} nueva(s)`}
+                            {dbOnly.length > 0 &&
+                              ` · ${dbOnly.length} en tienda no incluida(s) en este CSV`}
+                          </span>
+                        </td>
+                      </tr>,
+                      ...rows.map((r) => renderBulkPreviewDataRow(r)),
+                      ...dbOnly.map((p) => (
+                        <tr key={`db-only-${p.id}`} style={{ background: "rgba(120, 120, 120, 0.06)" }}>
+                          <td className="admin-bulk-check-cell" />
+                          {preview.csvHasVariantGroupColumn && (
+                            <td style={{ textAlign: "center", fontSize: 12, color: "var(--text-muted)" }}>
+                              {p.variantGroupOrder != null ? p.variantGroupOrder + 1 : "—"}
+                            </td>
+                          )}
+                          <td style={{ fontSize: 12, fontFamily: "monospace" }}>{p.externalRef ?? "—"}</td>
+                          <td colSpan={bulkPreviewTableColSpan - (preview.csvHasVariantGroupColumn ? 3 : 2)}>
+                            <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
+                              {p.name} — solo en tienda (no está en este CSV)
+                            </span>
                           </td>
-                          <td style={{ fontSize: 12 }}>{r.isTintesRow ? (r.tintGroupValue ?? "—") : "—"}</td>
-                        </>
-                      )}
-                      <td style={{ fontSize: 12 }}>{r.categoryCsv ?? "—"}</td>
-                      <td style={{ fontSize: 12 }}>{r.subcategoryCsv ?? "—"}</td>
-                      <td>{r.categorySlug ? categoryDisplayName(r.categorySlug, categories) : "—"}</td>
-                      <td>{r.subcategoryValue ?? "—"}</td>
-                      <td>{r.priceValue != null ? formatPrice(r.priceValue) : "—"}</td>
-                      <td>{r.stockValue ?? "—"}</td>
-                      <td style={{ fontSize: 11, maxWidth: 160, color: "var(--text-muted)" }} title={(r.tagsValue ?? []).join(", ")}>
-                        {(r.tagsValue ?? []).length ? (r.tagsValue ?? []).join(", ") : "—"}
-                      </td>
-                      <td style={{ fontSize: 12 }}>
-                        {r.matchedImages.length
-                          ? r.matchedImages
-                              .map((m) => {
-                                const how =
-                                  m.matchedBy === "tintLevel"
-                                    ? "nivel"
-                                    : m.matchedBy === "numericPrefix"
-                                      ? "prefijo"
-                                      : m.matchedBy === "sixDigitPrefix"
-                                        ? "6 dígitos"
-                                        : "exacto";
-                                return `${m.imageFilename} (${how})`;
-                              })
-                              .join(", ")
-                          : "—"}
-                      </td>
-                      <td style={{ fontSize: 12 }}>
-                        {ok ? (
-                          <span style={{ color: r.hasExisting ? "#b00020" : "green" }}>
-                            {r.hasExisting
-                              ? existingPolicy === "replace"
-                                ? "↺ Reemplazar"
-                                : "⛔ Ya registrado"
-                              : warnOnly
-                                ? "⚠ Sin foto"
-                                : "✓ OK"}
-                          </span>
-                        ) : (
-                          <span style={{ color: "var(--danger, #b00020)" }} title={r.errors.join(" · ")}>
-                            ✗ {r.errors[0] ?? "Error"}
-                          </span>
-                        )}
-                      </td>
-                      <td style={{ minWidth: 220 }}>
-                        {r.errors.length > 0 ? (
-                          editingTaxonomyRowId === r.previewRowId ? (
-                            <div style={{ display: "grid", gap: 6 }}>
-                              <select
-                                className="form-select"
-                                value={manualCategorySlug}
-                                onChange={(e) => {
-                                  const slug = e.target.value;
-                                  setManualCategorySlug(slug);
-                                  const cat = sortedCats.find((c) => c.slug === slug);
-                                  setManualSubcategoryName(cat?.subcategories?.[0]?.name ?? "");
-                                }}
-                                disabled={saving}
-                              >
-                                {sortedCats.map((c) => (
-                                  <option key={c.id} value={c.slug}>
-                                    {c.icon ? `${c.icon} ` : ""}
-                                    {c.name}
-                                  </option>
-                                ))}
-                              </select>
-                              <select
-                                className="form-select"
-                                value={manualSubcategoryName}
-                                onChange={(e) => setManualSubcategoryName(e.target.value)}
-                                disabled={saving || manualSubcategoryOptions.length === 0}
-                              >
-                                {manualSubcategoryOptions.map((s) => (
-                                  <option key={s.id} value={s.name}>
-                                    {s.name}
-                                  </option>
-                                ))}
-                              </select>
-                              <div style={{ display: "flex", gap: 6 }}>
-                                <button
-                                  type="button"
-                                  className="btn btn-primary btn-sm"
-                                  disabled={saving || !manualCategorySlug || !manualSubcategoryName}
-                                  onClick={() => {
-                                    void applyManualTaxonomyOverride(r);
-                                  }}
-                                >
-                                  Aplicar
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-outline btn-sm"
-                                  disabled={saving}
-                                  onClick={() => setEditingTaxonomyRowId(null)}
-                                >
-                                  Cancelar
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              className="btn btn-outline btn-sm"
-                              disabled={saving || sortedCats.length === 0}
-                              onClick={() => openManualTaxonomyEditor(r)}
-                            >
-                              Editar categoría/subcategoría
-                            </button>
-                          )
-                        ) : (
-                          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>—</span>
-                        )}
+                        </tr>
+                      )),
+                    ])
+                  : previewTableRows.map((r) => renderBulkPreviewDataRow(r))}
+                {previewRowsByBarcodeGroup && previewRowsByBarcodeGroup.ungrouped.length > 0 && (
+                  <>
+                    <tr style={{ background: "var(--lavender-light)" }}>
+                      <td
+                        colSpan={bulkPreviewTableColSpan}
+                        style={{ padding: "10px 14px", fontSize: 13, fontWeight: 600, color: "var(--text-muted)" }}
+                      >
+                        Sin código de barras
                       </td>
                     </tr>
-                  );
-                })}
+                    {previewRowsByBarcodeGroup.ungrouped.map((r) => renderBulkPreviewDataRow(r))}
+                  </>
+                )}
                 {previewTableRows.length === 0 && (
                   <tr>
-                    <td colSpan={hasTintesInBatch ? 17 : 14} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>
-                      No hay filas con match válido para importar.
+                    <td colSpan={bulkPreviewTableColSpan} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>
+                      {preview.csvHasVariantGroupColumn
+                        ? "No hay filas en el CSV."
+                        : "No hay filas con match válido para importar."}
                     </td>
                   </tr>
                 )}
@@ -2605,15 +2887,31 @@ function AdminBulkTab({
                 try {
                   const res = await postBulkImportCommit(jobId, [...selectedRowIds].sort(), existingPolicy);
                   bulkProgress.finish();
-                  if (res.imported > 0) {
-                    showToast(`Importados ${res.imported} producto(s)`, "success", "🎉");
+                  const grouped = res.variantGroupsAssigned ?? 0;
+                  if (grouped > 0) {
+                    showToast(
+                      `Grupos de variantes aplicados a ${grouped} producto(s). Revisa la columna «Variantes» en la lista.`,
+                      "success",
+                      "📦"
+                    );
+                  }
+                  const created = res.imported - grouped;
+                  if (created > 0) {
+                    showToast(`Importados ${created} producto(s) nuevo(s)`, "success", "🎉");
                   }
                   const skipped = res.skippedExistingDuplicates ?? 0;
                   if (skipped > 0) {
                     showToast(
-                      `${skipped} fila(s) omitida(s): el código ya estaba registrado (modo «no reemplazar»).`,
+                      `${skipped} fila(s) omitida(s): ya registradas y sin código de barras en el CSV.`,
                       "default",
                       "⏭️"
+                    );
+                  }
+                  if (res.imported === 0 && grouped === 0 && skipped === 0 && res.failed === 0) {
+                    showToast(
+                      "No se aplicaron cambios. Selecciona filas (Sel.) con código de barras e importa de nuevo.",
+                      "default",
+                      "ℹ️"
                     );
                   }
                   if (res.failed > 0) {

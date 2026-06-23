@@ -137,10 +137,14 @@ export type SemanticMapped = {
   tintLevel: string | null;
   /** Grupo de color dentro de la línea. */
   tintGroup: string | null;
+  /** Código de grupo de variantes (columna CSV «Barras»). */
+  variantGroupCode: string | null;
 };
 
 function headerToField(normalizedHeader: string): keyof SemanticMapped | null {
   const h = normalizeKey(normalizedHeader);
+
+  if (h.includes("barras")) return "variantGroupCode";
 
   // 1) Match exacto primero para evitar que "subcategoria" caiga en "categoria".
   for (const g of GROUPS) {
@@ -305,6 +309,7 @@ export function mapRowValues(
     tintType: null,
     tintLevel: null,
     tintGroup: null,
+    variantGroupCode: null,
   };
   headerFieldMap.forEach((field, col) => {
     const raw = (values[col] ?? "").trim();
@@ -348,6 +353,9 @@ export function mapRowValues(
         break;
       case "tintGroup":
         if (!out.tintGroup) out.tintGroup = raw;
+        break;
+      case "variantGroupCode":
+        if (!out.variantGroupCode) out.variantGroupCode = raw;
         break;
       default:
         break;

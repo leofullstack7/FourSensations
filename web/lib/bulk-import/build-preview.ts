@@ -1,6 +1,10 @@
 import type { ZipImageEntry } from "./zip-manifest";
 import { computeOrphanFiles } from "./zip-manifest";
 import { normalizeKey } from "./normalize";
+import type {
+  BulkPreviewDbVariant,
+  BulkPreviewVariantGroup,
+} from "./variant-groups-preview";
 import {
   buildHeaderFieldMap,
   effectiveProductTitle,
@@ -63,6 +67,25 @@ function firstSixDigits(digitRun: string): string {
   return digitRun.slice(0, 6);
 }
 
+/** Asigna orden de variante según posición en el CSV (primera fila = 0). */
+function assignVariantGroupOrders(rows: BulkPreviewRow[]): void {
+  const byGroup = new Map<string, BulkPreviewRow[]>();
+  for (const row of rows) {
+    row.variantGroupOrder = null;
+    const raw = row.mapped.variantGroupCode?.trim();
+    if (!raw) continue;
+    const key = normalizeKey(raw);
+    if (!byGroup.has(key)) byGroup.set(key, []);
+    byGroup.get(key)!.push(row);
+  }
+  for (const group of byGroup.values()) {
+    group.sort((a, b) => a.rowIndex - b.rowIndex);
+    group.forEach((row, order) => {
+      row.variantGroupOrder = order;
+    });
+  }
+}
+
 export type BulkPreviewRow = {
   previewRowId: string;
   rowId: string;
@@ -79,6 +102,9 @@ export type BulkPreviewRow = {
   isExistingProduct: boolean;
   existingProductId: string | null;
   existingProductName: string | null;
+  /** Grupo de barras ya persistido en DB (si el producto existe). */
+  existingVariantGroupCode: string | null;
+  existingVariantGroupOrder: number | null;
   issues: string[];
   selected: boolean;
   /** Resolución antes de aplicar override manual (CSV + inferencia). */
@@ -87,6 +113,8 @@ export type BulkPreviewRow = {
   tintFamilyId: string | null;
   /** Catálogo Tintes: id resuelto de Tipo (null si no aplica o sin resolver). */
   tintTypeId: string | null;
+  /** Orden dentro del grupo de variantes (0 = primera fila en CSV para ese código Barras). */
+  variantGroupOrder: number | null;
 };
 
 export type BulkPreviewStats = {
@@ -102,6 +130,10 @@ export type BulkPreviewStats = {
   unmatchedImages: number;
   /** Coincidencias con `Product.externalRef` (se rellena tras `markBulkPreviewExistingByExternalRef`). */
   existingProductRows: number;
+  /** Grupos de variantes (código de barras) detectados en el CSV. */
+  variantGroupCount: number;
+  /** Filas del CSV que ya existen en tienda y pertenecen a un grupo de barras. */
+  existingInVariantGroups: number;
 };
 
 /** Categoría nueva desde CSV o solo subcategorías nuevas bajo categoría ya existente. */
@@ -188,6 +220,12 @@ export type BulkPreviewResult = {
   tintRowSelections: Record<string, { tintFamilyId: string; tintTypeId: string }>;
   /** @deprecated Compat — usar tintSelectionResolved */
   tintCatalogResolved: boolean;
+  /** Hay columna CSV de código de barras (grupo de variantes). */
+  csvHasVariantGroupColumn: boolean;
+  /** Resumen por código de barras / grupo de variantes. */
+  variantGroups: BulkPreviewVariantGroup[];
+  /** Variantes ya en DB indexadas por groupKey normalizado. */
+  dbVariantsByGroup: Record<string, BulkPreviewDbVariant[]>;
 };
 
 function collectBaseRowIssues(
@@ -375,13 +413,18 @@ export function buildBulkPreview(params: {
       isExistingProduct: false,
       existingProductId: null,
       existingProductName: null,
+      existingVariantGroupCode: null,
+      existingVariantGroupOrder: null,
       issues,
       selected: false,
       taxonomyBeforeOverride,
       tintFamilyId: null,
       tintTypeId: null,
+      variantGroupOrder: null,
     };
   });
+
+  assignVariantGroupOrders(rows);
 
   const rowsByCode = new Map<string, number[]>();
   rows.forEach((r) => {
@@ -705,6 +748,8 @@ export function buildBulkPreview(params: {
       ambiguousRows: ambiguousRows.length,
       unmatchedImages: unmatchedImages.length,
       existingProductRows: 0,
+      variantGroupCount: 0,
+      existingInVariantGroups: 0,
     },
     existingTintFamilies: [],
     existingTintTypes: [],
@@ -727,5 +772,8 @@ export function buildBulkPreview(params: {
     newTintTypes: [],
     tintRowSelections: {},
     tintCatalogResolved: true,
+    csvHasVariantGroupColumn: false,
+    variantGroups: [],
+    dbVariantsByGroup: {},
   };
 }

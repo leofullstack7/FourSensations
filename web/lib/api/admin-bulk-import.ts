@@ -70,8 +70,10 @@ export type BulkCommitResponse = {
   ok: boolean;
   imported: number;
   failed: number;
-  /** Filas con código ya existente omitidas (política «no reemplazar»). */
+  /** Filas con código ya existente omitidas (sin código de barras para agrupar). */
   skippedExistingDuplicates?: number;
+  /** Productos existentes a los que se asignó grupo de barras (modo omitir). */
+  variantGroupsAssigned?: number;
   errors: string[];
   products: AdminProduct[];
 };

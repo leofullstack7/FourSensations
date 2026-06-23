@@ -31,6 +31,8 @@ export function prismaProductToAdmin(p: ProductWithImages): AdminProduct {
     featuredInHome: p.featuredInHome,
     slug: p.slug,
     externalRef: p.externalRef ?? null,
+    variantGroupCode: p.variantGroupCode ?? null,
+    variantGroupOrder: p.variantGroupOrder ?? null,
     imageUrl: p.imageUrl,
     images: mapImages(p.images),
   };
