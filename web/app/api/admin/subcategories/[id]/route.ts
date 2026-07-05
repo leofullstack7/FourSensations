@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { noStoreJson } from "@/lib/server/no-store-json";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { allocateUniqueSubcategorySlug } from "@/lib/server/category-slugs";
+import { revalidateStorefrontMenu } from "@/lib/server/revalidate-storefront-menu";
 import { slugify } from "@/lib/slugify";
 import type { AdminSubcategoryRow } from "@/lib/types/admin-category";
 import {
@@ -92,7 +93,8 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
           data: { subcategory: d.name },
         });
       }
-      return tx.subcategory.update({
+
+      const updated = await tx.subcategory.update({
         where: { id },
         data: {
           ...(d.name !== undefined && { name: d.name }),
@@ -104,8 +106,34 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
           slug: nextSlug,
         },
       });
+
+      if (d.menuTag !== undefined) {
+        const subName = d.name ?? oldName;
+        const tag = (updated.menuTag?.trim() || "General").trim();
+        const products = await tx.product.findMany({
+          where: {
+            category: existing.category.slug,
+            subcategory: subName,
+          },
+          select: { id: true, tags: true },
+        });
+        for (const p of products) {
+          const nextTags = [tag];
+          const cur = p.tags ?? [];
+          const same =
+            cur.length === nextTags.length && cur.every((t, i) => t === nextTags[i]);
+          if (same) continue;
+          await tx.product.update({
+            where: { id: p.id },
+            data: { tags: nextTags },
+          });
+        }
+      }
+
+      return updated;
     });
 
+    revalidateStorefrontMenu();
     return noStoreJson({ subcategory: mapSub(row) });
   } catch (e) {
     console.error("[PUT /api/admin/subcategories/[id]]", e);
@@ -140,6 +168,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteCtx) {
       );
     }
     await prisma.subcategory.delete({ where: { id } });
+    revalidateStorefrontMenu();
     return new Response(null, { status: 204 });
   } catch (e: unknown) {
     const code = (e as { code?: string })?.code;

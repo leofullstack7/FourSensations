@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { noStoreJson } from "@/lib/server/no-store-json";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { allocateUniqueCategorySlug } from "@/lib/server/category-slugs";
+import { revalidateStorefrontMenu } from "@/lib/server/revalidate-storefront-menu";
 import { slugify } from "@/lib/slugify";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import {
@@ -121,6 +122,7 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
       return updated;
     });
 
+    revalidateStorefrontMenu();
     return noStoreJson({ category: mapCategory(row) });
   } catch (e) {
     console.error("[PUT /api/admin/categories/[id]]", e);
@@ -149,6 +151,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteCtx) {
       );
     }
     await prisma.category.delete({ where: { id } });
+    revalidateStorefrontMenu();
     return new Response(null, { status: 204 });
   } catch (e: unknown) {
     const code = (e as { code?: string })?.code;

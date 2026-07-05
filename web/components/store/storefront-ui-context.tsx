@@ -12,6 +12,7 @@ export type StorefrontUiContextValue = {
   openProductModal: (id: string) => void;
   closeProductModal: () => void;
   openSearch: () => void;
+  openSearchWithQuery: (query: string) => void;
   addToCart: (id: string) => void;
   toggleFavorite: (id: string) => void;
   favorites: string[];

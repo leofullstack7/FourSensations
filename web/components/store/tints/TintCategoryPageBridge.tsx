@@ -6,12 +6,24 @@ import { formatPrice } from "@/lib/format";
 import type { TintBubbleItem } from "@/lib/tints";
 import { TintCategoryPageClient } from "./TintCategoryPageClient";
 
-function TintCategoryPageInner({ initialItems }: { initialItems: TintBubbleItem[] }) {
+type TintCategoryPageBridgeProps = {
+  initialItems: TintBubbleItem[];
+  categoryLabel?: string;
+  categoryIcon?: string;
+};
+
+function TintCategoryPageInner({
+  initialItems,
+  categoryLabel,
+  categoryIcon,
+}: TintCategoryPageBridgeProps) {
   const { addToCart, showToast } = useStorefrontUi();
 
   return (
     <TintCategoryPageClient
       initialItems={initialItems}
+      categoryLabel={categoryLabel}
+      categoryIcon={categoryIcon}
       formatPrice={formatPrice}
       addToCart={(item) => {
         addToCart(item.id);
@@ -21,12 +33,20 @@ function TintCategoryPageInner({ initialItems }: { initialItems: TintBubbleItem[
   );
 }
 
-export function TintCategoryPageBridge({ initialItems }: { initialItems: TintBubbleItem[] }) {
+export function TintCategoryPageBridge({
+  initialItems,
+  categoryLabel,
+  categoryIcon,
+}: TintCategoryPageBridgeProps) {
   return (
     <Suspense
       fallback={<div className="tint-category-loading">Cargando tintes…</div>}
     >
-      <TintCategoryPageInner initialItems={initialItems} />
+      <TintCategoryPageInner
+        initialItems={initialItems}
+        categoryLabel={categoryLabel}
+        categoryIcon={categoryIcon}
+      />
     </Suspense>
   );
 }

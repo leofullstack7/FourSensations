@@ -6,5 +6,5 @@ export default async function AdminPage() {
   const session = await auth();
   if (!session?.user) redirect("/admin/login");
   if (session.user.role !== "ADMIN") redirect("/admin/login?error=forbidden");
-  return <AdminApp />;
+  return <AdminApp initialSession={session} />;
 }

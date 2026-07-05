@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useReveal } from "@/hooks/useReveal";
+import { TechAmbient } from "@/components/ui/TechAmbient";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreProductCard } from "@/components/store/store-product-card";
 import type { StoreProduct } from "@/lib/types/product";
@@ -93,6 +95,8 @@ export function CategoryLandingClient({
     if (selectedSub && !allowed.has(selectedSub)) setSelectedSub("");
   };
 
+  useReveal();
+
   return (
     <main className="category-landing-page">
       <section
@@ -100,15 +104,25 @@ export function CategoryLandingClient({
         data-landing-slug={categorySlug}
         aria-label={`Categoría ${categoryLabel}`}
       >
+        <TechAmbient variant="page" />
         <div className="category-landing-hero-glow" aria-hidden />
         <div className="container category-landing-hero-inner">
           <div className="category-landing-hero-visual" aria-hidden>
             <span className="category-landing-icon">{categoryIcon}</span>
           </div>
           <div className="category-landing-hero-copy">
+            <div className="gb-tech-chip">
+              <span className="gb-tech-live-dot" style={{ width: 6, height: 6 }} aria-hidden />
+              Catálogo inteligente
+            </div>
             <div className="category-landing-eyebrow">Colección {categoryLabel}</div>
             <h1 className="category-landing-title">{copy.headline}</h1>
             <p className="category-landing-subtitle">{copy.subtitle}</p>
+            <div className="category-landing-stats">
+              <span className="category-landing-stat">◈ {products.length} productos</span>
+              <span className="category-landing-stat">⬡ {subcategoriesFromDb.length} subcategorías</span>
+              <span className="category-landing-stat">✦ Filtros en vivo</span>
+            </div>
             <div className="category-landing-cta-row">
               <Link href="/" className="btn btn-outline btn-sm category-landing-cta-back">
                 {copy.ctaBack}
@@ -128,7 +142,7 @@ export function CategoryLandingClient({
         </div>
       </section>
 
-      <section className="section-pad" style={{ paddingTop: 24 }}>
+      <section className="section-pad reveal" style={{ paddingTop: 24 }}>
         <div className="container">
           <div className="category-filter-panel">
             <div className="category-filter-title">Filtrar productos</div>

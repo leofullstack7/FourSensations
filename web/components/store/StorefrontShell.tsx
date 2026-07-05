@@ -18,7 +18,7 @@ import { computeShippingCop, loadCart, saveCart } from "@/lib/cart-storage";
 import { loadFavorites, saveFavorites } from "@/lib/favorites-storage";
 import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
 import { isHttpImageUrl } from "@/lib/util/image-url";
-import logoImage from "@/app/logo.png";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 type ToastItem = { id: number; msg: string; type: string; icon: string };
 
@@ -93,7 +93,6 @@ export function StorefrontShell({
   const [mobileExpandedCat, setMobileExpandedCat] = useState<string | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
-  const [adminOpening, setAdminOpening] = useState(false);
   const router = useRouter();
   const [topbarIndex, setTopbarIndex] = useState(0);
   const [authMode, setAuthMode] = useState<"login" | "fav-warning">("login");
@@ -306,6 +305,13 @@ export function StorefrontShell({
     setTimeout(() => document.getElementById("search-input-big")?.focus(), 100);
   };
 
+  const openSearchWithQuery = useCallback((query: string) => {
+    setSearchQuery(query.trim());
+    setSearchOpen(true);
+    document.body.style.overflow = "hidden";
+    setTimeout(() => document.getElementById("search-input-big")?.focus(), 100);
+  }, []);
+
   const closeSearch = () => {
     setSearchOpen(false);
     setSearchQuery("");
@@ -359,11 +365,13 @@ export function StorefrontShell({
         openProductModal,
         closeProductModal,
         openSearch,
+        openSearchWithQuery,
         addToCart,
         toggleFavorite,
         favorites,
       }}
     >
+      <div className="gb-store-shell">
       <>
       <div className="topbar" aria-live="polite">
         <MotionSpan
@@ -379,24 +387,7 @@ export function StorefrontShell({
 
       <header className="header" id="main-header">
         <div className="header-inner">
-          <Link href="/" className="logo">
-            <div className="logo-icon">
-              <Image
-                src={logoImage}
-                alt="Logo GinnaBeauty"
-                className="logo-icon-image"
-                width={96}
-                height={96}
-                priority
-              />
-            </div>
-            <div className="logo-text">
-              <span className="logo-brand">
-                Ginna<em>Beauty</em>
-              </span>
-              <span className="logo-tagline">Cosmética Premium</span>
-            </div>
-          </Link>
+          <BrandLogo variant="store" priority />
 
           <button
             type="button"
@@ -577,12 +568,8 @@ export function StorefrontShell({
                   type="button"
                   className="icon-btn icon-btn--admin"
                   title="Panel Admin"
-                  disabled={adminOpening}
-                  aria-busy={adminOpening}
                   onClick={() => {
-                    if (adminOpening) return;
-                    setAdminOpening(true);
-                    router.push("/admin");
+                    window.location.href = "/admin";
                   }}
                 >
                   ⚙️
@@ -732,19 +719,31 @@ export function StorefrontShell({
       </aside>
 
       <div
-        className={`modal-overlay${selectedProduct ? " open" : ""}`}
+        className={`modal-overlay modal-overlay--product-tech${selectedProduct ? " open" : ""}`}
         id="product-overlay"
         onClick={(e) => e.target === e.currentTarget && closeProductModal()}
         role="presentation"
       >
-        <div className="modal" style={{ position: "relative" }}>
+        <MotionDiv
+          className="modal modal--product-tech"
+          style={{ position: "relative" }}
+          initial={false}
+          animate={
+            selectedProduct
+              ? { opacity: 1, scale: 1, y: 0 }
+              : { opacity: 0, scale: 0.96, y: 16 }
+          }
+          transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <div className="modal-tech-border" aria-hidden />
           {selectedProduct && (
             <>
-              <button type="button" className="modal-close" onClick={closeProductModal}>
+              <button type="button" className="modal-close modal-close--tech" onClick={closeProductModal}>
                 ✕
               </button>
               <div className="product-modal-layout">
-                <div className="modal-gallery">
+                <div className="modal-gallery modal-gallery--tech">
+                  <div className="modal-gallery-tech-overlay" aria-hidden />
                   {(() => {
                     const urls = [selectedProduct.img, ...selectedProduct.gallery].filter(isHttpImageUrl);
                     const src = urls[modalImgIdx] ?? null;
@@ -765,22 +764,13 @@ export function StorefrontShell({
                           )}
                         </div>
                         {urls.length > 1 && (
-                          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                          <div className="modal-gallery-thumbs">
                             {urls.map((u, i) => (
                               <button
                                 key={`${u}-${i}`}
                                 type="button"
+                                className={`modal-gallery-thumb${modalImgIdx === i ? " active" : ""}`}
                                 onClick={() => setModalImgIdx(i)}
-                                style={{
-                                  padding: 0,
-                                  border: modalImgIdx === i ? "2px solid var(--rose)" : "1px solid var(--line)",
-                                  borderRadius: 8,
-                                  overflow: "hidden",
-                                  width: 52,
-                                  height: 52,
-                                  cursor: "pointer",
-                                  background: "transparent",
-                                }}
                               >
                                 <Image src={u} alt="" width={52} height={52} loading="lazy" style={{ objectFit: "cover", display: "block" }} />
                               </button>
@@ -791,7 +781,8 @@ export function StorefrontShell({
                     );
                   })()}
                 </div>
-                <div className="modal-details">
+                <div className="modal-details modal-details--tech">
+                  <span className="gb-tech-chip modal-product-badge">Detalle premium · HD</span>
                   <div>
                     <div className="breadcrumbs">
                       <Link href="/" prefetch>
@@ -844,7 +835,7 @@ export function StorefrontShell({
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                     <button
                       type="button"
-                      className="btn btn-primary"
+                      className="btn btn-primary btn-glow"
                       style={{ flex: 1, justifyContent: "center" }}
                       onClick={() => {
                         addToCart(selectedProduct.id);
@@ -862,14 +853,16 @@ export function StorefrontShell({
                       {favorites.includes(selectedProduct.id) ? "♥" : "♡"}
                     </button>
                   </div>
-                  <div style={{ background: "var(--ivory)", borderRadius: "var(--radius-md)", padding: 14, marginTop: 16, fontSize: 13, color: "var(--text-light)" }}>
-                    🚚 Envío a todo el país · 🔄 Devoluciones 7 días · ✅ Pago seguro
+                  <div className="modal-trust-strip">
+                    <span>🚚 Envío nacional</span>
+                    <span>🔄 7 días devolución</span>
+                    <span>✅ Pago seguro</span>
                   </div>
                 </div>
               </div>
             </>
           )}
-        </div>
+        </MotionDiv>
       </div>
 
       <div
@@ -1008,10 +1001,7 @@ export function StorefrontShell({
           >
             ✕
           </button>
-          <div className="auth-logo">
-            <div style={{ fontSize: 36 }}>🌸</div>
-            <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, marginTop: 6 }}>GinnaBeauty</div>
-          </div>
+          <BrandLogo variant="auth" />
           <div id="fav-warning-msg" className="fav-warning" style={{ display: authMode === "fav-warning" ? "block" : "none" }}>
             <p>
               💝 ¡Guarda tus productos favoritos! <strong>Inicia sesión</strong> para que tu lista se conserve incluso si cierras la página.
@@ -1133,51 +1123,6 @@ export function StorefrontShell({
         </div>
       </div>
 
-      {adminOpening && (
-        <div
-          role="status"
-          aria-live="polite"
-          aria-label="Cargando panel de administración"
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 1100,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(45,31,26,0.45)",
-            backdropFilter: "blur(6px)",
-          }}
-        >
-          <div
-            style={{
-              textAlign: "center",
-              padding: "28px 36px",
-              borderRadius: "var(--radius-lg)",
-              background: "var(--white)",
-              boxShadow: "var(--shadow-lg)",
-              minWidth: 220,
-            }}
-          >
-            <MotionDiv
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 0.85, ease: "linear" }}
-              style={{
-                width: 44,
-                height: 44,
-                margin: "0 auto 14px",
-                border: "3px solid var(--cream)",
-                borderTopColor: "var(--dusty-rose)",
-                borderRadius: "50%",
-                boxSizing: "border-box",
-              }}
-            />
-            <div style={{ fontWeight: 600, color: "var(--dark)", fontSize: 15 }}>Abriendo panel…</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>Un momento</div>
-          </div>
-        </div>
-      )}
-
       {authBusyLabel ? (
         <div className="gb-auth-global-loader" role="status" aria-live="polite" aria-busy="true" aria-label={authBusyLabel}>
           <div className="gb-auth-global-loader__card">
@@ -1196,6 +1141,7 @@ export function StorefrontShell({
         ))}
       </div>
     </>
+    </div>
     </StorefrontUiContext.Provider>
   );
 }

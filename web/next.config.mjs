@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    /** Evita que Webpack empaquete mal Prisma/bcrypt en rutas RSC (p. ej. /api/auth). */
+    serverComponentsExternalPackages: ["@prisma/client", "@auth/prisma-adapter", "bcryptjs"],
+  },
   /** Bunny CDN / storage: permite optimización next/image en URLs remotas del catálogo. */
   images: {
     remotePatterns: [

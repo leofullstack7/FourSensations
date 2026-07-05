@@ -5,7 +5,7 @@ import { useEffect } from "react";
 /** Paridad con IntersectionObserver del index.html original (.reveal → .visible). */
 export function useReveal() {
   useEffect(() => {
-    const els = document.querySelectorAll(".reveal");
+    const els = document.querySelectorAll(".reveal, .reveal-stagger");
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((e) => {

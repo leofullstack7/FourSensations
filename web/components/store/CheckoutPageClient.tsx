@@ -17,6 +17,8 @@ import { loadCart, saveCart } from "@/lib/cart-storage";
 import { formatPrice } from "@/lib/format";
 import type { CartLine } from "@/lib/types/product";
 import { isHttpImageUrl } from "@/lib/util/image-url";
+import { BrandLogo } from "@/components/brand/BrandLogo";
+import { TechAmbient } from "@/components/ui/TechAmbient";
 import { createCheckoutOrderSchema } from "@/lib/validation/checkout-order";
 
 type PayPhase = "idle" | "order" | "session" | "widget" | "integrity" | "error";
@@ -418,6 +420,7 @@ export function CheckoutPageClient() {
 
   return (
     <div className="gb-co-page">
+      <TechAmbient variant="subtle" />
       <div className="gb-co-orb gb-co-orb--1" aria-hidden />
       <div className="gb-co-orb gb-co-orb--2" aria-hidden />
 
@@ -426,7 +429,9 @@ export function CheckoutPageClient() {
           <Link href="/" className="gb-co-back">
             ← Volver a la tienda
           </Link>
-          <span className="gb-co-logo">GinnaBeauty</span>
+          <div className="gb-co-brand-wrap">
+            <BrandLogo variant="auth" className="gb-co-brand-logo" />
+          </div>
           <Link href="/" style={{ fontSize: 13, color: "var(--text-muted)" }}>
             Seguir comprando
           </Link>

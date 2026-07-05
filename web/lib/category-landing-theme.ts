@@ -61,6 +61,12 @@ const bySlug: Record<string, Partial<CategoryLandingCopy>> = {
       "Paquetes y mínimos claros para negocios que quieren stock confiable y variedad.",
     ctaExplore: "Ver opciones mayoristas",
   },
+  tintes: {
+    headline: "Tintes que revelan tu tono ideal",
+    subtitle:
+      "Encuentra tu color explorando por grupo, familia o tipo. Cada burbuja es un color real.",
+    ctaExplore: "Ver todos los tintes",
+  },
 };
 
 export function getCategoryLandingCopy(categoryLabel: string, slug: string): CategoryLandingCopy {

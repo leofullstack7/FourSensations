@@ -28,12 +28,13 @@ export function StoreProductCard({
 
   return (
     <div
-      className="product-card"
+      className="product-card product-card--tech"
       role="button"
       tabIndex={0}
       onClick={() => onOpen(product.id)}
       onKeyDown={(e) => e.key === "Enter" && onOpen(product.id)}
     >
+      <div className="product-card-shine" aria-hidden />
       <div className="product-img-wrap">
         <div className="product-img-placeholder">
           {isHttpImageUrl(product.img) ? (

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { noStoreJson } from "@/lib/server/no-store-json";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { allocateUniqueCategorySlug } from "@/lib/server/category-slugs";
+import { revalidateStorefrontMenu } from "@/lib/server/revalidate-storefront-menu";
 import { slugify } from "@/lib/slugify";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import {
@@ -104,6 +105,7 @@ export async function POST(req: NextRequest) {
       },
       include: { subcategories: { orderBy: { sortOrder: "asc" } } },
     });
+    revalidateStorefrontMenu();
     return noStoreJson({ category: mapCategory(row) }, { status: 201 });
   } catch (e) {
     console.error("[POST /api/admin/categories]", e);

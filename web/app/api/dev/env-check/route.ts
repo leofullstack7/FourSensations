@@ -13,10 +13,32 @@ export async function GET() {
 
   const zone =
     process.env.BUNNY_STORAGE_ZONE_NAME?.trim() || process.env.BUNNY_STORAGE_ZONE?.trim();
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "") || null;
+  const googleConfigured =
+    !!process.env.GOOGLE_CLIENT_ID?.trim() && !!process.env.GOOGLE_CLIENT_SECRET?.trim();
+  const expectedRedirectUris = [
+    "http://localhost:3000/api/auth/callback/google",
+    ...(siteUrl && !siteUrl.includes("localhost")
+      ? [`${siteUrl}/api/auth/callback/google`]
+      : []),
+  ];
   return NextResponse.json({
     cwd: process.cwd(),
     nodeEnv: process.env.NODE_ENV,
     hasAuthSecret: Boolean(process.env.AUTH_SECRET && process.env.AUTH_SECRET.length > 0),
+    hasGoogleOAuth: googleConfigured,
+    googleOAuth: googleConfigured
+      ? {
+          expectedRedirectUris,
+          expectedJavaScriptOrigins: [
+            "http://localhost:3000",
+            ...(siteUrl && !siteUrl.includes("localhost") ? [siteUrl] : []),
+          ],
+          authUrlEnv: process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? null,
+          fix:
+            "Si Google muestra redirect_uri_mismatch, registra expectedRedirectUris en Google Cloud Console → Credenciales → OAuth 2.0 → URIs de redirección autorizados. Ver docs/GOOGLE_OAUTH.md",
+        }
+      : null,
     hasDatabaseUrl: Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.length > 0),
     hasDirectUrl: Boolean(process.env.DIRECT_URL && process.env.DIRECT_URL.length > 0),
     hasBunnyStorageApiKey: Boolean(process.env.BUNNY_STORAGE_API_KEY?.trim()),

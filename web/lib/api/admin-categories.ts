@@ -89,3 +89,26 @@ export async function deleteAdminSubcategory(id: string): Promise<void> {
   const res = await fetch(`/api/admin/subcategories/${id}`, { ...fetchOpts, method: "DELETE" });
   if (!res.ok) throw new Error(await parseError(res));
 }
+
+export async function reorderAdminCategories(orderedIds: string[]): Promise<void> {
+  const res = await fetch("/api/admin/categories/reorder", {
+    ...fetchOpts,
+    method: "POST",
+    headers: { ...fetchOpts.headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ orderedIds }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
+export async function reorderAdminSubcategories(
+  categoryId: string,
+  orderedIds: string[]
+): Promise<void> {
+  const res = await fetch(`/api/admin/categories/${categoryId}/subcategories/reorder`, {
+    ...fetchOpts,
+    method: "POST",
+    headers: { ...fetchOpts.headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ orderedIds }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}

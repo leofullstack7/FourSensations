@@ -2,12 +2,18 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useRouter, useSearchParams } from "next/navigation";
-import { signIn, useSession } from "next-auth/react";
-import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
+import { BrandLogo } from "@/components/brand/BrandLogo";
+import { submitAdminCredentialsLogin } from "@/lib/admin/admin-credentials-login";
+
+function adminNextPath(raw: string | null): string {
+  if (raw && raw.startsWith("/admin")) return raw;
+  return "/admin";
+}
 
 export function AdminLoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session, status } = useSession();
 
@@ -16,39 +22,24 @@ export function AdminLoginForm() {
   const [loginErr, setLoginErr] = useState(false);
   const [loginSubmitting, setLoginSubmitting] = useState(false);
 
-  const nextPath = searchParams.get("next") || "/admin";
+  const nextPath = adminNextPath(searchParams.get("next"));
   const forbidden = searchParams.get("error") === "forbidden";
 
-  const redirectIfAuthed = useCallback(() => {
+  useEffect(() => {
     if (status !== "authenticated") return;
     if (session?.user?.role !== "ADMIN") return;
-    router.replace(nextPath.startsWith("/admin") ? nextPath : "/admin");
-    router.refresh();
-  }, [status, session, nextPath, router]);
-
-  useEffect(() => {
-    void redirectIfAuthed();
-  }, [redirectIfAuthed]);
-
-  useEffect(() => {
-    router.prefetch("/admin");
-  }, [router]);
+    window.location.replace(nextPath);
+  }, [status, session, nextPath]);
 
   return (
     <div className="admin-login-gate">
+      <div className="admin-login-bg" aria-hidden>
+        <div className="admin-login-orb admin-login-orb--1" />
+        <div className="admin-login-orb admin-login-orb--2" />
+        <div className="admin-login-grid" />
+      </div>
       <div className="admin-login-card">
-        <div style={{ fontSize: 48, marginBottom: 12 }}>🌸</div>
-        <div
-          style={{
-            fontFamily: "var(--font-display)",
-            fontSize: 28,
-            fontWeight: 600,
-            color: "var(--dark)",
-            marginBottom: 4,
-          }}
-        >
-          Ginna<em style={{ color: "var(--dusty-rose)", fontStyle: "italic" }}>Beauty</em>
-        </div>
+        <BrandLogo variant="auth" />
         <div
           style={{
             fontSize: 11,
@@ -56,6 +47,7 @@ export function AdminLoginForm() {
             textTransform: "uppercase",
             color: "var(--text-muted)",
             marginBottom: 32,
+            marginTop: 8,
           }}
         >
           Panel Administrativo
@@ -105,18 +97,10 @@ export function AdminLoginForm() {
           onClick={async () => {
             setLoginErr(false);
             setLoginSubmitting(true);
-            try {
-              const res = await signIn("credentials", { username, password, redirect: false });
-              if (res?.error) {
-                setLoginErr(true);
-                setPassword("");
-                setLoginSubmitting(false);
-                return;
-              }
-              router.refresh();
-              router.replace(nextPath.startsWith("/admin") ? nextPath : "/admin");
-            } catch {
+            const result = await submitAdminCredentialsLogin(username, password, nextPath);
+            if (!result.ok) {
               setLoginErr(true);
+              setPassword("");
               setLoginSubmitting(false);
             }
           }}

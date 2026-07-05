@@ -2,6 +2,7 @@ import { unstable_cache } from "next/cache";
 import type { MenuConfig } from "@/lib/types/admin";
 import { defaultMenuConfig } from "@/lib/menu-config";
 import { prisma } from "@/lib/prisma";
+import { STOREFRONT_MENU_CACHE_TAG } from "@/lib/server/revalidate-storefront-menu";
 
 export type StorefrontMenuPayload = {
   config: MenuConfig;
@@ -51,7 +52,7 @@ async function fetchStorefrontCategoryMenuFromDb(): Promise<StorefrontMenuPayloa
 const getCachedStorefrontCategoryMenu = unstable_cache(
   async (): Promise<StorefrontMenuPayload> => fetchStorefrontCategoryMenuFromDb(),
   ["storefront-category-menu-v1"],
-  { revalidate: 3600 }
+  { revalidate: 3600, tags: [STOREFRONT_MENU_CACHE_TAG] }
 );
 
 /**

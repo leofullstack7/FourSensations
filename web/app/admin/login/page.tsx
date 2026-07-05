@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { AdminLoginForm } from "@/components/admin/AdminLoginForm";
 
 function LoginFallback() {
@@ -12,7 +14,12 @@ function LoginFallback() {
   );
 }
 
-export default function AdminLoginPage() {
+export default async function AdminLoginPage() {
+  const session = await auth();
+  if (session?.user?.role === "ADMIN") {
+    redirect("/admin");
+  }
+
   return (
     <Suspense fallback={<LoginFallback />}>
       <AdminLoginForm />

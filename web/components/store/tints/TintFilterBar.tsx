@@ -1,7 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
-
 export type TintFilterOption = {
   value: string;
   label: string;
@@ -23,6 +21,45 @@ type TintFilterBarProps = {
   onSubcategoryChange: (value: string | null) => void;
 };
 
+function FilterChipRow({
+  label,
+  allLabel,
+  options,
+  active,
+  onChange,
+}: {
+  label: string;
+  allLabel: string;
+  options: TintFilterOption[];
+  active: string | null;
+  onChange: (value: string | null) => void;
+}) {
+  return (
+    <div>
+      <div className="category-filter-label">{label}</div>
+      <div className="category-chip-row">
+        <button
+          type="button"
+          className={`category-filter-chip${active === null ? " active" : ""}`}
+          onClick={() => onChange(null)}
+        >
+          {allLabel}
+        </button>
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            className={`category-filter-chip${active === opt.value ? " active" : ""}`}
+            onClick={() => onChange(opt.value)}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function TintFilterBar({
   groups,
   families,
@@ -38,72 +75,53 @@ export function TintFilterBar({
   onSubcategoryChange,
 }: TintFilterBarProps) {
   return (
-    <div className="tint-filters">
-      <div className="tint-filters__groups" role="group" aria-label="Filtrar por grupo de tinte">
-        <span className="tint-filters__groups-label">Explora por grupo</span>
-        <div className="tint-filters__groups-row">
-          <button
-            type="button"
-            className={`tint-chip tint-chip--lg${activeGroup === null ? " tint-chip--active" : ""}`}
-            onClick={() => onGroupChange(null)}
-          >
-            Todos
-          </button>
-          {groups.map((g) => (
-            <motion.button
-              key={g.value}
-              type="button"
-              className={`tint-chip tint-chip--lg${activeGroup === g.value ? " tint-chip--active" : ""}`}
-              onClick={() => onGroupChange(g.value)}
-              whileTap={{ scale: 0.96 }}
-            >
-              {g.label}
-              {typeof g.count === "number" && <span className="tint-chip__count">{g.count}</span>}
-            </motion.button>
-          ))}
+    <div className="category-filter-panel">
+      <div className="category-filter-title">Filtrar productos</div>
+      <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 12px" }}>
+        Grupos, familias y tipos según tu catálogo de tintes.
+      </p>
+
+      {groups.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <FilterChipRow
+            label="Grupo de color"
+            allLabel="Todos"
+            options={groups}
+            active={activeGroup}
+            onChange={onGroupChange}
+          />
         </div>
-      </div>
+      )}
 
-      <div className="tint-filters__secondary">
-        <label className="tint-filters__select">
-          <span>Familia</span>
-          <select value={activeFamily ?? ""} onChange={(e) => onFamilyChange(e.target.value || null)}>
-            <option value="">Todas</option>
-            {families.map((f) => (
-              <option key={f.value} value={f.value}>
-                {f.label}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="category-filter-grid">
+        {families.length > 0 && (
+          <FilterChipRow
+            label="Familia"
+            allLabel="Todas"
+            options={families}
+            active={activeFamily}
+            onChange={onFamilyChange}
+          />
+        )}
 
-        <label className="tint-filters__select">
-          <span>Tipo</span>
-          <select value={activeType ?? ""} onChange={(e) => onTypeChange(e.target.value || null)}>
-            <option value="">Todos</option>
-            {types.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {types.length > 0 && (
+          <FilterChipRow
+            label="Tipo"
+            allLabel="Todos"
+            options={types}
+            active={activeType}
+            onChange={onTypeChange}
+          />
+        )}
 
         {subcategories.length > 0 && (
-          <label className="tint-filters__select">
-            <span>Subcategoría</span>
-            <select
-              value={activeSubcategory ?? ""}
-              onChange={(e) => onSubcategoryChange(e.target.value || null)}
-            >
-              <option value="">Todas</option>
-              {subcategories.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <FilterChipRow
+            label="Subcategoría"
+            allLabel="Todas"
+            options={subcategories}
+            active={activeSubcategory}
+            onChange={onSubcategoryChange}
+          />
         )}
       </div>
     </div>

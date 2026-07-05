@@ -28,6 +28,10 @@ export const adminSubcategoryUpdateSchema = z.object({
   sortOrder: z.coerce.number().int().optional(),
 });
 
+export const adminReorderSchema = z.object({
+  orderedIds: z.array(z.string().trim().min(1)).min(1),
+});
+
 export function formatZodError(err: z.ZodError): { message: string } {
   return {
     message: err.issues.map((e) => `${e.path.join(".")}: ${e.message}`).join("; "),

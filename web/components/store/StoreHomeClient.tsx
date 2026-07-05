@@ -4,10 +4,14 @@ import Link from "next/link";
 import Image from "next/image";
 import banner2Image from "@/app/banner2.webp";
 import banner2MovilImage from "@/app/banner2-movil.webp";
-import logoImage from "@/app/logo.png";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { useReveal } from "@/hooks/useReveal";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
+import { BeautyAiAdvisor } from "@/components/store/BeautyAiAdvisor";
+import { GinnaInnovationStrip } from "@/components/store/GinnaInnovationStrip";
 import { StoreProductCard } from "@/components/store/store-product-card";
+import { CategoryShowcaseStrip } from "@/components/store/CategoryShowcaseStrip";
+import { TechAmbient } from "@/components/ui/TechAmbient";
 import { TintHomePreview } from "@/components/store/tints/TintHomePreview";
 import { sortProductsForHomeDisplay } from "@/lib/storefront-product-order";
 import { catKeyFromDisplayName } from "@/lib/category-labels";
@@ -19,26 +23,6 @@ const HERO_BANNERS_DESKTOP = [banner2Image.src, "/banner.webp"] as const;
 const HERO_BANNERS_MOBILE = [banner2MovilImage.src, "/banner-movil.webp"] as const;
 const INITIAL_VISIBLE_PRODUCTS = 32;
 const LOAD_MORE_PRODUCTS = 20;
-
-const CATEGORY_STRIP_GRADIENTS: Record<string, string> = {
-  Accesorios: "linear-gradient(135deg,#F5E6E0,#E8C8C2)",
-  Mayorista: "linear-gradient(135deg,#E2DCF0,#C5BBDA)",
-  "Cuidado capilar": "linear-gradient(135deg,#C8DAD7,#A8BFBB)",
-  "Cuidado piel": "linear-gradient(135deg,#F5E6E0,#EDCBB5)",
-  Maquillaje: "linear-gradient(135deg,#E8C8C2,#C9918B)",
-  Hombres: "linear-gradient(135deg,#D4E8E4,#A8BFBB)",
-  Uñas: "linear-gradient(135deg,#E2DCF0,#C5BBDA)",
-  Tintes: "linear-gradient(135deg,#3D2314,#8B5E4A)",
-  STYLING: "linear-gradient(135deg,#E2DCF0,#B8A8C8)",
-};
-
-const DEFAULT_CATEGORY_GRADIENT = "linear-gradient(135deg,#F5E6E0,#E8C8C2)";
-
-function categoryStripLabel(name: string): string {
-  if (name === "Cuidado capilar") return "Capilar";
-  if (name === "Cuidado piel") return "Cuidado Piel";
-  return name;
-}
 
 type StoreHomeClientProps = {
   tintItems?: TintBubbleItem[];
@@ -111,6 +95,12 @@ export function StoreHomeClient({ tintItems = [] }: StoreHomeClientProps) {
     <>
       <section className="hero-section">
         <div className={`banner-placeholder-wrapper${isSecondaryBanner ? " banner-placeholder-wrapper-secondary" : ""}`} id="hero-banner">
+          <div className="hero-tech-overlay" aria-hidden>
+            <div className="hero-orb hero-orb--1" />
+            <div className="hero-orb hero-orb--2" />
+            <div className="hero-orb hero-orb--3" />
+            <div className="hero-grid-lines" />
+          </div>
           <div
             className={`hero-banner-layer hero-banner-layer--desktop${heroBannerIndex === 0 ? " active" : ""}`}
             style={{ backgroundImage: `url("${HERO_BANNERS_DESKTOP[0]}")` }}
@@ -127,9 +117,9 @@ export function StoreHomeClient({ tintItems = [] }: StoreHomeClientProps) {
             className={`hero-banner-layer hero-banner-layer--mobile${heroBannerIndex === 1 ? " active" : ""}`}
             style={{ backgroundImage: `url("${HERO_BANNERS_MOBILE[1]}")` }}
           />
-          <div className={`hero-center-content${isPrimaryOnScreen ? "" : " hero-center-content-minimal"}`}>
+          <div className="hero-foreground">
             {isPrimaryOnScreen ? (
-              <>
+              <div className="hero-copy">
                 <div className="hero-eyebrow-tag">✨ Colección 2025 — Ya disponible</div>
                 <h1 className="hero-main-title">
                   Tu belleza,
@@ -139,37 +129,39 @@ export function StoreHomeClient({ tintItems = [] }: StoreHomeClientProps) {
                 <p className="hero-subtitle">
                   Descubre cosméticos premium, cuidado de piel y capilar curados con amor para realzar tu brillo natural.
                 </p>
-              </>
+              </div>
             ) : null}
-            <div className="hero-cta-group">
-              <button type="button" className="btn btn-primary btn-lg" onClick={() => document.getElementById("featured")?.scrollIntoView({ behavior: "smooth" })}>
-                🛍️ Explorar Colección
-              </button>
-              <button
-                type="button"
-                className={`btn btn-lg ${isSecondaryBanner ? "hero-btn-secondary-solid" : "btn-outline"}`}
-                onClick={openSearch}
-              >
-                ✨ Buscar mi producto
-              </button>
+            <div className="hero-stats">
+              <div className="hero-stat">
+                <div className="hero-stat-num">+2K</div>
+                <div className="hero-stat-label">Clientas felices</div>
+              </div>
+              <div className="hero-stat">
+                <div className="hero-stat-num">150+</div>
+                <div className="hero-stat-label">Productos</div>
+              </div>
+              <div className="hero-stat">
+                <div className="hero-stat-num">5★</div>
+                <div className="hero-stat-label">Calificación</div>
+              </div>
+              <div className="hero-stat">
+                <div className="hero-stat-num">🚚</div>
+                <div className="hero-stat-label">Envío a Colombia</div>
+              </div>
             </div>
-          </div>
-          <div className="hero-stats">
-            <div className="hero-stat">
-              <div className="hero-stat-num">+2K</div>
-              <div className="hero-stat-label">Clientas felices</div>
-            </div>
-            <div className="hero-stat">
-              <div className="hero-stat-num">150+</div>
-              <div className="hero-stat-label">Productos</div>
-            </div>
-            <div className="hero-stat">
-              <div className="hero-stat-num">5★</div>
-              <div className="hero-stat-label">Calificación</div>
-            </div>
-            <div className="hero-stat">
-              <div className="hero-stat-num">🚚</div>
-              <div className="hero-stat-label">Envío a Colombia</div>
+            <div className={`hero-center-content${isPrimaryOnScreen ? "" : " hero-center-content-minimal"}`}>
+              <div className="hero-cta-group">
+                <button type="button" className="btn btn-primary btn-lg btn-glow" onClick={() => document.getElementById("featured")?.scrollIntoView({ behavior: "smooth" })}>
+                  🛍️ Explorar Colección
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-lg ${isSecondaryBanner ? "hero-btn-secondary-solid" : "btn-outline"}`}
+                  onClick={openSearch}
+                >
+                  ✨ Buscar mi producto
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -198,30 +190,13 @@ export function StoreHomeClient({ tintItems = [] }: StoreHomeClientProps) {
         </div>
       </div>
 
-      <section className="categories-strip">
-        <div className="container">
-          <div className="cat-grid">
-            {Object.entries(menuConfig).map(([label, data]) => (
-              <Link
-                key={label}
-                href={`/categoria/${categoryPath(label)}`}
-                className="cat-card"
-                prefetch
-              >
-                <div
-                  className="cat-icon"
-                  style={{ background: CATEGORY_STRIP_GRADIENTS[label] ?? DEFAULT_CATEGORY_GRADIENT }}
-                >
-                  {data.icon}
-                </div>
-                <span className="cat-label">{categoryStripLabel(label)}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
+      <BeautyAiAdvisor />
+
+      <CategoryShowcaseStrip categoryPath={categoryPath} />
 
       {tintItems.length > 0 && <TintHomePreview items={tintItems} />}
+
+      <GinnaInnovationStrip />
 
       <section className="trust-section">
         <div className="container">
@@ -420,7 +395,7 @@ export function StoreHomeClient({ tintItems = [] }: StoreHomeClientProps) {
               Clientas que nos <em>aman</em>
             </h2>
           </div>
-          <div className="testimonials-grid reveal">
+          <div className="testimonials-grid reveal-stagger">
             {[
               ["María Fernanda G.", "Medellín · Cuidado Piel", "M", "El sérum de vitamina C transformó mi piel en 2 semanas..."],
               ["Valentina P.", "Bogotá · Maquillaje", "V", "La paleta de sombras Bloom es increíble..."],
@@ -443,7 +418,8 @@ export function StoreHomeClient({ tintItems = [] }: StoreHomeClientProps) {
       </section>
 
       <section className="newsletter-section">
-        <div className="container newsletter-content">
+        <TechAmbient variant="subtle" />
+        <div className="container newsletter-content reveal">
           <div className="section-eyebrow" style={{ color: "var(--blush)" }}>
             Únete a nuestra comunidad
           </div>
@@ -464,17 +440,7 @@ export function StoreHomeClient({ tintItems = [] }: StoreHomeClientProps) {
         <div className="container">
           <div className="footer-grid">
             <div className="footer-brand">
-              <Link href="/" className="logo">
-                <div className="logo-icon">
-                  <Image src={logoImage} alt="Logo GinnaBeauty" className="logo-icon-image" width={88} height={88} />
-                </div>
-                <div className="logo-text">
-                  <span className="logo-brand">
-                    Ginna<em>Beauty</em>
-                  </span>
-                  <span className="logo-tagline">Cosmética Premium</span>
-                </div>
-              </Link>
+              <BrandLogo variant="store" />
               <p className="footer-desc">Tu aliada de belleza. Cosméticos de alta calidad, cuidado de piel y capilar con envío a toda Colombia.</p>
               <div className="social-links">
                 <a href="#" className="social-link">📘</a>

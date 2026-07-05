@@ -57,7 +57,11 @@ export default async function CategoryPage({ params, searchParams }: Props) {
         initialMenuConfig={menuPayload.config}
         categorySlugByName={menuPayload.slugByCategoryName}
       >
-        <TintCategoryPageBridge initialItems={tintItems} />
+        <TintCategoryPageBridge
+          initialItems={tintItems}
+          categoryLabel={cat.name}
+          categoryIcon={cat.icon ?? "🎨"}
+        />
       </StorefrontShell>
     );
   }

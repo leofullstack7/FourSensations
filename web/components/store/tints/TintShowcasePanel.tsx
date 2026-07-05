@@ -14,8 +14,9 @@ export function TintShowcasePanel({ active, onAddToCart, formatPrice }: TintShow
   const reduceMotion = useReducedMotion();
 
   return (
-    <div className="tint-showcase">
+    <div className="tint-showcase tint-showcase--tech">
       <div className="tint-showcase__frame">
+        <div className="tint-showcase__grid" aria-hidden />
         <AnimatePresence mode="wait">
           {active ? (
             <motion.div
@@ -68,6 +69,7 @@ export function TintShowcasePanel({ active, onAddToCart, formatPrice }: TintShow
             transition={{ duration: 0.3, delay: 0.08 }}
           >
             <div className="tint-showcase__card-head">
+              <span className="gb-tech-chip tint-showcase__tech-badge">Vista ampliada</span>
               {active.family && <span className="tint-showcase__tag">{active.family}</span>}
               <h3>{active.name}</h3>
               <div className="tint-showcase__meta">

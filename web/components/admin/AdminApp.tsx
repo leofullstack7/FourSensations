@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
+import type { Session } from "next-auth";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createAdminCategory,
@@ -30,6 +31,7 @@ import {
   resolveAdminListRowsAfterFilter,
 } from "@/lib/admin/variant-groups";
 import { AdminProductVariantsModal } from "@/components/admin/AdminProductVariantsModal";
+import { AdminBulkTemplateModal } from "@/components/admin/AdminBulkTemplateModal";
 import { fetchAdminPaidOrders } from "@/lib/api/admin-orders";
 import {
   addProductGalleryImage,
@@ -60,57 +62,56 @@ import {
 import type { CsvTintTypeOption } from "@/lib/bulk-import/tint-catalog";
 
 import { isHttpImageUrl } from "@/lib/util/image-url";
-import { getDefaultAdminMenu } from "@/data/admin-initial";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
-import type { AdminProduct, AdminSale, MenuConfig } from "@/lib/types/admin";
+import type { AdminProduct, AdminSale } from "@/lib/types/admin";
 import { formatPrice } from "@/lib/format";
 import { AdminCombosPanel } from "@/components/admin/AdminCombosPanel";
+import { AdminMenuTab } from "@/components/admin/AdminMenuTab";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { BulkImportProgressOverlay } from "@/components/admin/BulkImportProgressOverlay";
 import { useBufferedProgress } from "@/hooks/useBufferedProgress";
-import { getMenuGroupLabelsForStoreCategory } from "@/lib/menu-config";
+import { useReveal } from "@/hooks/useReveal";
+import {
+  MENU_TAG_CUSTOM_VALUE,
+  menuTagOptionsFromTree,
+  resolveMenuTagFromEditor,
+} from "@/lib/admin/menu-utils";
 
 type AdminPageId = "dashboard" | "products" | "combos" | "sales" | "stock" | "categories" | "menu" | "reports";
 
-const MENU_TAG_CUSTOM_VALUE = "__custom__";
+type GoPageOptions = {
+  productTab?: "list" | "add" | "bulk";
+};
 
-function resolveMenuTagFromEditor(
-  presetOptions: string[],
-  selectValue: string,
-  customValue: string
-): string {
-  if (presetOptions.length === 0) return customValue.trim();
-  if (selectValue === MENU_TAG_CUSTOM_VALUE) return customValue.trim();
-  return selectValue.trim();
-}
+const ADMIN_PAGE_TITLES: Record<AdminPageId, string> = {
+  dashboard: "Dashboard",
+  products: "Gestión de Productos",
+  combos: "Crear Combos",
+  sales: "Ventas",
+  stock: "Inventario",
+  categories: "Categorías y subcategorías",
+  menu: "Gestión del Menú",
+  reports: "Reportes",
+};
+
+const ADMIN_NAV_ITEMS: {
+  id: AdminPageId;
+  icon: string;
+  label: string;
+  section?: "config";
+}[] = [
+  { id: "dashboard", icon: "📊", label: "Dashboard" },
+  { id: "products", icon: "📦", label: "Productos" },
+  { id: "combos", icon: "🧩", label: "Crear Combos" },
+  { id: "sales", icon: "💰", label: "Ventas" },
+  { id: "stock", icon: "📋", label: "Inventario" },
+  { id: "categories", icon: "🏷️", label: "Categorías", section: "config" },
+  { id: "menu", icon: "🗂️", label: "Gestión de Menú", section: "config" },
+  { id: "reports", icon: "📈", label: "Reportes", section: "config" },
+];
 
 function categoryDisplayName(slug: string, tree: AdminCategoryTree[]): string {
   return tree.find((c) => c.slug === slug)?.name ?? slug;
-}
-
-/** Etiquetas de menú (columnas del mega menú): `menuTag` de subcategorías, alineado con la tienda. */
-function menuTagOptionsFromTree(
-  tree: AdminCategoryTree[],
-  categorySlug: string,
-  subcategoryName: string
-): string[] {
-  const cat = tree.find((c) => c.slug === categorySlug);
-  if (!cat) return [];
-  const norm = (mt: string | null) => (mt?.trim() ? mt.trim() : "General");
-  if (subcategoryName.trim()) {
-    const sub = cat.subcategories.find((s) => s.name === subcategoryName);
-    if (sub) return [norm(sub.menuTag)];
-  }
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const s of cat.subcategories) {
-    const v = norm(s.menuTag);
-    const k = v.toLowerCase();
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push(v);
-  }
-  out.sort((a, b) => a.localeCompare(b, "es"));
-  return out;
 }
 
 /** Etiquetas mostradas/editadas: las guardadas en el producto, o la de menú de su subcategoría si aún no hay ninguna. */
@@ -184,9 +185,12 @@ function AdminRetryImage({
   );
 }
 
-export function AdminApp() {
+export function AdminApp({ initialSession }: { initialSession?: Session | null }) {
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const { data: clientSession, status } = useSession();
+  const session = clientSession ?? initialSession ?? null;
+  const hasServerAdminSession = initialSession?.user?.role === "ADMIN";
+  const sessionReady = hasServerAdminSession || status !== "loading";
 
   const [page, setPage] = useState<AdminPageId>("dashboard");
   const [pageTitle, setPageTitle] = useState("Dashboard");
@@ -200,7 +204,6 @@ export function AdminApp() {
   const [stockSavingId, setStockSavingId] = useState<string | null>(null);
   const [onlineSales, setOnlineSales] = useState<AdminSale[]>([]);
   const [manualSales, setManualSales] = useState<AdminSale[]>([]);
-  const [menuConfig, setMenuConfig] = useState<MenuConfig>(getDefaultAdminMenu);
   const [productTab, setProductTab] = useState<"list" | "add" | "bulk">("list");
   const [productSearch, setProductSearch] = useState("");
   const [productFilterBrand, setProductFilterBrand] = useState("");
@@ -227,6 +230,8 @@ export function AdminApp() {
     setToasts((t) => [...t, { id, msg, type, icon }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
   }, []);
+
+  useReveal();
 
   const loadProducts = useCallback(async () => {
     setProductsLoading(true);
@@ -297,11 +302,11 @@ export function AdminApp() {
 
   const sessionUserId = session?.user?.id;
 
-  /** Carga cuando la sesión está lista (`user.id` estable en deps). */
+  /** Carga cuando hay sesión admin (servidor o cliente). */
   useEffect(() => {
-    if (status !== "authenticated" || !sessionUserId) return;
+    if (!sessionReady || !sessionUserId || session?.user?.role !== "ADMIN") return;
     void loadProducts();
-  }, [status, sessionUserId, loadProducts]);
+  }, [sessionReady, sessionUserId, session?.user?.role, loadProducts]);
 
   useEffect(() => {
     if (productTab !== "list") {
@@ -329,53 +334,51 @@ export function AdminApp() {
   }, [productBulkMenuOpen]);
 
   useEffect(() => {
-    if (status !== "authenticated" || !sessionUserId) return;
+    if (!sessionReady || !sessionUserId || session?.user?.role !== "ADMIN") return;
     void loadCategories();
-  }, [status, sessionUserId, loadCategories]);
+  }, [sessionReady, sessionUserId, session?.user?.role, loadCategories]);
 
   useEffect(() => {
-    if (status !== "authenticated" || !sessionUserId) return;
+    if (!sessionReady || !sessionUserId || session?.user?.role !== "ADMIN") return;
     void loadPaidOrders();
-  }, [status, sessionUserId, loadPaidOrders]);
+  }, [sessionReady, sessionUserId, session?.user?.role, loadPaidOrders]);
 
   useEffect(() => {
-    if (status === "loading") return;
-    if (status === "unauthenticated") {
+    if (!sessionReady) return;
+    if (status === "unauthenticated" && !initialSession) {
       router.replace("/admin/login");
       return;
     }
     if (session?.user?.role && session.user.role !== "ADMIN") {
       router.replace("/admin/login?error=forbidden");
     }
-  }, [status, session, router]);
+  }, [sessionReady, status, session, initialSession, router]);
 
   /** Al entrar al panel: menú abierto y cierre automático a los 4 s (una sola vez por carga). */
   useEffect(() => {
-    if (status !== "authenticated" || session?.user?.role !== "ADMIN") return;
+    if (!sessionReady || session?.user?.role !== "ADMIN") return;
     if (sidebarAutoCollapseDone.current) return;
     sidebarAutoCollapseDone.current = true;
     const t = window.setTimeout(() => setSidebarExpanded(false), 4000);
     return () => window.clearTimeout(t);
   }, [status, session?.user?.role]);
 
-  const titles: Record<AdminPageId, string> = {
-    dashboard: "Dashboard",
-    products: "Gestión de Productos",
-    combos: "Crear Combos",
-    sales: "Ventas",
-    stock: "Inventario",
-    categories: "Categorías y subcategorías",
-    menu: "Gestión del Menú",
-    reports: "Reportes",
-  };
+  const titles = ADMIN_PAGE_TITLES;
 
-  const goPage = (p: AdminPageId) => {
-    setPage(p);
-    setPageTitle(titles[p]);
-    if (p === "sales") {
-      void loadPaidOrders();
-    }
-  };
+  const goPage = useCallback(
+    (p: AdminPageId, opts?: GoPageOptions) => {
+      if (p === page && !opts?.productTab) return;
+
+      setPage(p);
+      setPageTitle(titles[p]);
+      if (opts?.productTab) setProductTab(opts.productTab);
+
+      if (p === "products" || p === "stock" || p === "dashboard") void loadProducts();
+      else if (p === "categories" || p === "menu") void loadCategories();
+      else if (p === "sales") void loadPaidOrders();
+    },
+    [page, loadProducts, loadCategories, loadPaidOrders]
+  );
 
   const toggleSidebar = useCallback(() => {
     setSidebarExpanded((v) => !v);
@@ -585,26 +588,41 @@ export function AdminApp() {
     const max = Math.max(...values);
     return (
       <>
+        <div className="admin-dashboard-hero reveal">
+          <div className="admin-dashboard-hero-copy">
+            <span className="gb-tech-live-badge">
+              <span className="gb-tech-live-dot" aria-hidden />
+              Sistema en línea
+            </span>
+            <h2>Panel de control</h2>
+            <p>Monitorea ventas, inventario y catálogo con datos en tiempo real.</p>
+          </div>
+          <div className="admin-dashboard-hero-meta">
+            <span className="admin-dashboard-pill">◈ {products.length} SKUs</span>
+            <span className="admin-dashboard-pill">⬡ {sales.length} ventas</span>
+            <span className="admin-dashboard-pill">✦ IA catálogo activa</span>
+          </div>
+        </div>
         <div className="stats-grid">
-          <div className="stat-card">
+          <div className="stat-card stat-card--tech">
             <div className="stat-icon">💰</div>
             <div className="stat-num">{formatPrice(totalRevenue)}</div>
             <div className="stat-label">Ingresos este mes</div>
             <div className="stat-trend up">↑ 12% vs mes anterior</div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card stat-card--tech">
             <div className="stat-icon">🛒</div>
             <div className="stat-num">{sales.length}</div>
             <div className="stat-label">Ventas registradas</div>
             <div className="stat-trend up">↑ 8 nuevas hoy</div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card stat-card--tech">
             <div className="stat-icon">📦</div>
             <div className="stat-num">{products.filter((p) => p.active).length}</div>
             <div className="stat-label">Productos activos</div>
             <div className="stat-trend down">↓ 3 con stock bajo</div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card stat-card--tech">
             <div className="stat-icon">⭐</div>
             <div className="stat-num">4.8</div>
             <div className="stat-label">Calificación promedio</div>
@@ -612,7 +630,7 @@ export function AdminApp() {
           </div>
         </div>
         <div className="charts-row">
-          <div className="admin-card">
+          <div className="admin-card admin-card--tech">
             <div className="admin-card-title">Ventas últimos 6 meses</div>
             <div className="bar-chart" id="bar-chart">
               {months.map((m, i) => {
@@ -627,7 +645,7 @@ export function AdminApp() {
               })}
             </div>
           </div>
-          <div className="admin-card">
+          <div className="admin-card admin-card--tech">
             <div className="admin-card-title">Ventas por categoría</div>
             <div className="donut-chart">
               <div className="donut-visual" />
@@ -701,7 +719,7 @@ export function AdminApp() {
     );
   };
 
-  if (status === "loading") {
+  if (!sessionReady) {
     return (
       <div className="admin-login-gate">
         <div style={{ textAlign: "center" }}>
@@ -725,96 +743,36 @@ export function AdminApp() {
 
   const navLinkLabel = (text: string) => <span className="sidebar-link-label">{text}</span>;
 
+  const renderNavItem = (item: (typeof ADMIN_NAV_ITEMS)[number]) => {
+    const isActive = page === item.id;
+    return (
+      <button
+        key={item.id}
+        type="button"
+        className={`sidebar-link${isActive ? " active" : ""}`}
+        title={item.label}
+        aria-current={isActive ? "page" : undefined}
+        onClick={() => goPage(item.id)}
+      >
+        <span className="icon">{item.icon}</span>
+        {navLinkLabel(item.label)}
+      </button>
+    );
+  };
+
   return (
     <div className={`admin-app-shell${sidebarExpanded ? "" : " admin-sidebar-collapsed"}`}>
       <div className="admin-layout">
         <aside className="admin-sidebar" aria-label="Navegación del panel">
           <div className="admin-sidebar-header">
-            <div className="admin-logo">
-              <span className="admin-logo-mark" style={{ fontSize: 22 }}>
-                🌸
-              </span>
-              <span className="admin-logo-text">
-                Ginna<em>Beauty</em>
-              </span>
-            </div>
+            <BrandLogo variant="admin" />
             <div className="admin-role">Panel Administrativo</div>
           </div>
           <nav id="admin-sidebar-nav" className="sidebar-nav">
             <div className="nav-section-label">Principal</div>
-            <button
-              type="button"
-              className={`sidebar-link ${page === "dashboard" ? "active" : ""}`}
-              title="Dashboard"
-              onClick={() => goPage("dashboard")}
-            >
-              <span className="icon">📊</span>
-              {navLinkLabel("Dashboard")}
-            </button>
-            <button
-              type="button"
-              className={`sidebar-link ${page === "products" ? "active" : ""}`}
-              title="Productos"
-              onClick={() => goPage("products")}
-            >
-              <span className="icon">📦</span>
-              {navLinkLabel("Productos")}
-            </button>
-            <button
-              type="button"
-              className={`sidebar-link ${page === "combos" ? "active" : ""}`}
-              title="Crear Combos"
-              onClick={() => goPage("combos")}
-            >
-              <span className="icon">🧩</span>
-              {navLinkLabel("Crear Combos")}
-            </button>
-            <button
-              type="button"
-              className={`sidebar-link ${page === "sales" ? "active" : ""}`}
-              title="Ventas"
-              onClick={() => goPage("sales")}
-            >
-              <span className="icon">💰</span>
-              {navLinkLabel("Ventas")}
-            </button>
-            <button
-              type="button"
-              className={`sidebar-link ${page === "stock" ? "active" : ""}`}
-              title="Inventario"
-              onClick={() => goPage("stock")}
-            >
-              <span className="icon">📋</span>
-              {navLinkLabel("Inventario")}
-            </button>
+            {ADMIN_NAV_ITEMS.filter((item) => !item.section).map(renderNavItem)}
             <div className="nav-section-label">Configuración</div>
-            <button
-              type="button"
-              className={`sidebar-link ${page === "categories" ? "active" : ""}`}
-              title="Categorías"
-              onClick={() => goPage("categories")}
-            >
-              <span className="icon">🏷️</span>
-              {navLinkLabel("Categorías")}
-            </button>
-            <button
-              type="button"
-              className={`sidebar-link ${page === "menu" ? "active" : ""}`}
-              title="Gestión de Menú"
-              onClick={() => goPage("menu")}
-            >
-              <span className="icon">🗂️</span>
-              {navLinkLabel("Gestión de Menú")}
-            </button>
-            <button
-              type="button"
-              className={`sidebar-link ${page === "reports" ? "active" : ""}`}
-              title="Reportes"
-              onClick={() => goPage("reports")}
-            >
-              <span className="icon">📈</span>
-              {navLinkLabel("Reportes")}
-            </button>
+            {ADMIN_NAV_ITEMS.filter((item) => item.section === "config").map(renderNavItem)}
             <div className="nav-section-label">Tienda</div>
             <Link href="/" className="sidebar-link" target="_blank" title="Ver tienda en nueva pestaña">
               <span className="icon">🌐</span>
@@ -850,7 +808,11 @@ export function AdminApp() {
               <h1 className="admin-page-title">{pageTitle}</h1>
             </div>
             <div className="admin-topbar-actions">
-              <button type="button" className="btn btn-outline btn-sm" onClick={() => { goPage("products"); setProductTab("add"); }}>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => goPage("products", { productTab: "add" })}
+              >
                 + Agregar Producto
               </button>
               <button type="button" className="btn btn-rose btn-sm" onClick={() => setAddSaleOpen(true)}>
@@ -1108,7 +1070,14 @@ export function AdminApp() {
             </div>
 
             <div className={`admin-page ${page === "menu" ? "active" : ""}`} style={{ display: page === "menu" ? "block" : "none" }}>
-              <AdminMenuTab menuConfig={menuConfig} setMenuConfig={setMenuConfig} showToast={showToast} />
+              <AdminMenuTab
+                tree={categoriesTree}
+                loading={categoriesLoading}
+                error={categoriesError}
+                onReload={() => void loadCategories()}
+                showToast={showToast}
+                onGoCategories={() => goPage("categories")}
+              />
             </div>
 
             <div className={`admin-page ${page === "reports" ? "active" : ""}`} style={{ display: page === "reports" ? "block" : "none" }}>
@@ -1839,6 +1808,7 @@ function AdminBulkTab({
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const [existingPolicy, setExistingPolicy] = useState<"skip" | "replace">("skip");
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [showBulkTemplateModal, setShowBulkTemplateModal] = useState(false);
   const [showNewCategoriesModal, setShowNewCategoriesModal] = useState(false);
   const [applyingNewCategories, setApplyingNewCategories] = useState(false);
   /** Tras «Continuar sin crear» o cerrar el modal, se permite importar filas válidas aunque el preview siga listando novedades. */
@@ -2356,6 +2326,14 @@ function AdminBulkTab({
         >
           Fase 2 — Preview en servidor
         </span>
+        <button
+          type="button"
+          className="btn btn-outline btn-sm"
+          onClick={() => setShowBulkTemplateModal(true)}
+          style={{ marginLeft: "auto" }}
+        >
+          📋 Ver plantilla
+        </button>
       </div>
 
       <div
@@ -3192,6 +3170,7 @@ function AdminBulkTab({
           })();
         }}
       />
+      <AdminBulkTemplateModal open={showBulkTemplateModal} onClose={() => setShowBulkTemplateModal(false)} />
       </div>
     </div>
   );
@@ -3930,116 +3909,6 @@ function AdminStockTab({
   );
 }
 
-function AdminMenuTab({
-  menuConfig,
-  setMenuConfig,
-  showToast,
-}: {
-  menuConfig: MenuConfig;
-  setMenuConfig: React.Dispatch<React.SetStateAction<MenuConfig>>;
-  showToast: (m: string, t?: string, i?: string) => void;
-}) {
-  const [newCat, setNewCat] = useState("");
-  const [newIcon, setNewIcon] = useState("");
-  const [parent, setParent] = useState("");
-  const [grp, setGrp] = useState("");
-  const [subName, setSubName] = useState("");
-
-  return (
-    <>
-      <div className="admin-card" style={{ marginBottom: 20 }}>
-        <div className="admin-card-title">Agregar categoría</div>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <input type="text" className="form-input" placeholder="Nombre de la categoría" style={{ maxWidth: 240 }} value={newCat} onChange={(e) => setNewCat(e.target.value)} />
-          <input type="text" className="form-input" placeholder="Emoji 🌿" style={{ maxWidth: 100 }} value={newIcon} onChange={(e) => setNewIcon(e.target.value)} />
-          <button type="button" className="btn btn-rose btn-sm" onClick={() => {
-            const name = newCat.trim();
-            if (!name) return;
-            if (menuConfig[name]) { showToast("Ya existe esta categoría", "danger", "⚠️"); return; }
-            setMenuConfig((m) => ({ ...m, [name]: { icon: newIcon.trim() || "📂", subs: { General: [] } } }));
-            setNewCat("");
-            showToast(`Categoría "${name}" agregada`, "success", "✅");
-          }}>Agregar categoría</button>
-        </div>
-        <div style={{ marginTop: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <div>
-            <div className="form-label">Agregar subcategoría a:</div>
-            <select className="form-select" style={{ width: 200 }} value={parent} onChange={(e) => setParent(e.target.value)}>
-              <option value="">Seleccionar categoría</option>
-              {Object.keys(menuConfig).map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <div className="form-label">Grupo de subcategorías</div>
-            <input type="text" className="form-input" placeholder="Ej: Tratamiento" style={{ maxWidth: 180 }} value={grp} onChange={(e) => setGrp(e.target.value)} />
-          </div>
-          <div>
-            <div className="form-label">Subcategoría</div>
-            <input type="text" className="form-input" placeholder="Ej: Hidratación" style={{ maxWidth: 180 }} value={subName} onChange={(e) => setSubName(e.target.value)} />
-          </div>
-          <button type="button" className="btn btn-rose btn-sm" onClick={() => {
-            const group = grp.trim() || "General";
-            const name = subName.trim();
-            if (!parent || !name) { showToast("Completa todos los campos", "danger", "⚠️"); return; }
-            setMenuConfig((m) => {
-              const next = { ...m };
-              const cat = { ...next[parent], subs: { ...next[parent].subs } };
-              if (!cat.subs[group]) cat.subs[group] = [];
-              cat.subs[group] = [...cat.subs[group], name];
-              next[parent] = cat;
-              return next;
-            });
-            setSubName("");
-            showToast("Subcategoría agregada", "success", "✅");
-          }}>Agregar</button>
-        </div>
-      </div>
-      <div className="admin-card">
-        <div className="admin-card-title">Estructura del menú</div>
-        <div className="menu-tree">
-          {Object.entries(menuConfig).map(([cat, data]) => {
-            const allSubs = Object.entries(data.subs).flatMap(([g, items]) => items.map((i) => ({ grp: g, i })));
-            return (
-              <div key={cat} className="menu-cat-row">
-                <div className="menu-cat-header" onClick={(e) => { const el = (e.currentTarget.parentElement?.querySelector(".menu-cat-subs") as HTMLElement); if (el) el.hidden = !el.hidden; }}>
-                  <div className="menu-cat-name">{data.icon} {cat}</div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button type="button" className="btn-table danger" onClick={(e) => {
-                      e.stopPropagation();
-                      if (!confirm(`¿Eliminar categoría "${cat}" y todas sus subcategorías?`)) return;
-                      setMenuConfig((m) => { const n = { ...m }; delete n[cat]; return n; });
-                      showToast("Categoría eliminada", "default", "🗑️");
-                    }}>🗑️ Eliminar categoría</button>
-                    <span style={{ color: "var(--text-muted)", fontSize: 18 }}>›</span>
-                  </div>
-                </div>
-                <div className="menu-cat-subs">
-                  {allSubs.map(({ grp: g, i }) => (
-                    <div key={`${cat}-${g}-${i}`} className="sub-chip">
-                      <span>{i}</span>
-                      <span style={{ fontSize: 10, color: "var(--text-muted)" }}>({g})</span>
-                      <button type="button" title="Eliminar" onClick={() => {
-                        setMenuConfig((m) => {
-                          const next = { ...m };
-                          const c = { ...next[cat], subs: { ...next[cat].subs } };
-                          c.subs[g] = c.subs[g].filter((x) => x !== i);
-                          next[cat] = c;
-                          return next;
-                        });
-                      }}>✕</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <button type="button" className="btn btn-primary btn-sm" style={{ marginTop: 16 }} onClick={() => showToast("Menú guardado. Próximo paso: persistir vía API/Prisma.", "success", "💾")}>💾 Guardar cambios del menú</button>
-      </div>
-    </>
-  );
-}
-
 function AdminReportsTab({ sales, showToast }: { sales: AdminSale[]; showToast: (m: string, t?: string, i?: string) => void }) {
   const [showTop, setShowTop] = useState(false);
   const sorted = useMemo(() => {
@@ -4316,7 +4185,7 @@ function AdminCategoriesTab({
           <div style={{ marginTop: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>Subcategorías</div>
             <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 10px", maxWidth: 720 }}>
-              <strong>Etiqueta de menú (dorada):</strong> agrupa la subcategoría en el mega menú. Las opciones salen del menú público definido en código para esta categoría (ej. Cuidado capilar → Tratamiento, Estilo, Especiales). Si no ves lista, escribe el nombre del grupo a mano.
+              <strong>Etiqueta de menú (dorada):</strong> agrupa la subcategoría en el mega menú. Las opciones provienen de las etiquetas ya usadas en esta categoría (misma fuente que Gestión del Menú).
             </p>
             <table className="admin-table">
               <thead>
@@ -4337,7 +4206,7 @@ function AdminCategoriesTab({
                   </tr>
                 ) : (
                   [...cat.subcategories].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => {
-                    const menuGroupPresets = getMenuGroupLabelsForStoreCategory({ name: cat.name, slug: cat.slug });
+                    const menuGroupPresets = menuTagOptionsFromTree(tree, cat.slug, "");
                     return (
                     <tr key={s.id}>
                       <td style={{ padding: 12 }}>
@@ -4512,7 +4381,7 @@ function AdminCategoriesTab({
                 onChange={(e) => setSubDraft((d) => ({ ...d, [cat.id]: e.target.value }))}
               />
               {(() => {
-                const presets = getMenuGroupLabelsForStoreCategory({ name: cat.name, slug: cat.slug });
+                const presets = menuTagOptionsFromTree(tree, cat.slug, "");
                 const sel = subMenuTagSelectDraft[cat.id] ?? "";
                 const custom = subMenuTagDraft[cat.id] ?? "";
                 if (presets.length === 0) {
@@ -4566,7 +4435,7 @@ function AdminCategoriesTab({
                 onClick={() => {
                   const nm = (subDraft[cat.id] ?? "").trim();
                   if (!nm) return;
-                  const presets = getMenuGroupLabelsForStoreCategory({ name: cat.name, slug: cat.slug });
+                  const presets = menuTagOptionsFromTree(tree, cat.slug, "");
                   const sel = subMenuTagSelectDraft[cat.id] ?? "";
                   const custom = (subMenuTagDraft[cat.id] ?? "").trim();
                   const mt = resolveMenuTagFromEditor(presets, sel, custom);
