@@ -47,6 +47,26 @@ export function productNeedsAiComplete(product: Pick<AdminProduct, AiCompletable
   return getEmptyAiFields(product).length > 0;
 }
 
+export function productNeedsDescription(product: Pick<AdminProduct, AiCompletableField>): boolean {
+  return isFieldEmptyForAi(product, "description");
+}
+
+export type AiCompleteFieldOptions = {
+  /** Si se define, solo intenta completar estos campos. */
+  fields?: AiCompletableField[];
+  /** Regenera aunque el campo ya tenga valor (solo aplica a `fields`). */
+  forceRegenerate?: boolean;
+};
+
+export function resolveAiTargetFields(
+  product: Pick<AdminProduct, AiCompletableField>,
+  options: AiCompleteFieldOptions = {},
+): AiCompletableField[] {
+  const pool = options.fields?.length ? options.fields : AI_COMPLETABLE_FIELDS;
+  if (options.forceRegenerate) return [...pool];
+  return pool.filter((f) => isFieldEmptyForAi(product, f));
+}
+
 export function isAiGeneratedField(product: Pick<AdminProduct, "aiGeneratedFields">, field: AiCompletableField): boolean {
   return parseAiGeneratedFields(product.aiGeneratedFields)[field] === true;
 }

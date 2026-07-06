@@ -1,5 +1,6 @@
 import type { AdminAiCompleteResult } from "@/lib/api/admin-products";
 import { postAdminProductsAiCompleteOne } from "@/lib/api/admin-products";
+import type { AiCompleteFieldOptions } from "@/lib/product-ai-fields";
 
 const DEFAULT_CONCURRENCY = 6;
 
@@ -13,6 +14,7 @@ export async function runAdminProductsAiCompleteParallel(
   ids: string[],
   callbacks: AiCompleteProgressCallbacks = {},
   concurrency = DEFAULT_CONCURRENCY,
+  options?: AiCompleteFieldOptions,
 ): Promise<{ results: AdminAiCompleteResult[]; summary: { total: number; succeeded: number; failed: number } }> {
   const unique = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
   if (unique.length === 0) {
@@ -30,7 +32,7 @@ export async function runAdminProductsAiCompleteParallel(
       const id = unique[index]!;
       callbacks.onStart?.(id);
       try {
-        const result = await postAdminProductsAiCompleteOne(id);
+        const result = await postAdminProductsAiCompleteOne(id, options);
         results[index] = result;
         if (result.ok && result.filled.length > 0) succeeded += 1;
         else failed += 1;

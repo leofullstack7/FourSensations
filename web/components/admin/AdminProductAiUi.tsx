@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { AdminProduct } from "@/lib/types/admin";
 import {
   AI_COMPLETABLE_FIELDS,
@@ -11,6 +12,54 @@ import {
   type AiCompletableField,
 } from "@/lib/product-ai-fields";
 import { productOwnTags } from "@/lib/product-tags";
+
+export function AdminProductDescriptionBlock({
+  product,
+  generating,
+  onGenerate,
+}: {
+  product: AdminProduct;
+  generating?: boolean;
+  onGenerate?: () => void;
+}) {
+  const hasText = Boolean(product.description?.trim());
+  const isAi = isAiGeneratedField(product, "description");
+
+  return (
+    <div className="admin-product-description-block">
+      <div className="admin-product-description-block__head">
+        <h3 className="admin-product-description-block__title">Descripción del producto</h3>
+        <div className="admin-product-description-block__badges">
+          {isAi ? <span className="admin-ai-cell admin-ai-cell--yes">Generada con IA</span> : null}
+          {!isAi && hasText ? <span className="admin-ai-cell admin-ai-cell--no">Manual</span> : null}
+          {!hasText ? <span className="admin-ai-cell admin-ai-cell--empty">Sin descripción</span> : null}
+        </div>
+      </div>
+      {hasText ? (
+        <div className="admin-product-description-block__body">{product.description}</div>
+      ) : (
+        <p className="admin-product-description-block__empty">
+          Este producto no tiene descripción visible en tienda. Genera una con IA o edítala manualmente.
+        </p>
+      )}
+      {onGenerate ? (
+        <button
+          type="button"
+          className="btn btn-outline btn-sm admin-product-description-block__btn"
+          disabled={generating}
+          onClick={onGenerate}
+        >
+          {generating ? "Generando descripción…" : hasText ? "✦ Mejorar descripción con IA" : "✦ Generar descripción con IA"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+const FIELD_LABELS_DETAIL: Record<AiCompletableField, string> = {
+  ...AI_FIELD_LABELS,
+  tags: "Etiquetas del producto",
+};
 
 export function AdminAiFieldCell({
   product,
@@ -28,11 +77,6 @@ export function AdminAiFieldCell({
   }
   return <span className="admin-ai-cell admin-ai-cell--empty">—</span>;
 }
-
-const FIELD_LABELS_DETAIL: Record<AiCompletableField, string> = {
-  ...AI_FIELD_LABELS,
-  tags: "Etiquetas del producto",
-};
 
 export function AdminProductAiDetailPanel({ product }: { product: AdminProduct }) {
   const emptyFields = getEmptyAiFields(product);
@@ -63,11 +107,13 @@ export function AdminProductAiDetailPanel({ product }: { product: AdminProduct }
         </thead>
         <tbody>
           {AI_COMPLETABLE_FIELDS.map((field) => {
-            let value = "—";
+            let value: ReactNode = "—";
             if (field === "description") {
-              value = product.description?.trim()
-                ? product.description.slice(0, 120) + (product.description.length > 120 ? "…" : "")
-                : "—";
+              value = product.description?.trim() ? (
+                <span className="admin-ai-detail-desc-full">{product.description}</span>
+              ) : (
+                "—"
+              );
             }
             if (field === "tags") {
               const tags = productOwnTags(product);

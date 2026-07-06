@@ -19,12 +19,13 @@ import {
   createAdminProduct,
   deleteAdminProduct,
   fetchAdminProducts,
+  postAdminProductsAiCompleteOne,
   postAdminProductsBulkDelete,
   postAdminProductsAiClear,
   updateAdminProduct,
 } from "@/lib/api/admin-products";
 import { runAdminProductsAiCompleteParallel } from "@/lib/api/admin-products-ai-runner";
-import { productNeedsAiComplete } from "@/lib/product-ai-fields";
+import { productNeedsAiComplete, productNeedsDescription, type AiCompleteFieldOptions } from "@/lib/product-ai-fields";
 import {
   buildPrimaryVariantByGroup,
   buildVariantCountByGroup,
@@ -39,7 +40,7 @@ import {
 } from "@/components/admin/AdminAiBulkProgressModal";
 import { AdminProductVariantsModal } from "@/components/admin/AdminProductVariantsModal";
 import { AdminBulkTemplateModal } from "@/components/admin/AdminBulkTemplateModal";
-import { AdminProductAiDetailPanel } from "@/components/admin/AdminProductAiUi";
+import { AdminProductAiDetailPanel, AdminProductDescriptionBlock } from "@/components/admin/AdminProductAiUi";
 import { menuTagForProduct, productOwnTags, tagsToInputValue } from "@/lib/product-tags";
 import { fetchAdminPaidOrders } from "@/lib/api/admin-orders";
 import {
@@ -219,6 +220,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   const [productAiBusy, setProductAiBusy] = useState(false);
   const [aiBulkModalOpen, setAiBulkModalOpen] = useState(false);
   const [aiBulkPhase, setAiBulkPhase] = useState<"intro" | "running" | "done">("intro");
+  const [aiBulkMode, setAiBulkMode] = useState<"all" | "descriptions">("all");
   const [aiBulkItems, setAiBulkItems] = useState<AiBulkProgressItem[]>([]);
   const aiBulkRunLock = useRef(false);
   const productBulkMenuRef = useRef<HTMLDivElement>(null);
@@ -536,6 +538,35 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
     });
     setAiBulkItems(items);
     setAiBulkPhase("intro");
+    setAiBulkMode("all");
+    setAiBulkModalOpen(true);
+    setProductBulkMenuOpen(false);
+  }, [productListSelectedIds, products, showToast]);
+
+  const handleBulkAiDescriptions = useCallback(() => {
+    const ids = Array.from(productListSelectedIds);
+    if (ids.length === 0) {
+      showToast("Selecciona al menos un producto", "danger", "⚠️");
+      return;
+    }
+    const items: AiBulkProgressItem[] = ids.map((id) => {
+      const p = products.find((x) => x.id === id);
+      const needs = p ? productNeedsDescription(p) : true;
+      return {
+        id,
+        name: p?.name ?? id,
+        status: needs ? "pending" : "skipped",
+        filled: [],
+      };
+    });
+    const pending = items.filter((i) => i.status === "pending").length;
+    if (pending === 0) {
+      showToast("Los productos seleccionados ya tienen descripción", "default", "ℹ️");
+      return;
+    }
+    setAiBulkItems(items);
+    setAiBulkPhase("intro");
+    setAiBulkMode("descriptions");
     setAiBulkModalOpen(true);
     setProductBulkMenuOpen(false);
   }, [productListSelectedIds, products, showToast]);
@@ -545,6 +576,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
     setAiBulkModalOpen(false);
     setAiBulkItems([]);
     setAiBulkPhase("intro");
+    setAiBulkMode("all");
   }, [aiBulkPhase]);
 
   const runAiBulkComplete = useCallback(async () => {
@@ -554,48 +586,57 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
     setProductAiBusy(true);
 
     const pendingIds = aiBulkItems.filter((i) => i.status === "pending").map((i) => i.id);
+    const aiOptions: AiCompleteFieldOptions | undefined =
+      aiBulkMode === "descriptions" ? { fields: ["description"] } : undefined;
 
     try {
-      const { summary } = await runAdminProductsAiCompleteParallel(pendingIds, {
-        onStart(id) {
-          setAiBulkItems((prev) =>
-            prev.map((it) => (it.id === id ? { ...it, status: "running" as const } : it)),
-          );
-        },
-        onDone(result) {
-          setAiBulkItems((prev) =>
-            prev.map((it) => {
-              if (it.id !== result.id) return it;
-              if (result.ok && result.filled.length > 0) {
+      const { summary } = await runAdminProductsAiCompleteParallel(
+        pendingIds,
+        {
+          onStart(id) {
+            setAiBulkItems((prev) =>
+              prev.map((it) => (it.id === id ? { ...it, status: "running" as const } : it)),
+            );
+          },
+          onDone(result) {
+            setAiBulkItems((prev) =>
+              prev.map((it) => {
+                if (it.id !== result.id) return it;
+                if (result.ok && result.filled.length > 0) {
+                  return {
+                    ...it,
+                    status: "done" as const,
+                    filled: result.filled,
+                    product: result.product,
+                    name: result.name,
+                  };
+                }
+                if (result.ok) {
+                  return { ...it, status: "skipped" as const, name: result.name };
+                }
                 return {
                   ...it,
-                  status: "done" as const,
-                  filled: result.filled,
-                  product: result.product,
+                  status: "error" as const,
+                  error: result.error,
                   name: result.name,
                 };
-              }
-              if (result.ok) {
-                return { ...it, status: "skipped" as const, name: result.name };
-              }
-              return {
-                ...it,
-                status: "error" as const,
-                error: result.error,
-                name: result.name,
-              };
-            }),
-          );
-          if (result.product) {
-            setProducts((prev) => prev.map((x) => (x.id === result.product!.id ? result.product! : x)));
-          }
+              }),
+            );
+            if (result.product) {
+              setProducts((prev) => prev.map((x) => (x.id === result.product!.id ? result.product! : x)));
+            }
+          },
         },
-      });
+        undefined,
+        aiOptions,
+      );
 
       await loadProducts();
       setAiBulkPhase("done");
       showToast(
-        `IA: ${summary.succeeded} enriquecido(s), ${summary.failed} sin cambios o error`,
+        aiBulkMode === "descriptions"
+          ? `Descripciones: ${summary.succeeded} creada(s), ${summary.failed} sin cambios o error`
+          : `IA: ${summary.succeeded} enriquecido(s), ${summary.failed} sin cambios o error`,
         summary.succeeded > 0 ? "success" : "default",
         "✦",
       );
@@ -606,7 +647,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
       setProductAiBusy(false);
       aiBulkRunLock.current = false;
     }
-  }, [aiBulkItems, loadProducts, showToast]);
+  }, [aiBulkItems, aiBulkMode, loadProducts, showToast]);
 
   const handleBulkAiClear = useCallback(async () => {
     const ids = Array.from(productListSelectedIds);
@@ -646,6 +687,16 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
       const ids = visible.filter(productNeedsAiComplete).map((p) => p.id);
       setProductListSelectedIds(new Set(ids));
       showToast(`${ids.length} producto(s) incompleto(s) seleccionado(s)`, "default", "✦");
+      setProductBulkMenuOpen(false);
+    },
+    [showToast],
+  );
+
+  const selectWithoutDescriptionVisibleProducts = useCallback(
+    (visible: AdminProduct[]) => {
+      const ids = visible.filter(productNeedsDescription).map((p) => p.id);
+      setProductListSelectedIds(new Set(ids));
+      showToast(`${ids.length} producto(s) sin descripción seleccionado(s)`, "default", "📝");
       setProductBulkMenuOpen(false);
     },
     [showToast],
@@ -1021,6 +1072,26 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                         type="button"
                         role="menuitem"
                         className="btn btn-outline btn-sm"
+                        disabled={productAiBusy || productListSelectedIds.size === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={() => void handleBulkAiDescriptions()}
+                      >
+                        📝 Generar descripciones con IA ({productListSelectedIds.size})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={productAiBusy || filteredProducts.length === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={() => selectWithoutDescriptionVisibleProducts(filteredProducts)}
+                      >
+                        Seleccionar sin descripción (visibles)
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
                         disabled={productAiBusy || filteredProducts.length === 0}
                         style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
                         onClick={() => selectIncompleteVisibleProducts(filteredProducts)}
@@ -1322,6 +1393,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
       <AdminAiBulkProgressModal
         open={aiBulkModalOpen}
         phase={aiBulkPhase}
+        mode={aiBulkMode}
         items={aiBulkItems}
         onStart={() => void runAiBulkComplete()}
         onClose={closeAiBulkModal}
@@ -4823,6 +4895,7 @@ function AdminProductDetailModal({
   const [editBadge, setEditBadge] = useState("");
   const [editActive, setEditActive] = useState(true);
   const [editFeatured, setEditFeatured] = useState(false);
+  const [descriptionGenerating, setDescriptionGenerating] = useState(false);
 
   const applyProductToForm = useCallback(
     (p: AdminProduct) => {
@@ -4846,10 +4919,15 @@ function AdminProductDetailModal({
   useEffect(() => {
     if (!open || !product) return;
     setEditingMode(false);
+    setDescriptionGenerating(false);
     applyProductToForm(product);
-    // Solo al abrir el modal o al cambiar de producto (no en cada refresh del mismo id).
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset al cambiar de producto
   }, [open, product?.id]);
+
+  useEffect(() => {
+    if (!open || !product || editingMode) return;
+    applyProductToForm(product);
+  }, [open, product, editingMode, applyProductToForm]);
 
   const sortedCats = useMemo(
     () => [...categoryTree].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -5008,10 +5086,39 @@ function AdminProductDetailModal({
                   </label>
                 </div>
 
-                <div className="admin-card" style={{ padding: 12, marginBottom: 12 }}>
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>{product.name}</div>
-                  <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{product.description || "Sin descripción"}</div>
+                <div className="admin-card" style={{ padding: 12, marginBottom: 14, gridColumn: "1 / -1" }}>
+                  <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 10, color: "var(--dark)" }}>{product.name}</div>
                 </div>
+
+                <AdminProductDescriptionBlock
+                  product={product}
+                  generating={descriptionGenerating}
+                  onGenerate={() => {
+                    setDescriptionGenerating(true);
+                    void (async () => {
+                      try {
+                        const hasText = Boolean(product.description?.trim());
+                        const result = await postAdminProductsAiCompleteOne(product.id, {
+                          fields: ["description"],
+                          forceRegenerate: hasText,
+                        });
+                        if (result.product) {
+                          onProductRefresh?.(result.product);
+                          applyProductToForm(result.product);
+                        }
+                        if (result.ok && result.filled.includes("description")) {
+                          showToast("Descripción generada con IA", "success", "📝");
+                        } else {
+                          showToast(result.error ?? "No se pudo generar la descripción", "danger", "⚠️");
+                        }
+                      } catch (err) {
+                        showToast(err instanceof Error ? err.message : "Error de IA", "danger", "⚠️");
+                      } finally {
+                        setDescriptionGenerating(false);
+                      }
+                    })();
+                  }}
+                />
 
                 <AdminProductAiDetailPanel product={product} />
 

@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { prismaProductToAdmin } from "@/lib/mappers/admin-product";
 import {
-  getEmptyAiFields,
   mergeAiGeneratedFields,
+  resolveAiTargetFields,
   type AiCompletableField,
+  type AiCompleteFieldOptions,
 } from "@/lib/product-ai-fields";
 import { generateProductAiSuggestions } from "@/lib/server/product-ai-openai";
 import { filterOutMenuTags } from "@/lib/product-tags";
@@ -42,14 +43,15 @@ async function completeOneProduct(
   id: string,
   row: Awaited<ReturnType<typeof prisma.product.findMany>>[number] | undefined,
   categoryBySlug: Map<string, CategoryRow>,
+  options: AiCompleteFieldOptions = {},
 ): Promise<AiResultRow> {
   if (!row) {
     return { id, name: id, ok: false, filled: [], error: "Producto no encontrado" };
   }
 
   const admin = prismaProductToAdmin(row);
-  const emptyFields = getEmptyAiFields(admin);
-  if (emptyFields.length === 0) {
+  const targetFields = resolveAiTargetFields(admin, options);
+  if (targetFields.length === 0) {
     return { id, name: row.name, ok: true, filled: [], product: admin };
   }
 
@@ -65,29 +67,29 @@ async function completeOneProduct(
       categorySlug: row.category,
       subcategory: row.subcategory,
       priceCop: row.price,
-      emptyFields,
+      emptyFields: targetFields,
       menuTagForSubcategory: menuTagForSub,
     });
 
     const filled: AiCompletableField[] = [];
     const updateData: Record<string, unknown> = {};
 
-    if (emptyFields.includes("description") && suggestion.description) {
+    if (targetFields.includes("description") && suggestion.description) {
       updateData.description = suggestion.description;
       filled.push("description");
     }
-    if (emptyFields.includes("tags") && suggestion.tags?.length) {
+    if (targetFields.includes("tags") && suggestion.tags?.length) {
       const cleaned = filterOutMenuTags(suggestion.tags, menuTagForSub ? [menuTagForSub] : []);
       if (cleaned.length) {
         updateData.tags = cleaned;
         filled.push("tags");
       }
     }
-    if (emptyFields.includes("emoji") && suggestion.emoji) {
+    if (targetFields.includes("emoji") && suggestion.emoji) {
       updateData.emoji = suggestion.emoji;
       filled.push("emoji");
     }
-    if (emptyFields.includes("badge") && suggestion.badge !== undefined) {
+    if (targetFields.includes("badge") && suggestion.badge !== undefined) {
       updateData.badge = suggestion.badge;
       filled.push("badge");
     }
@@ -147,6 +149,10 @@ export async function POST(req: NextRequest) {
   }
 
   const uniqueIds = Array.from(new Set(parsed.data.ids));
+  const aiOptions: AiCompleteFieldOptions = {
+    fields: parsed.data.fields,
+    forceRegenerate: parsed.data.forceRegenerate,
+  };
 
   try {
     const [rows, categoryBySlug] = await Promise.all([
@@ -165,7 +171,7 @@ export async function POST(req: NextRequest) {
       while (cursor < uniqueIds.length) {
         const index = cursor++;
         const id = uniqueIds[index]!;
-        results[index] = await completeOneProduct(id, rowById.get(id), categoryBySlug);
+        results[index] = await completeOneProduct(id, rowById.get(id), categoryBySlug, aiOptions);
       }
     }
 

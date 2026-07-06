@@ -1,4 +1,5 @@
 import type { AdminProduct } from "@/lib/types/admin";
+import type { AiCompleteFieldOptions } from "@/lib/product-ai-fields";
 import { BULK_DELETE_ALL_CONFIRM_PHRASE } from "@/lib/validation/admin-product";
 
 export { BULK_DELETE_ALL_CONFIRM_PHRASE };
@@ -120,7 +121,10 @@ export type AdminAiCompleteResult = {
   product?: AdminProduct;
 };
 
-async function fetchAdminProductsAiCompleteChunk(ids: string[]): Promise<{
+async function fetchAdminProductsAiCompleteChunk(
+  ids: string[],
+  options?: AiCompleteFieldOptions,
+): Promise<{
   results: AdminAiCompleteResult[];
   summary: { total: number; succeeded: number; failed: number };
 }> {
@@ -128,7 +132,7 @@ async function fetchAdminProductsAiCompleteChunk(ids: string[]): Promise<{
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ ids }),
+    body: JSON.stringify({ ids, ...options }),
   });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as {
@@ -138,8 +142,11 @@ async function fetchAdminProductsAiCompleteChunk(ids: string[]): Promise<{
 }
 
 /** Un solo producto — para progreso en vivo y paralelismo. */
-export async function postAdminProductsAiCompleteOne(id: string): Promise<AdminAiCompleteResult> {
-  const data = await fetchAdminProductsAiCompleteChunk([id.trim()]);
+export async function postAdminProductsAiCompleteOne(
+  id: string,
+  options?: AiCompleteFieldOptions,
+): Promise<AdminAiCompleteResult> {
+  const data = await fetchAdminProductsAiCompleteChunk([id.trim()], options);
   return (
     data.results[0] ?? {
       id,

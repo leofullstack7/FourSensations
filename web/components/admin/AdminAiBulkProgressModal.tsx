@@ -17,6 +17,7 @@ export type AiBulkProgressItem = {
 type AdminAiBulkProgressModalProps = {
   open: boolean;
   phase: "intro" | "running" | "done";
+  mode: "all" | "descriptions";
   items: AiBulkProgressItem[];
   onStart: () => void;
   onClose: () => void;
@@ -73,6 +74,7 @@ function ProductPreview({ product, filled }: { product: AdminProduct; filled: Ai
 export function AdminAiBulkProgressModal({
   open,
   phase,
+  mode,
   items,
   onStart,
   onClose,
@@ -129,13 +131,15 @@ export function AdminAiBulkProgressModal({
           </div>
           <div>
             <h2 id="admin-ai-progress-title" className="admin-ai-progress-title">
-              {phase === "intro" && "Completar con IA"}
-              {phase === "running" && "Ginna IA trabajando…"}
-              {phase === "done" && "Proceso finalizado"}
+              {phase === "intro" && (mode === "descriptions" ? "Descripciones con IA" : "Completar con IA")}
+              {phase === "running" && (mode === "descriptions" ? "Escribiendo descripciones…" : "Ginna IA trabajando…")}
+              {phase === "done" && (mode === "descriptions" ? "Descripciones listas" : "Proceso finalizado")}
             </h2>
             <p className="admin-ai-progress-subtitle">
               {phase === "intro" &&
-                `${toProcess} producto(s) por enriquecer · ${items.length - toProcess} ya completos`}
+                (mode === "descriptions"
+                  ? `${toProcess} producto(s) sin descripción · ${items.length - toProcess} ya tienen texto`
+                  : `${toProcess} producto(s) por enriquecer · ${items.length - toProcess} ya completos`)}
               {phase === "running" && `${stats.finished} de ${stats.total} · ${stats.pct}%`}
               {phase === "done" &&
                 `${stats.done} enriquecidos · ${stats.skipped} omitidos · ${stats.errors} con error`}
@@ -154,8 +158,9 @@ export function AdminAiBulkProgressModal({
         {phase === "intro" && (
           <div className="admin-ai-progress-intro">
             <p>
-              La IA completará descripción, etiquetas, emoji y badge donde falten. Verás cada producto actualizarse en
-              tiempo real.
+              {mode === "descriptions"
+                ? "La IA redactará una descripción comercial clara para cada producto seleccionado que no tenga texto (mín. 12 caracteres)."
+                : "La IA completará descripción, etiquetas, emoji y badge donde falten. Verás cada producto actualizarse en tiempo real."}
             </p>
             <div className="admin-ai-progress-intro-actions">
               <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
