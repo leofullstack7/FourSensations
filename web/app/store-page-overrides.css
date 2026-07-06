@@ -21,9 +21,20 @@
   opacity: 0;
   transition: opacity 0.9s ease-in-out;
   z-index: 1;
+  transform: scale(1.1);
+  will-change: transform, opacity, background-size;
 }
 .hero-banner-layer.active {
   opacity: 1;
+  animation: hero-banner-zoom-out 12s ease-out forwards;
+}
+@keyframes hero-banner-zoom-out {
+  from {
+    transform: scale(1.14);
+  }
+  to {
+    transform: scale(1);
+  }
 }
 .hero-banner-layer--mobile {
   display: none;
@@ -52,6 +63,15 @@
 }
 .banner-placeholder-wrapper-secondary .hero-banner-layer.active {
   background-size: contain;
+  animation: hero-banner-zoom-out-contain 12s ease-out forwards;
+}
+@keyframes hero-banner-zoom-out-contain {
+  from {
+    background-size: 108%;
+  }
+  to {
+    background-size: contain;
+  }
 }
 .hero-center-content {
   position: relative;
@@ -231,11 +251,13 @@
   .banner-placeholder-wrapper-secondary .hero-banner-layer.active {
     background-size: cover;
     background-position: center top;
+    animation: hero-banner-zoom-out 12s ease-out forwards;
   }
 
   .hero-banner-layer.active {
     background-size: cover;
     background-position: center bottom;
+    animation: hero-banner-zoom-out 12s ease-out forwards;
   }
 
   /* Banner 1: mitad superior con contenido; inferior libre para figura */

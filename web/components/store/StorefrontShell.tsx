@@ -19,6 +19,7 @@ import { loadFavorites, saveFavorites } from "@/lib/favorites-storage";
 import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
 import { isHttpImageUrl } from "@/lib/util/image-url";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { StoreFloatingActions } from "@/components/store/StoreFloatingActions";
 
 type ToastItem = { id: number; msg: string; type: string; icon: string };
 
@@ -139,10 +140,12 @@ export function StorefrontShell({
 
   useEffect(() => {
     const onScroll = () => {
-      const header = document.querySelector(".header");
-      if (header) header.classList.toggle("scrolled", window.scrollY > 40);
+      const scrolled = window.scrollY > 40;
+      document.querySelector(".header")?.classList.toggle("scrolled", scrolled);
+      document.querySelector(".store-nav-sticky")?.classList.toggle("scrolled", scrolled);
     };
-    window.addEventListener("scroll", onScroll);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
@@ -373,6 +376,7 @@ export function StorefrontShell({
     >
       <div className="gb-store-shell">
       <>
+      <div className="store-nav-sticky" id="store-nav-sticky">
       <div className="topbar" aria-live="polite">
         <MotionSpan
           key={topbarIndex}
@@ -633,6 +637,7 @@ export function StorefrontShell({
           </div>
         </div>
       </header>
+      </div>
 
       {children}
 
@@ -1131,6 +1136,8 @@ export function StorefrontShell({
           </div>
         </div>
       ) : null}
+
+      <StoreFloatingActions />
 
       <div className="toast-container" id="toast-container">
         {toasts.map((t) => (
