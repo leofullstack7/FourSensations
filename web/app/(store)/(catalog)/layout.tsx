@@ -1,19 +1,15 @@
 import { StorefrontShell } from "@/components/store/StorefrontShell";
-import { getStorefrontProducts } from "@/lib/products";
 import { getStorefrontCategoryMenu } from "@/lib/store-categories";
 
-/** Shell + catálogo compartidos: no se vuelven a cargar al cambiar de categoría. */
+/** Solo menú en layout: el catálogo completo se carga en home o bajo demanda (búsqueda). */
 export const revalidate = 300;
 
 export default async function CatalogLayout({ children }: { children: React.ReactNode }) {
-  const [catalogProducts, menuPayload] = await Promise.all([
-    getStorefrontProducts(),
-    getStorefrontCategoryMenu(),
-  ]);
+  const menuPayload = await getStorefrontCategoryMenu();
 
   return (
     <StorefrontShell
-      catalogProducts={catalogProducts}
+      catalogProducts={[]}
       initialMenuConfig={menuPayload.config}
       categorySlugByName={menuPayload.slugByCategoryName}
     >

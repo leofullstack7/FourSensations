@@ -80,6 +80,73 @@ export async function getStorefrontProducts(): Promise<StoreProduct[]> {
   }
 }
 
+const CATEGORY_LIST_IMAGE_LIMIT = 4;
+
+export type CategoryProductsPage = {
+  products: StoreProduct[];
+  totalCount: number;
+  hasMore: boolean;
+};
+
+/** Página de productos de una categoría (excluye vitrina ya mostrada en SSR). */
+export async function getStorefrontCategoryProductsPage(
+  categorySlug: string,
+  opts: { skip: number; take: number; excludeIds?: string[] },
+): Promise<CategoryProductsPage> {
+  const { skip, take, excludeIds = [] } = opts;
+
+  if (!process.env.DATABASE_URL) {
+    const all = orderCategoryProductsByFeatured(
+      mockProducts.filter((p) => p.category === categorySlug),
+      excludeIds.length > 0 ? excludeIds : defaultFeaturedProductIds(
+        mockProducts.filter((p) => p.category === categorySlug),
+      ),
+    );
+    const rest = all.filter((p) => !excludeIds.includes(p.id));
+    const page = rest.slice(skip, skip + take);
+    return {
+      products: page,
+      totalCount: all.length,
+      hasMore: skip + page.length < rest.length,
+    };
+  }
+
+  try {
+    const exclude = excludeIds.filter(Boolean);
+    const where = {
+      active: true,
+      category: categorySlug,
+      ...(exclude.length > 0 ? { id: { notIn: exclude } } : {}),
+    };
+
+    const [totalCount, rows] = await Promise.all([
+      prisma.product.count({ where: { active: true, category: categorySlug } }),
+      prisma.product.findMany({
+        where,
+        orderBy: [{ featuredInHome: "desc" }, { name: "asc" }],
+        skip,
+        take,
+        include: {
+          images: { orderBy: { sortOrder: "asc" }, take: CATEGORY_LIST_IMAGE_LIMIT },
+        },
+      }),
+    ]);
+
+    const products = rows.map((r) => rowToStore(r, r.images));
+    const restTotal = await prisma.product.count({ where });
+    return {
+      products,
+      totalCount,
+      hasMore: skip + products.length < restTotal,
+    };
+  } catch {
+    const all = mockProducts.filter((p) => p.category === categorySlug);
+    const rest = all.filter((p) => !excludeIds.includes(p.id));
+    const page = rest.slice(skip, skip + take);
+    return { products: page, totalCount: all.length, hasMore: skip + page.length < rest.length };
+  }
+}
+
 /** Productos activos de una categoría (payload reducido vs catálogo completo). */
 export async function getStorefrontProductsByCategory(categorySlug: string): Promise<StoreProduct[]> {
   if (!process.env.DATABASE_URL) {

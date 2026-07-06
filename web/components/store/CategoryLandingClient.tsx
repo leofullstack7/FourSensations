@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useReveal } from "@/hooks/useReveal";
 import { TechAmbient } from "@/components/ui/TechAmbient";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreProductCard } from "@/components/store/store-product-card";
-import { orderCategoryProductsByFeatured } from "@/lib/category-storefront-featured";
+import { CATEGORY_STOREFRONT_FEATURED_COUNT } from "@/lib/category-storefront-featured";
 import type { StoreProduct } from "@/lib/types/product";
 import { getCategoryLandingCopy } from "@/lib/category-landing-theme";
 
@@ -48,29 +48,43 @@ export function CategoryLandingClient({
   productTagOptions,
   defaultProductTag,
 }: CategoryLandingClientProps) {
-  const { openProductModal, addToCart, toggleFavorite, favorites } = useStorefrontUi();
+  const { openProductModal, addToCart, toggleFavorite, favorites, mergeCatalogProducts } = useStorefrontUi();
+  const CATEGORY_PAGE_SIZE = 24;
+
   const [products, setProducts] = useState<StoreProduct[]>(featuredProducts);
-  const [catalogLoading, setCatalogLoading] = useState(totalProductCount > featuredProducts.length);
+  const [restSkip, setRestSkip] = useState(0);
+  const [hasMore, setHasMore] = useState(totalProductCount > featuredProducts.length);
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const [allTags, setAllTags] = useState<string[]>(productTagOptions);
 
   useEffect(() => {
     setProducts(featuredProducts);
-    setCatalogLoading(totalProductCount > featuredProducts.length);
+    setRestSkip(0);
+    setHasMore(totalProductCount > featuredProducts.length);
     setAllTags(productTagOptions);
-  }, [categorySlug, featuredProducts, totalProductCount, productTagOptions]);
+    mergeCatalogProducts(featuredProducts);
+  }, [categorySlug, featuredProducts, totalProductCount, productTagOptions, mergeCatalogProducts]);
 
-  useEffect(() => {
-    if (totalProductCount <= featuredProducts.length) return;
-    let cancelled = false;
+  const loadMoreCategory = useCallback(() => {
+    if (!hasMore || catalogLoading) return;
     setCatalogLoading(true);
-    void fetch(`/api/store/category/${encodeURIComponent(categorySlug)}/products`, {
-      cache: "no-store",
-    })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("No se pudo cargar el catálogo"))))
-      .then((data: { products?: StoreProduct[] }) => {
-        if (cancelled || !Array.isArray(data.products)) return;
-        const ordered = orderCategoryProductsByFeatured(data.products, featuredOrderIds);
-        setProducts(ordered);
+    const exclude = featuredOrderIds.slice(0, CATEGORY_STOREFRONT_FEATURED_COUNT).join(",");
+    const url = `/api/store/category/${encodeURIComponent(categorySlug)}/products?skip=${restSkip}&take=${CATEGORY_PAGE_SIZE}&exclude=${encodeURIComponent(exclude)}`;
+    void fetch(url, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("No se pudo cargar productos"))))
+      .then((data: { products?: StoreProduct[]; hasMore?: boolean }) => {
+        if (!Array.isArray(data.products) || data.products.length === 0) {
+          setHasMore(false);
+          return;
+        }
+        setProducts((prev) => {
+          const map = new Map(prev.map((p) => [p.id, p]));
+          for (const p of data.products!) map.set(p.id, p);
+          return Array.from(map.values());
+        });
+        mergeCatalogProducts(data.products);
+        setRestSkip((s) => s + data.products!.length);
+        setHasMore(Boolean(data.hasMore));
         const tagSet = new Set<string>(productTagOptions);
         for (const p of data.products) {
           for (const t of p.tags ?? []) tagSet.add(t);
@@ -78,15 +92,18 @@ export function CategoryLandingClient({
         setAllTags(Array.from(tagSet).sort((a, b) => a.localeCompare(b, "es")));
       })
       .catch(() => {
-        /* vitrina ya visible; el resto es progresivo */
+        /* vitrina ya visible */
       })
-      .finally(() => {
-        if (!cancelled) setCatalogLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [categorySlug, featuredOrderIds, totalProductCount, featuredProducts.length, productTagOptions]);
+      .finally(() => setCatalogLoading(false));
+  }, [
+    hasMore,
+    catalogLoading,
+    categorySlug,
+    restSkip,
+    featuredOrderIds,
+    productTagOptions,
+    mergeCatalogProducts,
+  ]);
   const copy = useMemo(() => getCategoryLandingCopy(categoryLabel, categorySlug), [categoryLabel, categorySlug]);
   const [selectedGrupo, setSelectedGrupo] = useState(defaultGrupo);
   const [selectedSub, setSelectedSub] = useState(defaultSubcategory);
@@ -292,10 +309,11 @@ export function CategoryLandingClient({
             </div>
           </div>
 
-          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "14px 0 20px" }}>
-            {filtered.length} producto(s) en <strong>{categoryLabel}</strong>
-            {selectedGrupo || selectedSub || selectedBrand || selectedProductTag ? " con filtros activos" : ""}
-            {catalogLoading ? " · cargando catálogo completo…" : ""}
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "14px 0 12px" }}>
+            {selectedGrupo || selectedSub || selectedBrand || selectedProductTag
+              ? `${filtered.length} producto(s) con filtros activos`
+              : `Mostrando ${products.length} de ${totalProductCount} en ${categoryLabel}`}
+            {catalogLoading ? " · cargando más…" : ""}
           </p>
 
           {subcategoriesFromDb.length === 0 && (
@@ -310,19 +328,35 @@ export function CategoryLandingClient({
               No hay productos para estos filtros.
             </div>
           ) : (
-            <div className="products-grid category-landing-products">
-              {filtered.map((p, i) => (
-                <StoreProductCard
-                  key={`${categorySlug}-${p.id}`}
-                  product={p}
-                  isFav={favorites.includes(p.id)}
-                  onOpen={openProductModal}
-                  onToggleFav={toggleFavorite}
-                  onAddCart={addToCart}
-                  imagePriority={i < 6}
-                />
-              ))}
-            </div>
+            <>
+              <div className="products-grid category-landing-products">
+                {filtered.map((p, i) => (
+                  <StoreProductCard
+                    key={`${categorySlug}-${p.id}`}
+                    product={p}
+                    isFav={favorites.includes(p.id)}
+                    onOpen={openProductModal}
+                    onToggleFav={toggleFavorite}
+                    onAddCart={addToCart}
+                    imagePriority={i < 6}
+                  />
+                ))}
+              </div>
+              {hasMore ? (
+                <div style={{ display: "flex", justifyContent: "center", margin: "28px 0 8px" }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={loadMoreCategory}
+                    disabled={catalogLoading}
+                  >
+                    {catalogLoading
+                      ? "Cargando productos…"
+                      : `Cargar más productos (${totalProductCount - products.length} restantes)`}
+                  </button>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </section>

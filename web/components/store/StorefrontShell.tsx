@@ -68,8 +68,37 @@ export function StorefrontShell({
   initialMenuConfig: MenuConfig;
   categorySlugByName: Record<string, string>;
 }) {
-  const [products] = useState<StoreProduct[]>(catalogProducts);
+  const [products, setProducts] = useState<StoreProduct[]>(catalogProducts);
   const [menuConfig] = useState<MenuConfig>(initialMenuConfig);
+  const fullCatalogLoaded = useRef(false);
+  const fullCatalogLoading = useRef(false);
+
+  const mergeCatalogProducts = useCallback((extra: StoreProduct[]) => {
+    if (extra.length === 0) return;
+    setProducts((prev) => {
+      const map = new Map(prev.map((p) => [p.id, p]));
+      for (const p of extra) map.set(p.id, p);
+      return Array.from(map.values());
+    });
+  }, []);
+
+  const ensureFullCatalog = useCallback(async () => {
+    if (fullCatalogLoaded.current || fullCatalogLoading.current) return;
+    fullCatalogLoading.current = true;
+    try {
+      const res = await fetch("/api/store/catalog", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as { products?: StoreProduct[] };
+      if (Array.isArray(data.products) && data.products.length > 0) {
+        mergeCatalogProducts(data.products);
+        fullCatalogLoaded.current = true;
+      }
+    } catch {
+      /* búsqueda global opcional */
+    } finally {
+      fullCatalogLoading.current = false;
+    }
+  }, [mergeCatalogProducts]);
 
   const categoryPath = useCallback(
     (categoryDisplayName: string) =>
@@ -307,6 +336,7 @@ export function StorefrontShell({
   };
 
   const openSearch = () => {
+    void ensureFullCatalog();
     setSearchQuery("");
     setSearchOpen(true);
     document.body.style.overflow = "hidden";
@@ -314,11 +344,12 @@ export function StorefrontShell({
   };
 
   const openSearchWithQuery = useCallback((query: string) => {
+    void ensureFullCatalog();
     setSearchQuery(query.trim());
     setSearchOpen(true);
     document.body.style.overflow = "hidden";
     setTimeout(() => document.getElementById("search-input-big")?.focus(), 100);
-  }, []);
+  }, [ensureFullCatalog]);
 
   const closeSearch = () => {
     setSearchOpen(false);
@@ -369,6 +400,8 @@ export function StorefrontShell({
         menuConfig,
         categoryPath,
         catalogProducts: products,
+        mergeCatalogProducts,
+        ensureFullCatalog,
         showToast,
         openProductModal,
         closeProductModal,

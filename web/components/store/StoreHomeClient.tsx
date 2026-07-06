@@ -26,11 +26,12 @@ const LOAD_MORE_PRODUCTS = 20;
 
 type StoreHomeClientProps = {
   tintItems?: TintBubbleItem[];
+  initialProducts?: StoreProduct[];
 };
 
-export function StoreHomeClient({ tintItems = [] }: StoreHomeClientProps) {
+export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreHomeClientProps) {
   const {
-    catalogProducts: products,
+    catalogProducts,
     menuConfig,
     categoryPath,
     showToast,
@@ -40,6 +41,8 @@ export function StoreHomeClient({ tintItems = [] }: StoreHomeClientProps) {
     toggleFavorite,
     favorites,
   } = useStorefrontUi();
+
+  const products = catalogProducts.length > 0 ? catalogProducts : initialProducts;
 
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [manualSub, setManualSub] = useState<string | null>(null);
