@@ -110,3 +110,40 @@ export async function postSyncProductTagsFromMenu(): Promise<{ updated: number; 
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as { updated: number; total: number };
 }
+
+export type AdminAiCompleteResult = {
+  id: string;
+  name: string;
+  ok: boolean;
+  filled: ("description" | "tags" | "emoji" | "badge")[];
+  error?: string;
+  product?: AdminProduct;
+};
+
+export async function postAdminProductsAiComplete(ids: string[]): Promise<{
+  results: AdminAiCompleteResult[];
+  summary: { total: number; succeeded: number; failed: number };
+}> {
+  const res = await fetch("/api/admin/products/ai-complete", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as {
+    results: AdminAiCompleteResult[];
+    summary: { total: number; succeeded: number; failed: number };
+  };
+}
+
+export async function postAdminProductsAiClear(ids: string[]): Promise<{ clearedProducts: number; clearedFields: number }> {
+  const res = await fetch("/api/admin/products/ai-clear", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as { clearedProducts: number; clearedFields: number };
+}

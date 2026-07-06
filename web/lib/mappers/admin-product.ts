@@ -1,5 +1,6 @@
 import type { Product, ProductImage } from "@prisma/client";
-import type { AdminProduct, AdminProductImage } from "@/lib/types/admin";
+import { parseAiGeneratedFields } from "@/lib/product-ai-fields";
+import type { AdminProduct, AdminProductImage, AiGeneratedFieldsMap } from "@/lib/types/admin";
 
 export type ProductWithImages = Product & { images?: ProductImage[] };
 
@@ -35,5 +36,6 @@ export function prismaProductToAdmin(p: ProductWithImages): AdminProduct {
     variantGroupOrder: p.variantGroupOrder ?? null,
     imageUrl: p.imageUrl,
     images: mapImages(p.images),
+    aiGeneratedFields: parseAiGeneratedFields(p.aiGeneratedFields) as AiGeneratedFieldsMap,
   };
 }

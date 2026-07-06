@@ -20,6 +20,8 @@ import {
   deleteAdminProduct,
   fetchAdminProducts,
   postAdminProductsBulkDelete,
+  postAdminProductsAiClear,
+  postAdminProductsAiComplete,
   postSyncProductTagsFromMenu,
   updateAdminProduct,
 } from "@/lib/api/admin-products";
@@ -32,6 +34,8 @@ import {
 } from "@/lib/admin/variant-groups";
 import { AdminProductVariantsModal } from "@/components/admin/AdminProductVariantsModal";
 import { AdminBulkTemplateModal } from "@/components/admin/AdminBulkTemplateModal";
+import { AdminAiFieldCell, AdminProductAiDetailPanel } from "@/components/admin/AdminProductAiUi";
+import { productNeedsAiComplete } from "@/lib/product-ai-fields";
 import { fetchAdminPaidOrders } from "@/lib/api/admin-orders";
 import {
   addProductGalleryImage,
@@ -213,6 +217,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   const [productListSelectedIds, setProductListSelectedIds] = useState<Set<string>>(() => new Set());
   const [productBulkMenuOpen, setProductBulkMenuOpen] = useState(false);
   const [productBulkDeleting, setProductBulkDeleting] = useState(false);
+  const [productAiBusy, setProductAiBusy] = useState(false);
   const productBulkMenuRef = useRef<HTMLDivElement>(null);
   /** Menú lateral expandido (texto + iconos); al colapsar solo iconos y más ancho útil. */
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
@@ -528,6 +533,84 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
       setProductBulkDeleting(false);
     }
   }, [productListSelectedIds, showToast, loadProducts, clearProductListSelection]);
+
+  const handleBulkAiComplete = useCallback(async () => {
+    const ids = Array.from(productListSelectedIds);
+    if (ids.length === 0) {
+      showToast("Selecciona al menos un producto", "danger", "⚠️");
+      return;
+    }
+    if (
+      !confirm(
+        `Completar con IA los campos vacíos de ${ids.length} producto(s)? Se usará categoría y subcategoría como contexto.`,
+      )
+    ) {
+      return;
+    }
+    setProductAiBusy(true);
+    setProductBulkMenuOpen(false);
+    try {
+      const { results, summary } = await postAdminProductsAiComplete(ids);
+      await loadProducts();
+      showToast(
+        `IA: ${summary.succeeded} completado(s), ${summary.failed} sin cambios o con error`,
+        summary.succeeded > 0 ? "success" : "default",
+        "✦",
+      );
+      const firstOk = results.find((r) => r.ok && r.filled.length > 0);
+      if (firstOk?.id) {
+        setDetailProductId(firstOk.id);
+        setDetailOpen(true);
+      }
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Error al completar con IA", "danger", "⚠️");
+    } finally {
+      setProductAiBusy(false);
+    }
+  }, [productListSelectedIds, showToast, loadProducts]);
+
+  const handleBulkAiClear = useCallback(async () => {
+    const ids = Array.from(productListSelectedIds);
+    if (ids.length === 0) {
+      showToast("Selecciona al menos un producto", "danger", "⚠️");
+      return;
+    }
+    if (
+      !confirm(
+        `¿Quitar los valores generados por IA en ${ids.length} producto(s)? Los campos quedarán vacíos o por defecto.`,
+      )
+    ) {
+      return;
+    }
+    setProductAiBusy(true);
+    setProductBulkMenuOpen(false);
+    try {
+      const { clearedProducts, clearedFields } = await postAdminProductsAiClear(ids);
+      clearProductListSelection();
+      await loadProducts();
+      showToast(
+        clearedProducts > 0
+          ? `Datos IA eliminados en ${clearedProducts} producto(s) (${clearedFields} campos)`
+          : "Ningún producto seleccionado tenía datos marcados como IA",
+        clearedProducts > 0 ? "default" : "default",
+        "🧹",
+      );
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Error al quitar datos IA", "danger", "⚠️");
+    } finally {
+      setProductAiBusy(false);
+    }
+  }, [productListSelectedIds, showToast, loadProducts, clearProductListSelection]);
+
+  const selectIncompleteVisibleProducts = useCallback(
+    (visible: AdminProduct[]) => {
+      const ids = visible.filter(productNeedsAiComplete).map((p) => p.id);
+      setProductListSelectedIds(new Set(ids));
+      showToast(`${ids.length} producto(s) incompleto(s) seleccionado(s)`, "default", "✦");
+      setProductBulkMenuOpen(false);
+    },
+    [showToast],
+  );
 
   const handleBulkDeleteAll = useCallback(async () => {
     if (products.length === 0) {
@@ -859,7 +942,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                     className={`tab-btn ${productBulkMenuOpen ? "active" : ""}`}
                     aria-expanded={productBulkMenuOpen}
                     aria-haspopup="menu"
-                    disabled={productBulkDeleting}
+                    disabled={productBulkDeleting || productAiBusy}
                     title="Más acciones (eliminación en lote)"
                     onClick={() => setProductBulkMenuOpen((o) => !o)}
                     style={{ minWidth: 44, padding: "10px 14px" }}
@@ -885,6 +968,42 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                         gap: 6,
                       }}
                     >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-primary btn-sm"
+                        disabled={productAiBusy || productListSelectedIds.size === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={() => void handleBulkAiComplete()}
+                      >
+                        ✦ Completar datos con IA ({productListSelectedIds.size})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={productAiBusy || filteredProducts.length === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={() => selectIncompleteVisibleProducts(filteredProducts)}
+                      >
+                        Seleccionar incompletos visibles
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={productAiBusy || productListSelectedIds.size === 0}
+                        style={{
+                          width: "100%",
+                          justifyContent: "flex-start",
+                          textAlign: "left",
+                          borderColor: "var(--sage-dark)",
+                          color: "var(--sage-dark)",
+                        }}
+                        onClick={() => void handleBulkAiClear()}
+                      >
+                        Quitar datos generados por IA ({productListSelectedIds.size})
+                      </button>
                       <button
                         type="button"
                         role="menuitem"
@@ -1386,6 +1505,10 @@ function AdminProductListTab({
               <th title="Orden en la sección Productos Destacados del home (sin etiqueta pública)">Prioridad home</th>
               <th>Precio</th>
               <th>Stock</th>
+              <th style={{ textAlign: "center", fontSize: 11 }} title="Descripción generada por IA">Desc. IA</th>
+              <th style={{ textAlign: "center", fontSize: 11 }} title="Etiquetas generadas por IA">Tags IA</th>
+              <th style={{ textAlign: "center", fontSize: 11 }} title="Emoji generado por IA">Emoji IA</th>
+              <th style={{ textAlign: "center", fontSize: 11 }} title="Badge generado por IA">Badge IA</th>
               <th style={{ textAlign: "center" }}>Variantes</th>
               <th>Estado</th>
               <th>Acciones</th>
@@ -1394,13 +1517,13 @@ function AdminProductListTab({
           <tbody>
             {listLoading && filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                <td colSpan={14} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   Cargando…
                 </td>
               </tr>
             ) : filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                <td colSpan={14} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   {totalProductCount === 0
                     ? "Sin productos"
                     : "Ningún producto coincide con la búsqueda o los filtros seleccionados."}
@@ -1452,6 +1575,18 @@ function AdminProductListTab({
                     </td>
                     <td>{formatPrice(p.price)}</td>
                     <td>{p.stock}</td>
+                    <td style={{ textAlign: "center" }}>
+                      <AdminAiFieldCell product={p} field="description" />
+                    </td>
+                    <td style={{ textAlign: "center" }}>
+                      <AdminAiFieldCell product={p} field="tags" />
+                    </td>
+                    <td style={{ textAlign: "center" }}>
+                      <AdminAiFieldCell product={p} field="emoji" />
+                    </td>
+                    <td style={{ textAlign: "center" }}>
+                      <AdminAiFieldCell product={p} field="badge" />
+                    </td>
                     <td style={{ textAlign: "center", verticalAlign: "middle" }}>
                       {isGroupRow ? (
                         <button
@@ -4842,6 +4977,8 @@ function AdminProductDetailModal({
                   <div style={{ fontWeight: 700, marginBottom: 6 }}>{product.name}</div>
                   <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{product.description || "Sin descripción"}</div>
                 </div>
+
+                <AdminProductAiDetailPanel product={product} />
 
                 <div className="admin-card" style={{ padding: 12 }}>
                   <div style={{ fontWeight: 700, marginBottom: 8 }}>Imágenes extra</div>

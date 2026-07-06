@@ -99,6 +99,8 @@ model Product {
   /// Grupo de color dentro de la línea — texto libre, importación Tintes.
   tintGroup      String?
   active        Boolean        @default(true)
+  /// Mapa JSON de campos generados por IA, ej. { "description": true, "tags": true }
+  aiGeneratedFields Json?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   images        ProductImage[]

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { prismaProductToAdmin } from "@/lib/mappers/admin-product";
 import { allocateUniqueProductSlug } from "@/lib/server/product-slug";
 import { slugify } from "@/lib/slugify";
 import { isTrustedCdnImageUrl } from "@/lib/server/bunny-config";
+import { stripAiFlagsForManualEdit } from "@/lib/product-ai-fields";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
 import {
   adminProductUpdateSchema,
@@ -97,6 +99,14 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
       nextExternalRef = ref;
     }
 
+    const aiPatchKeys = Object.keys(d).filter((k) =>
+      ["description", "tags", "emoji", "badge"].includes(k),
+    );
+    const nextAiFields =
+      aiPatchKeys.length > 0
+        ? stripAiFlagsForManualEdit(existing.aiGeneratedFields, aiPatchKeys)
+        : undefined;
+
     // Solo columnas escalares; `ProductImage` (galería) no se toca aquí.
     // `imageUrl`: el esquema deja `undefined` si el cliente no envía la clave (no borrar foto);
     // `null` o `""` parseados borran la imagen a propósito.
@@ -121,6 +131,10 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
         ...(d.isNew !== undefined && { isNew: d.isNew }),
         ...(d.featuredInHome !== undefined && { featuredInHome: d.featuredInHome }),
         ...(d.active !== undefined && { active: d.active }),
+        ...(nextAiFields !== undefined && {
+          aiGeneratedFields:
+            nextAiFields === null ? Prisma.JsonNull : (nextAiFields as Prisma.InputJsonValue),
+        }),
         slug: nextSlug,
       },
       include: { images: true },

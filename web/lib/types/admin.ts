@@ -5,6 +5,11 @@ export type AdminProductImage = {
   sortOrder: number;
 };
 
+/** Campos marcados como generados por IA. */
+export type AiGeneratedFieldsMap = Partial<
+  Record<"description" | "tags" | "emoji" | "badge", boolean>
+>;
+
 /** Producto en admin — `id` es cuid de Prisma. */
 export type AdminProduct = {
   id: string;
@@ -34,6 +39,8 @@ export type AdminProduct = {
   featuredInHome: boolean;
   imageUrl: string | null;
   images: AdminProductImage[];
+  /** Campos marcados como generados por IA (description, tags, emoji, badge). */
+  aiGeneratedFields?: AiGeneratedFieldsMap | null;
 };
 
 export type AdminSale = {

@@ -270,6 +270,8 @@ export function StorefrontShell({
         normalizeSearchText(p.brand),
         normalizeSearchText(p.subcategory),
         normalizeSearchText(getCategoryLabel(p.category)),
+        normalizeSearchText(p.description),
+        ...p.tags.map((t) => normalizeSearchText(t)),
       ];
       const tokens = fields.flatMap((f) => f.split(/\s+/).filter(Boolean));
 
