@@ -62,10 +62,6 @@ const getCachedStorefrontCategoryMenu = unstable_cache(
 export async function getStorefrontCategoryMenu(): Promise<StorefrontMenuPayload> {
   if (!process.env.DATABASE_URL) return menuFromDefault();
   try {
-    // En local, leer siempre de DB (evita menú viejo en caché tras crear categorías nuevas).
-    if (process.env.NODE_ENV === "development") {
-      return await fetchStorefrontCategoryMenuFromDb();
-    }
     return await getCachedStorefrontCategoryMenu();
   } catch {
     return menuFromDefault();
@@ -78,6 +74,7 @@ export type StoreCategoryWithSubs = {
   name: string;
   icon: string | null;
   sortOrder: number;
+  storefrontFeaturedProductIds: string[];
   subcategories: { name: string; menuTag: string | null; slug: string; sortOrder: number }[];
 };
 
@@ -98,6 +95,7 @@ export async function getStorefrontCategoryBySlug(slug: string): Promise<StoreCa
           name: row.name,
           icon: row.icon,
           sortOrder: row.sortOrder,
+          storefrontFeaturedProductIds: row.storefrontFeaturedProductIds ?? [],
           subcategories: row.subcategories.map((s) => ({
             name: s.name,
             menuTag: s.menuTag,

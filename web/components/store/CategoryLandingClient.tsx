@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useReveal } from "@/hooks/useReveal";
 import { TechAmbient } from "@/components/ui/TechAmbient";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreProductCard } from "@/components/store/store-product-card";
+import { orderCategoryProductsByFeatured } from "@/lib/category-storefront-featured";
 import type { StoreProduct } from "@/lib/types/product";
 import { getCategoryLandingCopy } from "@/lib/category-landing-theme";
 
@@ -18,7 +19,9 @@ type CategoryLandingClientProps = {
   categoryLabel: string;
   categorySlug: string;
   categoryIcon: string;
-  products: StoreProduct[];
+  featuredProducts: StoreProduct[];
+  featuredOrderIds: string[];
+  totalProductCount: number;
   subcategoriesFromDb: SubcategoryRow[];
   grupoLabels: string[];
   defaultGrupo: string;
@@ -35,7 +38,9 @@ export function CategoryLandingClient({
   categoryLabel,
   categorySlug,
   categoryIcon,
-  products,
+  featuredProducts,
+  featuredOrderIds,
+  totalProductCount,
   subcategoriesFromDb,
   grupoLabels,
   defaultGrupo,
@@ -44,6 +49,44 @@ export function CategoryLandingClient({
   defaultProductTag,
 }: CategoryLandingClientProps) {
   const { openProductModal, addToCart, toggleFavorite, favorites } = useStorefrontUi();
+  const [products, setProducts] = useState<StoreProduct[]>(featuredProducts);
+  const [catalogLoading, setCatalogLoading] = useState(totalProductCount > featuredProducts.length);
+  const [allTags, setAllTags] = useState<string[]>(productTagOptions);
+
+  useEffect(() => {
+    setProducts(featuredProducts);
+    setCatalogLoading(totalProductCount > featuredProducts.length);
+    setAllTags(productTagOptions);
+  }, [categorySlug, featuredProducts, totalProductCount, productTagOptions]);
+
+  useEffect(() => {
+    if (totalProductCount <= featuredProducts.length) return;
+    let cancelled = false;
+    setCatalogLoading(true);
+    void fetch(`/api/store/category/${encodeURIComponent(categorySlug)}/products`, {
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("No se pudo cargar el catálogo"))))
+      .then((data: { products?: StoreProduct[] }) => {
+        if (cancelled || !Array.isArray(data.products)) return;
+        const ordered = orderCategoryProductsByFeatured(data.products, featuredOrderIds);
+        setProducts(ordered);
+        const tagSet = new Set<string>(productTagOptions);
+        for (const p of data.products) {
+          for (const t of p.tags ?? []) tagSet.add(t);
+        }
+        setAllTags(Array.from(tagSet).sort((a, b) => a.localeCompare(b, "es")));
+      })
+      .catch(() => {
+        /* vitrina ya visible; el resto es progresivo */
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [categorySlug, featuredOrderIds, totalProductCount, featuredProducts.length, productTagOptions]);
   const copy = useMemo(() => getCategoryLandingCopy(categoryLabel, categorySlug), [categoryLabel, categorySlug]);
   const [selectedGrupo, setSelectedGrupo] = useState(defaultGrupo);
   const [selectedSub, setSelectedSub] = useState(defaultSubcategory);
@@ -119,7 +162,7 @@ export function CategoryLandingClient({
             <h1 className="category-landing-title">{copy.headline}</h1>
             <p className="category-landing-subtitle">{copy.subtitle}</p>
             <div className="category-landing-stats">
-              <span className="category-landing-stat">◈ {products.length} productos</span>
+              <span className="category-landing-stat">◈ {totalProductCount} productos</span>
               <span className="category-landing-stat">⬡ {subcategoriesFromDb.length} subcategorías</span>
               <span className="category-landing-stat">✦ Filtros en vivo</span>
             </div>
@@ -234,7 +277,7 @@ export function CategoryLandingClient({
                   >
                     Todas
                   </button>
-                  {productTagOptions.map((t) => (
+                  {allTags.map((t) => (
                     <button
                       key={t}
                       type="button"
@@ -252,6 +295,7 @@ export function CategoryLandingClient({
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "14px 0 20px" }}>
             {filtered.length} producto(s) en <strong>{categoryLabel}</strong>
             {selectedGrupo || selectedSub || selectedBrand || selectedProductTag ? " con filtros activos" : ""}
+            {catalogLoading ? " · cargando catálogo completo…" : ""}
           </p>
 
           {subcategoriesFromDb.length === 0 && (
@@ -275,7 +319,7 @@ export function CategoryLandingClient({
                   onOpen={openProductModal}
                   onToggleFav={toggleFavorite}
                   onAddCart={addToCart}
-                  imagePriority={i === 0}
+                  imagePriority={i < 6}
                 />
               ))}
             </div>

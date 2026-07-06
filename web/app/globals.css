@@ -1,5 +1,6 @@
 /* Re-export: el diseño completo vive en design-system.css (copia de style.css del proyecto original). */
 @import "./design-system.css";
+@import "./shell-loading.css";
 @import "./store-page-overrides.css";
 @import "./store-experience.css";
 @import "./store-experience-v2.css";

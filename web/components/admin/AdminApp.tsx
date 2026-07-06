@@ -32,6 +32,7 @@ import {
   groupListThumbnail,
   resolveAdminListRowsAfterFilter,
 } from "@/lib/admin/variant-groups";
+import { AdminCategoryStorefrontPanel } from "@/components/admin/AdminCategoryStorefrontPanel";
 import { AdminProductVariantsModal } from "@/components/admin/AdminProductVariantsModal";
 import { AdminBulkTemplateModal } from "@/components/admin/AdminBulkTemplateModal";
 import { AdminProductAiDetailPanel } from "@/components/admin/AdminProductAiUi";
@@ -81,7 +82,7 @@ import {
   resolveMenuTagFromEditor,
 } from "@/lib/admin/menu-utils";
 
-type AdminPageId = "dashboard" | "products" | "combos" | "sales" | "stock" | "categories" | "menu" | "reports";
+type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "sales" | "stock" | "categories" | "menu" | "reports";
 
 type GoPageOptions = {
   productTab?: "list" | "add" | "bulk";
@@ -90,6 +91,7 @@ type GoPageOptions = {
 const ADMIN_PAGE_TITLES: Record<AdminPageId, string> = {
   dashboard: "Dashboard",
   products: "Gestión de Productos",
+  "category-products": "Gestión de PRODUCTOS en Categorías",
   combos: "Crear Combos",
   sales: "Ventas",
   stock: "Inventario",
@@ -106,6 +108,7 @@ const ADMIN_NAV_ITEMS: {
 }[] = [
   { id: "dashboard", icon: "📊", label: "Dashboard" },
   { id: "products", icon: "📦", label: "Productos" },
+  { id: "category-products", icon: "✨", label: "Productos en Categorías" },
   { id: "combos", icon: "🧩", label: "Crear Combos" },
   { id: "sales", icon: "💰", label: "Ventas" },
   { id: "stock", icon: "📋", label: "Inventario" },
@@ -1117,6 +1120,14 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                   }}
                 />
               )}
+            </div>
+
+            <div className={`admin-page ${page === "category-products" ? "active" : ""}`} style={{ display: page === "category-products" ? "block" : "none" }}>
+              <AdminCategoryStorefrontPanel
+                active={page === "category-products"}
+                categories={categoriesTree}
+                showToast={showToast}
+              />
             </div>
 
             <div className={`admin-page ${page === "combos" ? "active" : ""}`} style={{ display: page === "combos" ? "block" : "none" }}>

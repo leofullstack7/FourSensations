@@ -280,9 +280,27 @@ input, select, textarea { font-family: inherit; }
 .nav-item:focus-within .nav-link svg { transform: rotate(180deg); }
 
 /* Mega Menu */
+.nav-item {
+  position: relative;
+}
+/* Puente invisible: evita que el menú se cierre al mover el cursor hacia los enlaces */
+.nav-item::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 10px;
+  z-index: 39;
+  pointer-events: none;
+}
+.nav-item:hover::after,
+.nav-item:focus-within::after {
+  pointer-events: auto;
+}
 .mega-menu {
   position: absolute;
-  top: calc(100% + 4px);
+  top: 100%;
   left: 50%;
   transform: translateX(-50%) translateY(-8px);
   background: var(--white);

@@ -6,6 +6,8 @@ import { StoreProductCard } from "@/components/store/store-product-card";
 import { StorefrontUiContext } from "@/components/store/storefront-ui-context";
 import Image from "next/image";
 import Link from "next/link";
+import { StoreNavLink } from "@/components/store/StoreNavLink";
+import { useStoreNavigation } from "@/components/store/StoreNavigationProvider";
 import { useRouter } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -95,6 +97,7 @@ export function StorefrontShell({
   const [cartOpen, setCartOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const router = useRouter();
+  const { navigateTo } = useStoreNavigation();
   const [topbarIndex, setTopbarIndex] = useState(0);
   const [authMode, setAuthMode] = useState<"login" | "fav-warning">("login");
   const [customerAuthTab, setCustomerAuthTab] = useState<"login" | "register">("login");
@@ -415,25 +418,25 @@ export function StorefrontShell({
                   <div key={group} className="mega-subcol">
                     <div className="mega-subcol-title">{group}</div>
                     {items.map((i) => (
-                      <Link
+                      <StoreNavLink
                         key={i}
                         href={`/categoria/${categoryPath(cat)}?grupo=${encodeURIComponent(group)}&sub=${encodeURIComponent(i)}`}
                         className="mega-link"
                       >
                         <span className="dot" />
                         {i}
-                      </Link>
+                      </StoreNavLink>
                     ))}
                   </div>
                 ));
                 return (
                   <li key={cat} className="nav-item">
-                    <Link href={`/categoria/${categoryPath(cat)}`} className="nav-link">
+                    <StoreNavLink href={`/categoria/${categoryPath(cat)}`} className="nav-link" prefetch>
                       {data.icon} {cat}
                       <svg width="10" height="10" viewBox="0 0 10 10">
                         <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
                       </svg>
-                    </Link>
+                    </StoreNavLink>
                     <div className="mega-menu">
                       <div className="mega-header">{cat}</div>
                       <div className={`mega-grid ${subKeys.length <= 2 ? "cols-2" : subKeys.length >= 4 ? "cols-4" : ""}`}>{allLinks}</div>
@@ -442,9 +445,9 @@ export function StorefrontShell({
                           <strong>{cat} Premium</strong>
                           Los mejores productos para ti
                         </div>
-                        <Link href={`/categoria/${categoryPath(cat)}`} className="mega-promo-btn">
+                        <StoreNavLink href={`/categoria/${categoryPath(cat)}`} className="mega-promo-btn">
                           Ver todo
-                        </Link>
+                        </StoreNavLink>
                       </div>
                     </div>
                   </li>
@@ -611,7 +614,9 @@ export function StorefrontShell({
                                 type="button"
                                 className="mobile-mega-link"
                                 onClick={() => {
-                                  window.location.href = `/categoria/${categoryPath(cat)}?grupo=${encodeURIComponent(group)}&sub=${encodeURIComponent(i)}`;
+                                  navigateTo(
+                                    `/categoria/${categoryPath(cat)}?grupo=${encodeURIComponent(group)}&sub=${encodeURIComponent(i)}`,
+                                  );
                                   closeMobileMenu();
                                 }}
                               >
@@ -625,7 +630,7 @@ export function StorefrontShell({
                         type="button"
                         className="mobile-mega-see-all"
                         onClick={() => {
-                          window.location.href = `/categoria/${categoryPath(cat)}`;
+                          navigateTo(`/categoria/${categoryPath(cat)}`);
                           closeMobileMenu();
                         }}
                       >

@@ -294,6 +294,8 @@ model Category {
   name          String
   icon          String?
   sortOrder     Int           @default(0)
+  /// Orden explícito de productos en la vitrina de la categoría (primeros visibles en tienda).
+  storefrontFeaturedProductIds String[] @default([])
   subcategories Subcategory[]
 }
 

@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { StoreNavLink } from "@/components/store/StoreNavLink";
+import { useStoreNavigation } from "@/components/store/StoreNavigationProvider";
 import { motion, useReducedMotion } from "framer-motion";
 import Image from "next/image";
 import { TechAmbient } from "@/components/ui/TechAmbient";
@@ -21,7 +21,7 @@ type TypeCard = {
 };
 
 export function TintHomePreview({ items, categoryHref = "/categoria/tintes" }: TintHomePreviewProps) {
-  const router = useRouter();
+  const { navigateTo } = useStoreNavigation();
   const reduceMotion = useReducedMotion();
   const [activeFamily, setActiveFamily] = useState<string | null>(null);
 
@@ -66,9 +66,9 @@ export function TintHomePreview({ items, categoryHref = "/categoria/tintes" }: T
               {typeCards.length} líneas disponibles · elige un tipo para ver todos los tonos en la colección.
             </p>
           </div>
-          <Link href={categoryHref} className="tint-home-preview__see-all btn btn-outline btn-sm">
+          <StoreNavLink href={categoryHref} className="tint-home-preview__see-all btn btn-outline btn-sm">
             Ver toda la colección →
-          </Link>
+          </StoreNavLink>
         </div>
 
         {families.length > 1 && (
@@ -100,7 +100,7 @@ export function TintHomePreview({ items, categoryHref = "/categoria/tintes" }: T
                 key={card.type}
                 type="button"
                 className="tint-type-card tint-type-card--modern"
-                onClick={() => router.push(`${categoryHref}?tipo=${encodeURIComponent(card.type)}`)}
+                onClick={() => navigateTo(`${categoryHref}?tipo=${encodeURIComponent(card.type)}`)}
                 initial={{ opacity: 0, y: 20, scale: 0.94 }}
                 whileInView={{ opacity: 1, y: 0, scale: 1 }}
                 viewport={{ once: true, margin: "-30px" }}

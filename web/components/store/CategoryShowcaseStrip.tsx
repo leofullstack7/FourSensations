@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
+import { StoreNavLink } from "@/components/store/StoreNavLink";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TechAmbient } from "@/components/ui/TechAmbient";
 import {
@@ -70,7 +70,7 @@ export function CategoryShowcaseStrip({ categoryPath }: CategoryShowcaseStripPro
             aria-live={isMobile ? "polite" : undefined}
           >
             {CATEGORY_SHOWCASE_ITEMS.map((item, index) => (
-              <Link
+              <StoreNavLink
                 key={item.label}
                 href={`/categoria/${categoryPath(item.label)}`}
                 className={`cat-showcase-card cat-showcase-card--${item.variant}`}
@@ -91,7 +91,7 @@ export function CategoryShowcaseStrip({ categoryPath }: CategoryShowcaseStripPro
                   <span className="cat-showcase-card__shade" aria-hidden />
                   <span className="cat-showcase-card__label">{item.displayName.toUpperCase()}</span>
                 </span>
-              </Link>
+              </StoreNavLink>
             ))}
           </div>
 

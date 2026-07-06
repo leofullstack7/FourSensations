@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { submitAdminCredentialsLogin } from "@/lib/admin/admin-credentials-login";
 
@@ -19,7 +18,7 @@ export function AdminLoginForm() {
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [loginErr, setLoginErr] = useState(false);
+  const [loginErr, setLoginErr] = useState<string | null>(null);
   const [loginSubmitting, setLoginSubmitting] = useState(false);
 
   const nextPath = adminNextPath(searchParams.get("next"));
@@ -31,6 +30,35 @@ export function AdminLoginForm() {
     window.location.replace(nextPath);
   }, [status, session, nextPath]);
 
+  const runLogin = async () => {
+    setLoginErr(null);
+    setLoginSubmitting(true);
+    try {
+      const result = await submitAdminCredentialsLogin(username, password, nextPath);
+      if (!result.ok) {
+        if (result.reason === "empty") {
+          setLoginErr("Completa email y contraseña");
+        } else if (result.reason === "invalid") {
+          setLoginErr("Usuario o contraseña incorrectos");
+        } else {
+          setLoginErr("No se pudo conectar. Revisa tu red o recarga la página.");
+        }
+        setPassword("");
+      }
+    } catch {
+      setLoginErr("Error inesperado al iniciar sesión. Intenta de nuevo.");
+      setPassword("");
+    } finally {
+      setLoginSubmitting(false);
+    }
+  };
+
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (loginSubmitting) return;
+    void runLogin();
+  };
+
   return (
     <div className="admin-login-gate">
       <div className="admin-login-bg" aria-hidden>
@@ -38,7 +66,7 @@ export function AdminLoginForm() {
         <div className="admin-login-orb admin-login-orb--2" />
         <div className="admin-login-grid" />
       </div>
-      <div className="admin-login-card">
+      <form className="admin-login-card" onSubmit={onSubmit} noValidate>
         <BrandLogo variant="auth" />
         <div
           style={{
@@ -67,58 +95,48 @@ export function AdminLoginForm() {
         )}
 
         <div style={{ marginBottom: 14 }}>
-          <label className="form-label">Email del administrador</label>
+          <label className="form-label" htmlFor="admin-login-email">
+            Email del administrador
+          </label>
           <input
-            type="text"
+            id="admin-login-email"
+            type="email"
             className="form-input"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="ej. admin@ginnabeauty.local"
             autoComplete="username"
+            disabled={loginSubmitting}
+            required
           />
         </div>
         <div style={{ marginBottom: 24 }}>
-          <label className="form-label">Contraseña</label>
+          <label className="form-label" htmlFor="admin-login-password">
+            Contraseña
+          </label>
           <input
+            id="admin-login-password"
             type="password"
             className="form-input"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             autoComplete="current-password"
+            disabled={loginSubmitting}
+            required
           />
         </div>
         <button
-          type="button"
+          type="submit"
           className="btn btn-primary"
           style={{ width: "100%", justifyContent: "center", gap: 10 }}
           disabled={loginSubmitting}
           aria-busy={loginSubmitting}
-          onClick={async () => {
-            setLoginErr(false);
-            setLoginSubmitting(true);
-            const result = await submitAdminCredentialsLogin(username, password, nextPath);
-            if (!result.ok) {
-              setLoginErr(true);
-              setPassword("");
-              setLoginSubmitting(false);
-            }
-          }}
         >
           {loginSubmitting && (
-            <motion.span
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 0.85, ease: "linear" }}
-              style={{
-                display: "inline-block",
-                width: 18,
-                height: 18,
-                border: "2px solid rgba(255,255,255,0.35)",
-                borderTopColor: "rgba(255,255,255,0.95)",
-                borderRadius: "50%",
-                boxSizing: "border-box",
-                flexShrink: 0,
-              }}
+            <span
+              className="admin-boot-spinner"
+              style={{ width: 18, height: 18, borderWidth: 2 }}
               aria-hidden
             />
           )}
@@ -128,11 +146,11 @@ export function AdminLoginForm() {
           ← Volver a la tienda
         </Link>
         {loginErr && (
-          <div style={{ color: "var(--dusty-rose)", fontSize: 13, marginTop: 12 }}>
-            Usuario o contraseña incorrectos
+          <div style={{ color: "var(--dusty-rose)", fontSize: 13, marginTop: 12 }} role="alert">
+            {loginErr}
           </div>
         )}
-      </div>
+      </form>
     </div>
   );
 }

@@ -124,3 +124,55 @@
   border-radius: 0 10px 10px 0;
   border-right: 1px solid rgba(200, 168, 162, 0.15);
 }
+
+/* Overlay de navegación instantánea (mega menú / categorías) */
+.gb-nav-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(250, 247, 244, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: gb-nav-overlay-in 0.18s ease-out both;
+}
+
+.gb-nav-overlay__panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 28px 32px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 20px 60px rgba(45, 31, 26, 0.12);
+  border: 1px solid rgba(200, 168, 162, 0.25);
+}
+
+.gb-nav-overlay__logo {
+  width: 72px;
+  height: 72px;
+}
+
+.gb-nav-overlay__text {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted, #8a7a76);
+}
+
+.gb-loading-page--route {
+  min-height: 50vh;
+}
+
+@keyframes gb-nav-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

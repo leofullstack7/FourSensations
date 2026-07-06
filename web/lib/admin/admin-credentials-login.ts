@@ -1,63 +1,53 @@
-import { getCsrfToken } from "next-auth/react";
-
 export type AdminLoginResult =
   | { ok: true }
-  | { ok: false; reason: "invalid" | "network" };
+  | { ok: false; reason: "invalid" | "network" | "empty" };
 
-function hasAuthErrorInUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url, typeof window !== "undefined" ? window.location.origin : "http://localhost");
-    return parsed.searchParams.has("error");
-  } catch {
-    return url.includes("error=");
-  }
-}
+const LOGIN_TIMEOUT_MS = 15000;
 
 /**
- * Login admin vía POST directo al callback de Auth.js.
- * Evita el cuelgue de `signIn(..., { redirect: false })`, que a veces no resuelve
- * tras esperar la actualización de sesión en cliente.
+ * Login admin vía API server-side (misma estrategia que clientes de tienda).
+ * Evita cuelgues del callback `/api/auth/callback/credentials` en el navegador.
  */
 export async function submitAdminCredentialsLogin(
   username: string,
   password: string,
-  callbackUrl: string
+  callbackUrl: string,
 ): Promise<AdminLoginResult> {
-  const csrfToken = await getCsrfToken();
-  if (!csrfToken) return { ok: false, reason: "network" };
+  const email = username.trim();
+  if (!email || !password) {
+    return { ok: false, reason: "empty" };
+  }
 
-  let res: Response;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), LOGIN_TIMEOUT_MS);
+
   try {
-    res = await fetch("/api/auth/callback/credentials", {
+    const res = await fetch("/api/auth/admin/login", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "X-Auth-Return-Redirect": "1",
-      },
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
       credentials: "same-origin",
-      body: new URLSearchParams({
-        csrfToken,
-        username: username.trim(),
-        password,
-        callbackUrl,
-      }),
+      signal: controller.signal,
+      body: JSON.stringify({ username: email, password }),
     });
+
+    if (res.status === 401) {
+      return { ok: false, reason: "invalid" };
+    }
+
+    if (!res.ok) {
+      return { ok: false, reason: "network" };
+    }
+
+    const data = (await res.json()) as { ok?: boolean };
+    if (!data.ok) {
+      return { ok: false, reason: "network" };
+    }
+
+    window.location.assign(callbackUrl);
+    return { ok: true };
   } catch {
     return { ok: false, reason: "network" };
+  } finally {
+    window.clearTimeout(timer);
   }
-
-  let data: { url?: string } = {};
-  try {
-    data = (await res.json()) as { url?: string };
-  } catch {
-    return { ok: false, reason: "network" };
-  }
-
-  const target = data.url?.trim() || callbackUrl;
-  if (!res.ok || hasAuthErrorInUrl(target)) {
-    return { ok: false, reason: "invalid" };
-  }
-
-  window.location.replace(target);
-  return { ok: true };
 }
