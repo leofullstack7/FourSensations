@@ -380,8 +380,37 @@
 .gb-ai-product-picks {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   margin-top: 12px;
+}
+.gb-ai-product-pick-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gb-ai-product-pick-quick {
+  display: flex;
+  gap: 6px;
+  padding-left: 4px;
+}
+.gb-ai-product-pick-btn {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(200, 168, 162, 0.35);
+  background: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.gb-ai-product-pick-btn:hover {
+  border-color: var(--blush);
+  background: var(--ivory);
+}
+.gb-ai-product-pick-btn--fav.is-active {
+  border-color: var(--dusty-rose);
+  color: var(--dusty-rose);
 }
 .gb-ai-product-pick {
   display: flex;

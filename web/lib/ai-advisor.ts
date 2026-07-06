@@ -1,8 +1,27 @@
+import {
+  appendProductFollowUp,
+  buildOffTopicAdvisorReply,
+  empatheticProductIntro,
+  GINNA_WELCOME_MESSAGE,
+  isLikelyOffTopicMessage,
+} from "@/lib/ai-advisor-persona";
+import {
+  buildAdvisorSearchQueryFromTurns,
+  isFollowUpMessage,
+  resolveEffectiveUserMessage,
+} from "@/lib/ai-advisor-context";
 import { getCategoryLabel } from "@/lib/category-labels";
 import { TINTES_CATEGORY_SLUG } from "@/lib/bulk-import/tintes";
 import type { StoreProduct } from "@/lib/types/product";
 
 export type AiChatRole = "bot" | "user";
+
+export type AiAdvisorAction = {
+  label: string;
+  kind: "whatsapp" | "search" | "catalog" | "cart" | "wishlist";
+  query?: string;
+  productId?: string;
+};
 
 export type AiChatMessage = {
   id: string;
@@ -11,7 +30,8 @@ export type AiChatMessage = {
   productIds?: string[];
   /** Breve razón por producto (id → texto). */
   productHints?: Record<string, string>;
-  action?: { label: string; kind: "whatsapp" | "search"; query?: string };
+  action?: AiAdvisorAction;
+  actions?: AiAdvisorAction[];
 };
 
 export type AiAdvisorReply = {
@@ -21,7 +41,12 @@ export type AiAdvisorReply = {
   engine?: "rules" | "openai";
 };
 
-export type AdvisorHistoryTurn = { role: AiChatRole; text: string };
+export type AdvisorHistoryTurn = {
+  role: AiChatRole;
+  text: string;
+  /** Productos que Ginna recomendó en ese turno (memoria de hilo). */
+  productIds?: string[];
+};
 
 const GREETINGS = ["hola", "buenas", "buenos dias", "buenas tardes", "buenas noches", "hey", "hi", "buen dia"];
 const THANKS = ["gracias", "thank", "genial", "perfecto", "listo", "ok gracias", "muchas gracias"];
@@ -40,31 +65,32 @@ export const STORE_ADVISOR_KNOWLEDGE = {
   returns:
     "Para cambios o garantías escríbenos por WhatsApp con tu número de pedido; el equipo te orienta según el producto.",
   scope:
-    "Soy Ginna AI: te ayudo a encontrar productos de belleza en nuestro catálogo (piel, cabello, maquillaje, tintes, uñas y más).",
+    "Soy Ginna AI, asesora de GinnaBeauty: te ayudo con tu cuidado personal y te recomiendo productos de calidad para llevar al carrito o favoritos.",
 } as const;
 
 const INTENT_SYNONYMS: Record<string, string[]> = {
-  "piel seca": ["hidratante", "humectante", "serum", "crema", "balsamo", "cuidado piel", "facial"],
-  "piel grasa": ["matificante", "limpiador", "tonico", "control sebo", "cuidado piel"],
-  "piel sensible": ["suave", "hipoalergenico", "calmante", "cuidado piel"],
-  acne: ["acne", "anti imperfecciones", "limpiador", "poros", "cuidado piel"],
-  manchas: ["manchas", "vitamina c", "serum", "claridad", "cuidado piel"],
-  antiedad: ["antiedad", "arrugas", "retinol", "contorno", "cuidado piel"],
-  "cabello seco": ["hidratacion", "nutricion", "acondicionador", "mascarilla", "cuidado capilar"],
-  "cabello danado": ["reparacion", "tratamiento", "keratina", "bond", "cuidado capilar"],
-  "cabello rizado": ["rizos", "definicion", "crema para peinar", "cuidado capilar"],
-  caida: ["crecimiento", "fortalecedor", "anticaida", "cuidado capilar"],
-  frizz: ["disciplinador", "finalizador", "antifrizz", "cuidado capilar"],
-  "cabello teñido": ["color", "matiz", "proteccion color", "cuidado capilar"],
-  "maquillaje natural": ["base", "rubor", "glow", "maquillaje", "look natural"],
-  labios: ["labial", "gloss", "balsamo labial", "maquillaje"],
-  ojos: ["mascara", "sombras", "delineador", "cejas", "maquillaje"],
-  regalo: ["combo", "kit", "regalo", "detalle"],
-  hombre: ["hombres", "barba", "afeitado", "after shave"],
-  unas: ["esmalte", "unas", "sempermanente", "manicure"],
-  tinte: ["tinte", "tintes", "coloracion", "tono", "igora", "canas", "cobertura"],
-  rubio: ["rubio", "decoloracion", "matiz", "tintes"],
-  castano: ["castano", "cobertura", "tintes"],
+  "piel seca": ["hidratante", "humectante", "serum", "crema", "balsamo", "cuidado piel", "facial", "resequedad", "reseca", "deshidratada"],
+  "piel grasa": ["matificante", "limpiador", "tonico", "control sebo", "cuidado piel", "brillo", "poros"],
+  "piel sensible": ["suave", "hipoalergenico", "calmante", "cuidado piel", "irritada", "rojeces"],
+  acne: ["acne", "granos", "espinillas", "anti imperfecciones", "limpiador", "poros", "cuidado piel"],
+  manchas: ["manchas", "vitamina c", "serum", "claridad", "cuidado piel", "hiperpigmentacion", "manchitas"],
+  antiedad: ["antiedad", "arrugas", "lineas de expresion", "retinol", "contorno", "cuidado piel", "flacidez"],
+  "cabello seco": ["hidratacion", "nutricion", "acondicionador", "mascarilla", "cuidado capilar", "reseco", "poroso"],
+  "cabello danado": ["reparacion", "tratamiento", "keratina", "bond", "cuidado capilar", "maltratado", "quimico", "puntas abiertas"],
+  "cabello rizado": ["rizos", "definicion", "crema para peinar", "cuidado capilar", "ondulado", "rizado"],
+  caida: ["crecimiento", "fortalecedor", "anticaida", "cuidado capilar", "caida del cabello", "alopecia"],
+  frizz: ["disciplinador", "finalizador", "antifrizz", "cuidado capilar", "encrespamiento", "electrizado"],
+  "cabello teñido": ["color", "matiz", "proteccion color", "cuidado capilar", "teñido", "tenido", "decolorado"],
+  "maquillaje natural": ["base", "rubor", "glow", "maquillaje", "look natural", "no makeup", "luminoso"],
+  labios: ["labial", "gloss", "balsamo labial", "maquillaje", "tinte labios"],
+  ojos: ["mascara", "sombras", "delineador", "cejas", "maquillaje", "pestañas", "pestana"],
+  regalo: ["combo", "kit", "regalo", "detalle", "sorpresa", "obsequio"],
+  hombre: ["hombres", "barba", "afeitado", "after shave", "caballero"],
+  unas: ["esmalte", "unas", "uñas", "sempermanente", "manicure", "pedicure"],
+  tinte: ["tinte", "tintes", "tinturo", "tinturar", "tintura", "coloracion", "tono", "igora", "canas", "cobertura", "pintar el pelo", "teñir", "tenir"],
+  rubio: ["rubio", "rubia", "decoloracion", "matiz", "tintes", "platino", "dorado"],
+  castano: ["castano", "castaño", "cobertura", "tintes", "marron", "chocolate"],
+  economico: ["economico", "económico", "barato", "precio bajo", "accesible", "oferta"],
 };
 
 /** Términos que sugieren una categoría del catálogo (slug → palabras clave). */
@@ -94,10 +120,23 @@ function tokenize(value: string): string[] {
     .filter((t) => t.length > 1);
 }
 
-/** Combina el mensaje actual con turnos recientes del usuario para búsqueda contextual. */
+/** Combina el hilo completo de la conversación para búsqueda contextual. */
 export function buildAdvisorSearchQuery(current: string, history?: string[]): string {
-  const prior = (history ?? []).filter(Boolean).slice(-2);
-  return [...prior, current.trim()].filter(Boolean).join(" ");
+  const turns: AdvisorHistoryTurn[] = (history ?? []).map((text) => ({ role: "user" as const, text }));
+  return buildAdvisorSearchQueryFromTurns(turns, current);
+}
+
+export function buildAdvisorSearchQueryWithHistory(
+  current: string,
+  historyTurns: AdvisorHistoryTurn[],
+): string {
+  let prior = historyTurns;
+  const last = prior[prior.length - 1];
+  if (last?.role === "user" && normalizeAdvisorText(last.text) === normalizeAdvisorText(current.trim())) {
+    prior = prior.slice(0, -1);
+  }
+  const effective = resolveEffectiveUserMessage(current, [...prior, { role: "user", text: current }]);
+  return buildAdvisorSearchQueryFromTurns(prior, effective);
 }
 
 export function productSearchBlob(p: StoreProduct): string {
@@ -283,10 +322,12 @@ function isCannedIntent(text: string): boolean {
 }
 
 /** ¿Conviene usar LLM para este mensaje? */
-export function shouldUseAdvisorLlm(text: string): boolean {
+export function shouldUseAdvisorLlm(text: string, historyTurns?: AdvisorHistoryTurn[]): boolean {
   const t = text.trim();
   if (!t || isCannedIntent(t)) return false;
-  if (resolveAdvisorQuickPromptId(t)) return false;
+  if (resolveAdvisorQuickPromptId(t) && (historyTurns?.length ?? 0) < 2) return false;
+  if (historyTurns && historyTurns.length >= 2 && isFollowUpMessage(t, historyTurns)) return true;
+  if (historyTurns && historyTurns.length >= 6) return true;
   return true;
 }
 
@@ -308,7 +349,9 @@ export function formatProductForAdvisorContext(p: StoreProduct): string {
 }
 
 export type BuildAdvisorOptions = {
+  /** @deprecated Usar historyTurns para memoria completa del hilo. */
   history?: string[];
+  historyTurns?: AdvisorHistoryTurn[];
   engine?: AiAdvisorReply["engine"];
 };
 
@@ -320,7 +363,7 @@ export const ADVISOR_QUICK_PROMPTS = [
     text: "Tengo la piel seca y busco hidratación facial",
     searchQuery: "piel seca hidratacion facial humectante crema serum",
     intro:
-      "Para piel seca lo clave es hidratación profunda y confort duradero. Estas opciones del catálogo te ayudan a recuperar luminosidad y suavidad:",
+      "La piel seca necesita hidratación de verdad — en GinnaBeauty tenemos opciones profesionales para devolverle confort y luminosidad. Mira estas:",
   },
   {
     id: "hair",
@@ -328,7 +371,7 @@ export const ADVISOR_QUICK_PROMPTS = [
     text: "Mi cabello está dañado y necesito reparación",
     searchQuery: "cabello danado reparacion tratamiento mascarilla keratina",
     intro:
-      "El cabello dañado pide reparación y nutrición intensa. Empieza con estos tratamientos del catálogo para devolverle fuerza y brillo:",
+      "El cabello maltratado se recupera con buena nutrición — te dejo tratamientos de GinnaBeauty que nuestras clientas aman:",
   },
   {
     id: "makeup",
@@ -336,7 +379,7 @@ export const ADVISOR_QUICK_PROMPTS = [
     text: "Quiero maquillaje natural con glow",
     searchQuery: "maquillaje natural glow base rubor luminoso",
     intro:
-      "Un look natural con glow se logra con acabados ligeros y luminosos. Estas piezas del catálogo son perfectas para ese efecto fresh:",
+      "Para un look natural con glow, estas piezas de la tienda te dan luminosidad sin cargar — échales un ojo:",
   },
   {
     id: "tint",
@@ -344,7 +387,7 @@ export const ADVISOR_QUICK_PROMPTS = [
     text: "Busco tinte para cubrir canas en tono castaño",
     searchQuery: "tinte castano canas cobertura coloracion igora",
     intro:
-      "Para cubrir canas en tono castaño, estas tinturas y líneas profesionales del catálogo ofrecen cobertura uniforme y acabado salón:",
+      "Para cubrir canas en castaño con acabado de salón, estas tinturas profesionales de GinnaBeauty son excelentes opciones:",
   },
   {
     id: "gift",
@@ -352,7 +395,7 @@ export const ADVISOR_QUICK_PROMPTS = [
     text: "Busco un regalo de belleza especial",
     searchQuery: "regalo kit combo detalle best seller",
     intro:
-      "Un regalo de belleza especial puede ser un kit curado o un favorito del catálogo. Te dejo ideas concretas para sorprender:",
+      "Un regalo de belleza siempre emociona — estas opciones de la tienda son perfectas para sorprender:",
   },
 ] as const;
 
@@ -376,7 +419,13 @@ function getQuickPromptConfig(id: AdvisorQuickPromptId) {
 export function buildAdvisorReplyForQuickPrompt(
   promptId: AdvisorQuickPromptId,
   products: StoreProduct[],
+  historyTurns: AdvisorHistoryTurn[] = [],
 ): AiAdvisorReply {
+  if (historyTurns.length >= 2) {
+    const preset = getQuickPromptConfig(promptId);
+    return buildAdvisorReply(preset.text, products, { historyTurns, engine: "rules" });
+  }
+
   const preset = getQuickPromptConfig(promptId);
   const ranked = scoreProductsForQuery(products, preset.searchQuery);
   const top = ranked.slice(0, 3);
@@ -393,14 +442,14 @@ export function buildAdvisorReplyForQuickPrompt(
     return {
       confidence: Math.max(confidence, 0.72),
       engine: "rules",
-      messages: [
+      messages: appendProductFollowUp([
         {
           role: "bot",
           text: preset.intro,
           productIds: top.map((r) => r.product.id),
           productHints,
         },
-      ],
+      ]),
     };
   }
 
@@ -422,18 +471,18 @@ export function buildAdvisorReply(
     return {
       confidence: 0,
       engine,
-      messages: [{ role: "bot", text: "Cuéntame qué buscas — piel, cabello, maquillaje, tintes o un regalo ✨" }],
+      messages: [{ role: "bot", text: GINNA_WELCOME_MESSAGE }],
     };
   }
 
-  if (matchesAny(trimmed, GREETINGS)) {
+  if (matchesAny(trimmed, GREETINGS) && (options.historyTurns?.length ?? options.history?.length ?? 0) < 2) {
     return {
       confidence: 0,
       engine,
       messages: [
         {
           role: "bot",
-          text: "¡Hola! Soy Ginna AI 💫 Cuéntame qué quieres cuidar — piel, cabello, maquillaje, tintes o un regalo. Elige una sugerencia abajo o escríbeme con detalle.",
+          text: "¡Hola! Qué gusto saludarte 💫 Soy asesora de GinnaBeauty. Cuéntame qué te preocupa de tu piel, cabello, maquillaje o tintes — te recomiendo productos y los puedes llevar al carrito al instante.",
         },
       ],
     };
@@ -443,7 +492,7 @@ export function buildAdvisorReply(
     return {
       confidence: 0,
       engine,
-      messages: [{ role: "bot", text: "Con gusto ✨ Si quieres seguir explorando, escríbeme otro detalle o abre el catálogo." }],
+      messages: [{ role: "bot", text: "Con gusto ✨ Si quieres seguir, cuéntame otro detalle de tu rutina o agrégalo al carrito cuando encuentres tu favorito." }],
     };
   }
 
@@ -491,20 +540,16 @@ export function buildAdvisorReply(
     };
   }
 
-  if (matchesAny(trimmed, OFF_TOPIC)) {
-    return {
-      confidence: 0,
-      engine,
-      messages: [
-        {
-          role: "bot",
-          text: "Eso se me escapa 😅 Soy especialista en belleza. ¿Probamos con rutina de piel, cabello, maquillaje o tintes?",
-        },
-      ],
-    };
+  const historyTurns = options.historyTurns ?? [];
+
+  if (matchesAny(trimmed, OFF_TOPIC) || isLikelyOffTopicMessage(trimmed, historyTurns)) {
+    return buildOffTopicAdvisorReply();
   }
 
-  const searchQuery = buildAdvisorSearchQuery(trimmed, options.history);
+  const searchQuery =
+    historyTurns.length > 0
+      ? buildAdvisorSearchQueryWithHistory(trimmed, historyTurns)
+      : buildAdvisorSearchQuery(trimmed, options.history?.slice(0, -1));
   const ranked = scoreProductsForQuery(products, searchQuery);
   const top = ranked.slice(0, 3);
   const topScore = top[0]?.score ?? 0;
@@ -521,22 +566,23 @@ export function buildAdvisorReply(
       productHints[product.id] = explainProductMatch(product, queryTokens);
     }
 
-    const intro =
-      confidence >= 0.65
-        ? `Encontré opciones que encajan con lo que me dices 👇`
-        : `Estas opciones del catálogo podrían servirte — revisa y dime si afinamos:`;
+    const intro = empatheticProductIntro(
+      historyTurns,
+      historyTurns.length >= 2 && isFollowUpMessage(trimmed, historyTurns),
+      trimmed,
+    );
 
     return {
       confidence,
       engine,
-      messages: [
+      messages: appendProductFollowUp([
         {
           role: "bot",
           text: intro,
           productIds: top.map((r) => r.product.id),
           productHints,
         },
-      ],
+      ]),
     };
   }
 
@@ -560,13 +606,16 @@ export function buildAdvisorReply(
     messages: [
       {
         role: "bot",
-        text: "No encuentro algo exacto con eso en catálogo 🤔 Prueba con más detalle (ej. «piel seca», «tinte rubio 9», «marca X») o abre la búsqueda:",
-        action: { label: "Buscar en catálogo", kind: "search", query: searchQuery || trimmed },
+        text: "No encuentro algo exacto en catálogo 🤔 Cuéntame un poco más tu preocupación (tipo de piel, cabello, tono…) o explora la tienda — tenemos marcas de calidad profesional:",
+        actions: [
+          { label: "Buscar en catálogo", kind: "search", query: searchQuery || trimmed },
+          { label: "Ver productos", kind: "catalog" },
+        ],
       },
       {
         role: "bot",
-        text: "Si prefieres, una asesora humana te orienta en WhatsApp.",
-        action: { label: "Hablar con el equipo", kind: "whatsapp" },
+        text: "Si prefieres, una asesora humana te orienta por WhatsApp con gusto.",
+        action: { label: "Escríbenos por WhatsApp", kind: "whatsapp" },
       },
     ],
   };

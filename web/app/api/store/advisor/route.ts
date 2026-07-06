@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { buildAdvisorReply, type AdvisorHistoryTurn } from "@/lib/ai-advisor";
+import { ADVISOR_MAX_TURNS } from "@/lib/ai-advisor-context";
 import { getStorefrontProducts } from "@/lib/products";
 import { generateStoreAdvisorReply } from "@/lib/server/store-advisor-openai";
 import { noStoreJson } from "@/lib/server/no-store-json";
@@ -23,9 +24,19 @@ function sanitizeHistory(raw: unknown): AdvisorHistoryTurn[] {
         (t.role === "user" || t.role === "bot") &&
         typeof (t as AdvisorHistoryTurn).text === "string",
     )
-    .map((t) => ({ role: t.role, text: t.text.trim().slice(0, 500) }))
+    .map((t) => {
+      const turn = t as AdvisorHistoryTurn & { productIds?: unknown };
+      const productIds = Array.isArray(turn.productIds)
+        ? turn.productIds.filter((id): id is string => typeof id === "string").slice(0, 6)
+        : undefined;
+      return {
+        role: turn.role,
+        text: turn.text.trim().slice(0, 500),
+        ...(productIds?.length ? { productIds } : {}),
+      };
+    })
     .filter((t) => t.text.length > 0)
-    .slice(-8);
+    .slice(-ADVISOR_MAX_TURNS);
 }
 
 /** Asesor Ginna AI: catálogo Prisma + reglas; OpenAI si hay API key. */
@@ -40,14 +51,13 @@ export async function POST(req: NextRequest) {
     }
 
     const products = await getStorefrontProducts();
-    const userHistory = history.filter((h) => h.role === "user").map((h) => h.text);
 
     try {
       const reply = await generateStoreAdvisorReply({ message, history, products });
       return noStoreJson(reply);
     } catch (llmErr) {
       console.warn("[POST /api/store/advisor] LLM fallback:", llmErr);
-      const fallback = buildAdvisorReply(message, products, { history: userHistory, engine: "rules" });
+      const fallback = buildAdvisorReply(message, products, { historyTurns: history, engine: "rules" });
       return noStoreJson(fallback);
     }
   } catch (e) {

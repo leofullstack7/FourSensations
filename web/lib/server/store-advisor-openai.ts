@@ -2,14 +2,21 @@ import {
   ADVISOR_RULES_LLM_THRESHOLD,
   buildAdvisorReply,
   buildAdvisorReplyForQuickPrompt,
+  buildAdvisorSearchQueryWithHistory,
   formatProductForAdvisorContext,
   resolveAdvisorQuickPromptId,
   scoreProductsForQuery,
-  buildAdvisorSearchQuery,
   shouldUseAdvisorLlm,
   type AdvisorHistoryTurn,
   type AiAdvisorReply,
 } from "@/lib/ai-advisor";
+import { isFollowUpMessage, summarizeAdvisorConversation } from "@/lib/ai-advisor-context";
+import {
+  appendProductFollowUp,
+  buildOffTopicAdvisorReply,
+  GINNA_ADVISOR_PERSONA,
+  isLikelyOffTopicMessage,
+} from "@/lib/ai-advisor-persona";
 import type { StoreProduct } from "@/lib/types/product";
 import { isOpenAiConfigured } from "@/lib/server/product-ai-openai";
 
@@ -26,7 +33,7 @@ type LlmAdvisorJson = {
 };
 
 const LLM_TOP_PRODUCTS = 6;
-const LLM_MAX_TOKENS = 280;
+const LLM_MAX_TOKENS = 340;
 
 function getOpenAiConfig() {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
@@ -44,10 +51,7 @@ function parseAdvisorJson(content: string): LlmAdvisorJson {
 }
 
 function buildLlmPrompt(input: LlmAdvisorInput, ranked: { product: StoreProduct; score: number }[]): string {
-  const userHistory = input.history
-    .slice(-4)
-    .map((t) => `${t.role === "user" ? "Cliente" : "Ginna AI"}: ${t.text}`)
-    .join("\n");
+  const conversation = summarizeAdvisorConversation(input.history);
 
   const catalog =
     ranked.length > 0
@@ -56,48 +60,69 @@ function buildLlmPrompt(input: LlmAdvisorInput, ranked: { product: StoreProduct;
           .join("\n")
       : "Sin coincidencias claras.";
 
-  return `Ginna AI · GinnaBeauty Colombia. Español, tono premium y cercano.
-Recomienda SOLO productos del CATÁLOGO (ids exactos). 1-2 frases máximo.
+  return `${GINNA_ADVISOR_PERSONA}
 
-Envío gratis desde $150.000 COP · Pagos ePayco/Bold.
+Mantén el hilo de la conversación. Recomienda SOLO productos del CATÁLOGO (ids exactos).
+Cuando recomiendes productos, invita naturalmente a agregarlos al carrito o favoritos.
+1-3 frases, español Colombia, tono de empleada de tienda.
 
-Historial:
-${userHistory || "—"}
+Envío gratis desde $150.000 COP · Pagos ePayco/Bold · Calidad profesional GinnaBeauty.
 
-Cliente: ${input.message}
+CONVERSACIÓN:
+${conversation}
+
+Mensaje actual:
+${input.message}
 
 CATÁLOGO:
 ${catalog}
 
 JSON (sin markdown):
-{"text":"…","productIds":["id"],"productNotes":{"id":"motivo breve"}}`;
+{"text":"…","productIds":["id"],"productNotes":{"id":"por qué ayuda con su preocupación"}}`;
 }
 
 function rulesReplyHasProducts(reply: AiAdvisorReply): boolean {
   return reply.messages.some((m) => (m.productIds?.length ?? 0) > 0);
 }
 
+function withProductFollowUp(reply: AiAdvisorReply): AiAdvisorReply {
+  return {
+    ...reply,
+    messages: appendProductFollowUp(reply.messages),
+  };
+}
+
 export async function generateStoreAdvisorReply(input: LlmAdvisorInput): Promise<AiAdvisorReply> {
-  const userTurns = input.history.filter((h) => h.role === "user").map((h) => h.text);
+  const historyTurns = input.history;
+
+  if (
+    isLikelyOffTopicMessage(input.message, historyTurns) &&
+    !isFollowUpMessage(input.message, historyTurns)
+  ) {
+    return buildOffTopicAdvisorReply();
+  }
 
   const quickId = resolveAdvisorQuickPromptId(input.message);
-  if (quickId) {
+  if (quickId && historyTurns.length < 2) {
     return buildAdvisorReplyForQuickPrompt(quickId, input.products);
   }
 
   const rulesReply = buildAdvisorReply(input.message, input.products, {
-    history: userTurns,
+    historyTurns,
     engine: "rules",
   });
 
+  const isFollowUp = historyTurns.length >= 2 && isFollowUpMessage(input.message, historyTurns);
+
   if (
+    !isFollowUp &&
     rulesReplyHasProducts(rulesReply) &&
     rulesReply.confidence >= ADVISOR_RULES_LLM_THRESHOLD
   ) {
     return rulesReply;
   }
 
-  if (!shouldUseAdvisorLlm(input.message)) {
+  if (!shouldUseAdvisorLlm(input.message, historyTurns)) {
     return rulesReply;
   }
 
@@ -105,7 +130,7 @@ export async function generateStoreAdvisorReply(input: LlmAdvisorInput): Promise
     return rulesReply;
   }
 
-  const searchQuery = buildAdvisorSearchQuery(input.message, userTurns.slice(0, -1));
+  const searchQuery = buildAdvisorSearchQueryWithHistory(input.message, historyTurns);
   const ranked = scoreProductsForQuery(input.products, searchQuery).slice(0, LLM_TOP_PRODUCTS);
 
   const { apiKey, model } = getOpenAiConfig();
@@ -118,12 +143,13 @@ export async function generateStoreAdvisorReply(input: LlmAdvisorInput): Promise
     },
     body: JSON.stringify({
       model,
-      temperature: 0.4,
+      temperature: 0.42,
       max_tokens: LLM_MAX_TOKENS,
       messages: [
         {
           role: "system",
-          content: "Ginna AI. Solo JSON válido. Ids del catálogo provisto; nunca inventes.",
+          content:
+            "Eres Ginna AI, asesora de GinnaBeauty. Solo JSON válido. Memoria del hilo. Recomiendas productos reales; invitas al carrito o favoritos.",
         },
         { role: "user", content: buildLlmPrompt(input, ranked) },
       ],
@@ -165,9 +191,9 @@ export async function generateStoreAdvisorReply(input: LlmAdvisorInput): Promise
     };
   }
 
-  return {
+  return withProductFollowUp({
     confidence: 0.75,
     engine: "openai",
     messages: [{ role: "bot", text, productIds, productHints }],
-  };
+  });
 }
