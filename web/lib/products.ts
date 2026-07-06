@@ -9,31 +9,44 @@ import { categoryProductsCacheTag } from "@/lib/server/revalidate-category-store
 import type { StoreProduct } from "@/lib/types/product";
 import { prisma } from "@/lib/prisma";
 
-function rowToStore(
-  p: {
-    id: string;
-    name: string;
-    brand: string;
-    category: string;
-    subcategory: string;
-    tags: string[];
-    price: number;
-    originalPrice: number | null;
-    rating: number;
-    reviews: number;
-    badge: string | null;
-    description: string;
-    emoji: string | null;
-    imageUrl: string | null;
-    isNew: boolean;
-    featuredInHome: boolean;
-  },
-  galleryRows: { url: string }[] = []
-): StoreProduct {
+const productStoreInclude = {
+  images: { orderBy: { sortOrder: "asc" as const } },
+  tintFamily: { select: { name: true } },
+  tintType: { select: { name: true } },
+};
+
+type ProductRow = {
+  id: string;
+  name: string;
+  brand: string;
+  category: string;
+  subcategory: string;
+  tags: string[];
+  price: number;
+  originalPrice: number | null;
+  rating: number;
+  reviews: number;
+  badge: string | null;
+  description: string;
+  emoji: string | null;
+  imageUrl: string | null;
+  isNew: boolean;
+  featuredInHome: boolean;
+  tintLevel?: string | null;
+  tintGroup?: string | null;
+  tintFamily?: { name: string } | null;
+  tintType?: { name: string } | null;
+};
+
+function rowToStore(p: ProductRow, galleryRows: { url: string }[] = []): StoreProduct {
   const main = p.imageUrl?.trim() || "";
   const extras = galleryRows.map((g) => g.url).filter(Boolean);
   const primary = main || extras[0] || "";
   const gallery = main ? extras : extras.slice(1);
+  const tintLevel = p.tintLevel?.trim() || undefined;
+  const tintGroup = p.tintGroup?.trim() || undefined;
+  const tintFamily = p.tintFamily?.name?.trim() || undefined;
+  const tintType = p.tintType?.name?.trim() || undefined;
   return {
     id: p.id,
     name: p.name,
@@ -52,6 +65,10 @@ function rowToStore(
     isNew: p.isNew,
     featuredInHome: p.featuredInHome,
     gallery,
+    ...(tintLevel ? { tintLevel } : {}),
+    ...(tintGroup ? { tintGroup } : {}),
+    ...(tintFamily ? { tintFamily } : {}),
+    ...(tintType ? { tintType } : {}),
   };
 }
 
@@ -61,7 +78,7 @@ const getCachedStorefrontProducts = unstable_cache(
     const rows = await prisma.product.findMany({
       where: { active: true },
       orderBy: [{ featuredInHome: "desc" }, { name: "asc" }],
-      include: { images: { orderBy: { sortOrder: "asc" } } },
+      include: productStoreInclude,
     });
     if (rows.length === 0) return mockProducts;
     return rows.map((r) => rowToStore(r, r.images));
@@ -165,7 +182,7 @@ export async function getStorefrontProductsByCategory(categorySlug: string): Pro
         const rows = await prisma.product.findMany({
           where: { active: true, category: categorySlug },
           orderBy: [{ featuredInHome: "desc" }, { name: "asc" }],
-          include: { images: { orderBy: { sortOrder: "asc" } } },
+          include: productStoreInclude,
         });
         const products = rows.map((r) => rowToStore(r, r.images));
         const ids =
@@ -233,7 +250,7 @@ export async function getStorefrontCategoryFeaturedProducts(categorySlug: string
 
         const rows = await prisma.product.findMany({
           where: { active: true, id: { in: featuredIds }, category: categorySlug },
-          include: { images: { orderBy: { sortOrder: "asc" } } },
+          include: productStoreInclude,
         });
         const byId = new Map(rows.map((r) => [r.id, rowToStore(r, r.images)]));
         const products = featuredIds

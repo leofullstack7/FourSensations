@@ -3,35 +3,71 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { MotionDiv, MotionSpan } from "@/components/store/store-framer-motion";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
-import { buildAdvisorReply, type AiChatMessage } from "@/lib/ai-advisor";
+import {
+  buildAdvisorReply,
+  type AdvisorHistoryTurn,
+  type AiAdvisorReply,
+  type AiChatMessage,
+} from "@/lib/ai-advisor";
 import { getWhatsAppHref, WHATSAPP_DEFAULT_MESSAGE } from "@/lib/storefront-contact";
 import { formatPrice } from "@/lib/format";
 
 const QUICK_PROMPTS = [
-  { id: "skin", label: "Piel seca", text: "Tengo la piel seca y busco hidratación" },
+  { id: "skin", label: "Piel seca", text: "Tengo la piel seca y busco hidratación facial" },
   { id: "hair", label: "Cabello dañado", text: "Mi cabello está dañado y necesito reparación" },
   { id: "makeup", label: "Look natural", text: "Quiero maquillaje natural con glow" },
+  { id: "tint", label: "Tintes", text: "Busco tinte para cubrir canas en tono castaño" },
   { id: "gift", label: "Regalo", text: "Busco un regalo de belleza especial" },
 ] as const;
 
 const WELCOME: AiChatMessage = {
   id: "welcome",
   role: "bot",
-  text: "Hola, soy Ginna AI ✨ Cuéntame qué quieres cuidar — piel, cabello, maquillaje, tintes o un regalo. Puedes seguir escribiendo; no respondo a todo, pero en belleza te guío bien.",
+  text: "Hola, soy Ginna AI ✨ Cuéntame qué quieres cuidar — piel, cabello, maquillaje, tintes o un regalo. Respondo con productos de nuestro catálogo y te conecto con el equipo cuando hace falta.",
 };
 
 function nextId(): string {
   return `ai-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function toHistoryTurns(messages: AiChatMessage[]): AdvisorHistoryTurn[] {
+  return messages
+    .filter((m) => m.id !== "welcome")
+    .map((m) => ({ role: m.role, text: m.text }));
+}
+
+async function fetchAdvisorReply(message: string, history: AdvisorHistoryTurn[]): Promise<AiAdvisorReply | null> {
+  try {
+    const res = await fetch("/api/store/advisor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ message, history }),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as AiAdvisorReply;
+  } catch {
+    return null;
+  }
+}
+
 export function BeautyAiAdvisor() {
-  const { catalogProducts, openProductModal, openSearchWithQuery } = useStorefrontUi();
+  const { catalogProducts, ensureFullCatalog, openProductModal, openSearchWithQuery } = useStorefrontUi();
   const [messages, setMessages] = useState<AiChatMessage[]>([WELCOME]);
   const [draft, setDraft] = useState("");
   const [typing, setTyping] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const catalogEnsured = useRef(false);
   const inputId = useId();
   const whatsappHref = getWhatsAppHref(WHATSAPP_DEFAULT_MESSAGE);
+
+  useEffect(() => {
+    if (catalogProducts.length > 0 || catalogEnsured.current) return;
+    catalogEnsured.current = true;
+    setCatalogLoading(true);
+    void ensureFullCatalog().finally(() => setCatalogLoading(false));
+  }, [catalogProducts.length, ensureFullCatalog]);
 
   const scrollToBottom = useCallback(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -44,18 +80,36 @@ export function BeautyAiAdvisor() {
   const pushReply = useCallback(
     (userText: string) => {
       const userMsg: AiChatMessage = { id: nextId(), role: "user", text: userText };
-      setMessages((prev) => [...prev, userMsg].slice(-16));
+      let historyForApi: AdvisorHistoryTurn[] = [];
+
+      setMessages((prev) => {
+        const withUser = [...prev, userMsg].slice(-16);
+        historyForApi = toHistoryTurns(withUser);
+        return withUser;
+      });
+
       setTyping(true);
 
       window.setTimeout(() => {
-        const reply = buildAdvisorReply(userText, catalogProducts);
-        const botMsgs: AiChatMessage[] = reply.messages.map((m) => ({
-          ...m,
-          id: nextId(),
-        }));
-        setMessages((prev) => [...prev, ...botMsgs].slice(-16));
-        setTyping(false);
-      }, 750 + Math.random() * 400);
+        void (async () => {
+          let reply: AiAdvisorReply | null = await fetchAdvisorReply(userText, historyForApi);
+
+          if (!reply) {
+            reply = buildAdvisorReply(userText, catalogProducts, {
+              history: historyForApi.filter((h) => h.role === "user").map((h) => h.text),
+              engine: "rules",
+            });
+          }
+
+          const botMsgs: AiChatMessage[] = reply.messages.map((m) => ({
+            ...m,
+            id: nextId(),
+          }));
+
+          setMessages((current) => [...current, ...botMsgs].slice(-16));
+          setTyping(false);
+        })();
+      }, 450 + Math.random() * 350);
     },
     [catalogProducts],
   );
@@ -100,15 +154,19 @@ export function BeautyAiAdvisor() {
             Descubre con <em>IA</em>
           </h2>
           <p className="gb-ai-desc">
-            Conversa como en un chat: describe tu rutina, tu tipo de piel o lo que buscas. Te sugiero
-            productos del catálogo cuando tengo confianza — y te redirijo al equipo cuando hace falta un
-            toque humano.
+            Conversa como en un chat: describe tu rutina, tu tipo de piel o lo que buscas. Consulto el catálogo
+            real de GinnaBeauty — nombre, categoría, etiquetas y descripción — y te sugiero productos concretos.
           </p>
           <ul className="gb-ai-features">
-            <li>Chat continuo</li>
+            <li>Chat con contexto</li>
             <li>Recomendaciones del catálogo</li>
             <li>Asesora humana si lo necesitas</li>
           </ul>
+          {catalogLoading ? (
+            <p className="gb-ai-catalog-hint" style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
+              Sincronizando catálogo…
+            </p>
+          ) : null}
         </div>
 
         <MotionDiv
@@ -136,6 +194,7 @@ export function BeautyAiAdvisor() {
                       {msg.productIds.map((id) => {
                         const p = productMap.get(id);
                         if (!p) return null;
+                        const hint = msg.productHints?.[id];
                         return (
                           <button
                             key={id}
@@ -149,6 +208,7 @@ export function BeautyAiAdvisor() {
                             <span className="gb-ai-product-pick-copy">
                               <span className="gb-ai-product-pick-name">{p.name}</span>
                               <span className="gb-ai-product-pick-meta">
+                                {hint ? `${hint} · ` : ""}
                                 {p.brand} · {formatPrice(p.price)}
                               </span>
                             </span>

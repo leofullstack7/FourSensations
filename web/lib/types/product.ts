@@ -23,6 +23,11 @@ export type StoreProduct = {
   featuredInHome: boolean;
   /** URLs adicionales (galería); la principal sigue en `img`. */
   gallery: string[];
+  /** Catálogo tintes (opcional; mejora matching del asesor IA). */
+  tintLevel?: string;
+  tintGroup?: string;
+  tintFamily?: string;
+  tintType?: string;
 };
 
 export type CartLine = StoreProduct & { qty: number };
