@@ -69,6 +69,8 @@ async function completeOneProduct(
       priceCop: row.price,
       emptyFields: targetFields,
       menuTagForSubcategory: menuTagForSub,
+      existingDescription: row.description,
+      rewriteDescriptions: options.rewriteDescriptions,
     });
 
     const filled: AiCompletableField[] = [];
@@ -152,6 +154,7 @@ export async function POST(req: NextRequest) {
   const aiOptions: AiCompleteFieldOptions = {
     fields: parsed.data.fields,
     forceRegenerate: parsed.data.forceRegenerate,
+    rewriteDescriptions: parsed.data.rewriteDescriptions,
   };
 
   try {

@@ -1,6 +1,9 @@
 import {
+  ADVISOR_RULES_LLM_THRESHOLD,
   buildAdvisorReply,
+  buildAdvisorReplyForQuickPrompt,
   formatProductForAdvisorContext,
+  resolveAdvisorQuickPromptId,
   scoreProductsForQuery,
   buildAdvisorSearchQuery,
   shouldUseAdvisorLlm,
@@ -22,6 +25,9 @@ type LlmAdvisorJson = {
   productNotes?: Record<string, string>;
 };
 
+const LLM_TOP_PRODUCTS = 6;
+const LLM_MAX_TOKENS = 280;
+
 function getOpenAiConfig() {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("OPENAI_API_KEY no configurada");
@@ -39,50 +45,68 @@ function parseAdvisorJson(content: string): LlmAdvisorJson {
 
 function buildLlmPrompt(input: LlmAdvisorInput, ranked: { product: StoreProduct; score: number }[]): string {
   const userHistory = input.history
-    .slice(-6)
+    .slice(-4)
     .map((t) => `${t.role === "user" ? "Cliente" : "Ginna AI"}: ${t.text}`)
     .join("\n");
 
   const catalog =
     ranked.length > 0
-      ? ranked.map(({ product, score }) => `${formatProductForAdvisorContext(product)} (relevancia:${score.toFixed(0)})`).join("\n")
-      : "Sin coincidencias claras en catálogo.";
+      ? ranked
+          .map(({ product, score }) => `${formatProductForAdvisorContext(product)} (rel:${score.toFixed(0)})`)
+          .join("\n")
+      : "Sin coincidencias claras.";
 
-  return `Eres Ginna AI, asesora de belleza de GinnaBeauty (Colombia).
-Responde en español, tono cercano y premium. SOLO recomienda productos de la lista "CATÁLOGO" usando sus ids exactos.
-Si la pregunta es sobre envíos, pagos o devoluciones, responde brevemente con lo que sabes y NO inventes productos.
-Si no hay productos adecuados, dilo con honestidad y sugiere reformular la consulta.
+  return `Ginna AI · GinnaBeauty Colombia. Español, tono premium y cercano.
+Recomienda SOLO productos del CATÁLOGO (ids exactos). 1-2 frases máximo.
 
-Conocimiento tienda:
-- Envío gratis desde $150.000 COP a Colombia.
-- Pagos en línea seguros (ePayco/Bold).
-- Cambios/garantías vía WhatsApp con número de pedido.
+Envío gratis desde $150.000 COP · Pagos ePayco/Bold.
 
-Historial reciente:
-${userHistory || "(sin historial)"}
+Historial:
+${userHistory || "—"}
 
-Mensaje actual del cliente:
-${input.message}
+Cliente: ${input.message}
 
-CATÁLOGO (usa solo estos ids en productIds):
+CATÁLOGO:
 ${catalog}
 
-Responde ÚNICAMENTE JSON válido (sin markdown):
-{"text":"respuesta natural 1-3 frases","productIds":["id1","id2"],"productNotes":{"id1":"por qué encaja"}}`;
+JSON (sin markdown):
+{"text":"…","productIds":["id"],"productNotes":{"id":"motivo breve"}}`;
+}
+
+function rulesReplyHasProducts(reply: AiAdvisorReply): boolean {
+  return reply.messages.some((m) => (m.productIds?.length ?? 0) > 0);
 }
 
 export async function generateStoreAdvisorReply(input: LlmAdvisorInput): Promise<AiAdvisorReply> {
   const userTurns = input.history.filter((h) => h.role === "user").map((h) => h.text);
-  const searchQuery = buildAdvisorSearchQuery(input.message, userTurns.slice(0, -1));
-  const ranked = scoreProductsForQuery(input.products, searchQuery).slice(0, 12);
+
+  const quickId = resolveAdvisorQuickPromptId(input.message);
+  if (quickId) {
+    return buildAdvisorReplyForQuickPrompt(quickId, input.products);
+  }
+
+  const rulesReply = buildAdvisorReply(input.message, input.products, {
+    history: userTurns,
+    engine: "rules",
+  });
+
+  if (
+    rulesReplyHasProducts(rulesReply) &&
+    rulesReply.confidence >= ADVISOR_RULES_LLM_THRESHOLD
+  ) {
+    return rulesReply;
+  }
 
   if (!shouldUseAdvisorLlm(input.message)) {
-    return buildAdvisorReply(input.message, input.products, { history: userTurns, engine: "rules" });
+    return rulesReply;
   }
 
   if (!isOpenAiConfigured()) {
-    return buildAdvisorReply(input.message, input.products, { history: userTurns, engine: "rules" });
+    return rulesReply;
   }
+
+  const searchQuery = buildAdvisorSearchQuery(input.message, userTurns.slice(0, -1));
+  const ranked = scoreProductsForQuery(input.products, searchQuery).slice(0, LLM_TOP_PRODUCTS);
 
   const { apiKey, model } = getOpenAiConfig();
 
@@ -94,13 +118,12 @@ export async function generateStoreAdvisorReply(input: LlmAdvisorInput): Promise
     },
     body: JSON.stringify({
       model,
-      temperature: 0.45,
-      max_tokens: 450,
+      temperature: 0.4,
+      max_tokens: LLM_MAX_TOKENS,
       messages: [
         {
           role: "system",
-          content:
-            "Eres Ginna AI. Respondes solo JSON válido. Recomiendas productos reales del catálogo proporcionado; nunca inventes ids.",
+          content: "Ginna AI. Solo JSON válido. Ids del catálogo provisto; nunca inventes.",
         },
         { role: "user", content: buildLlmPrompt(input, ranked) },
       ],
@@ -134,6 +157,7 @@ export async function generateStoreAdvisorReply(input: LlmAdvisorInput): Promise
   }
 
   if (productIds.length === 0) {
+    if (rulesReplyHasProducts(rulesReply)) return rulesReply;
     return {
       confidence: 0.5,
       engine: "openai",

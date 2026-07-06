@@ -5,6 +5,7 @@ export const adminProductAiCompleteSchema = z.object({
   ids: z.array(z.string().trim().min(1).max(200)).min(1).max(40),
   fields: z.array(z.enum(AI_COMPLETABLE_FIELDS)).optional(),
   forceRegenerate: z.boolean().optional(),
+  rewriteDescriptions: z.boolean().optional(),
 });
 
 export const adminProductAiClearSchema = z.object({

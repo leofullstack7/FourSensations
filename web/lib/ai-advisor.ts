@@ -286,6 +286,7 @@ function isCannedIntent(text: string): boolean {
 export function shouldUseAdvisorLlm(text: string): boolean {
   const t = text.trim();
   if (!t || isCannedIntent(t)) return false;
+  if (resolveAdvisorQuickPromptId(t)) return false;
   return true;
 }
 
@@ -297,7 +298,7 @@ export function formatProductForAdvisorContext(p: StoreProduct): string {
     `${getCategoryLabel(p.category)} / ${p.subcategory}`,
     `$${p.price.toLocaleString("es-CO")} COP`,
     p.tags.length ? `tags: ${p.tags.join(", ")}` : "",
-    p.description ? p.description.slice(0, 160) : "",
+    p.description ? p.description.slice(0, 96) : "",
     p.tintLevel ? `nivel: ${p.tintLevel}` : "",
     p.tintGroup ? `grupo: ${p.tintGroup}` : "",
     p.tintFamily ? `familia: ${p.tintFamily}` : "",
@@ -310,6 +311,104 @@ export type BuildAdvisorOptions = {
   history?: string[];
   engine?: AiAdvisorReply["engine"];
 };
+
+/** Preguntas rápidas del chat — una sola fuente para UI y motor rules. */
+export const ADVISOR_QUICK_PROMPTS = [
+  {
+    id: "skin",
+    label: "Piel seca",
+    text: "Tengo la piel seca y busco hidratación facial",
+    searchQuery: "piel seca hidratacion facial humectante crema serum",
+    intro:
+      "Para piel seca lo clave es hidratación profunda y confort duradero. Estas opciones del catálogo te ayudan a recuperar luminosidad y suavidad:",
+  },
+  {
+    id: "hair",
+    label: "Cabello dañado",
+    text: "Mi cabello está dañado y necesito reparación",
+    searchQuery: "cabello danado reparacion tratamiento mascarilla keratina",
+    intro:
+      "El cabello dañado pide reparación y nutrición intensa. Empieza con estos tratamientos del catálogo para devolverle fuerza y brillo:",
+  },
+  {
+    id: "makeup",
+    label: "Look natural",
+    text: "Quiero maquillaje natural con glow",
+    searchQuery: "maquillaje natural glow base rubor luminoso",
+    intro:
+      "Un look natural con glow se logra con acabados ligeros y luminosos. Estas piezas del catálogo son perfectas para ese efecto fresh:",
+  },
+  {
+    id: "tint",
+    label: "Tintes",
+    text: "Busco tinte para cubrir canas en tono castaño",
+    searchQuery: "tinte castano canas cobertura coloracion igora",
+    intro:
+      "Para cubrir canas en tono castaño, estas tinturas y líneas profesionales del catálogo ofrecen cobertura uniforme y acabado salón:",
+  },
+  {
+    id: "gift",
+    label: "Regalo",
+    text: "Busco un regalo de belleza especial",
+    searchQuery: "regalo kit combo detalle best seller",
+    intro:
+      "Un regalo de belleza especial puede ser un kit curado o un favorito del catálogo. Te dejo ideas concretas para sorprender:",
+  },
+] as const;
+
+export type AdvisorQuickPromptId = (typeof ADVISOR_QUICK_PROMPTS)[number]["id"];
+
+const QUICK_PROMPT_TEXT_TO_ID = new Map(
+  ADVISOR_QUICK_PROMPTS.map((p) => [normalizeAdvisorText(p.text), p.id]),
+);
+
+/** Identifica si el mensaje coincide con un chip predeterminado. */
+export function resolveAdvisorQuickPromptId(text: string): AdvisorQuickPromptId | null {
+  const n = normalizeAdvisorText(text);
+  return QUICK_PROMPT_TEXT_TO_ID.get(n) ?? null;
+}
+
+function getQuickPromptConfig(id: AdvisorQuickPromptId) {
+  return ADVISOR_QUICK_PROMPTS.find((p) => p.id === id)!;
+}
+
+/** Respuesta instantánea para chips (sin OpenAI, sin API). */
+export function buildAdvisorReplyForQuickPrompt(
+  promptId: AdvisorQuickPromptId,
+  products: StoreProduct[],
+): AiAdvisorReply {
+  const preset = getQuickPromptConfig(promptId);
+  const ranked = scoreProductsForQuery(products, preset.searchQuery);
+  const top = ranked.slice(0, 3);
+  const queryTokens = expandQueryTokens(preset.searchQuery);
+  const topScore = top[0]?.score ?? 0;
+  const secondScore = top[1]?.score ?? 0;
+  const confidence = confidenceFromScore(topScore, secondScore);
+
+  if (top.length > 0 && topScore >= 4) {
+    const productHints: Record<string, string> = {};
+    for (const { product } of top) {
+      productHints[product.id] = explainProductMatch(product, queryTokens);
+    }
+    return {
+      confidence: Math.max(confidence, 0.72),
+      engine: "rules",
+      messages: [
+        {
+          role: "bot",
+          text: preset.intro,
+          productIds: top.map((r) => r.product.id),
+          productHints,
+        },
+      ],
+    };
+  }
+
+  return buildAdvisorReply(preset.text, products, { engine: "rules" });
+}
+
+/** Umbral: por encima, las reglas bastan y no hace falta LLM. */
+export const ADVISOR_RULES_LLM_THRESHOLD = 0.45;
 
 export function buildAdvisorReply(
   input: string,

@@ -220,7 +220,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   const [productAiBusy, setProductAiBusy] = useState(false);
   const [aiBulkModalOpen, setAiBulkModalOpen] = useState(false);
   const [aiBulkPhase, setAiBulkPhase] = useState<"intro" | "running" | "done">("intro");
-  const [aiBulkMode, setAiBulkMode] = useState<"all" | "descriptions">("all");
+  const [aiBulkMode, setAiBulkMode] = useState<"all" | "descriptions" | "descriptions-rewrite">("all");
   const [aiBulkItems, setAiBulkItems] = useState<AiBulkProgressItem[]>([]);
   const aiBulkRunLock = useRef(false);
   const productBulkMenuRef = useRef<HTMLDivElement>(null);
@@ -571,6 +571,28 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
     setProductBulkMenuOpen(false);
   }, [productListSelectedIds, products, showToast]);
 
+  const handleBulkAiRewriteDescriptions = useCallback(() => {
+    const ids = Array.from(productListSelectedIds);
+    if (ids.length === 0) {
+      showToast("Selecciona al menos un producto", "danger", "⚠️");
+      return;
+    }
+    const items: AiBulkProgressItem[] = ids.map((id) => {
+      const p = products.find((x) => x.id === id);
+      return {
+        id,
+        name: p?.name ?? id,
+        status: "pending",
+        filled: [],
+      };
+    });
+    setAiBulkItems(items);
+    setAiBulkPhase("intro");
+    setAiBulkMode("descriptions-rewrite");
+    setAiBulkModalOpen(true);
+    setProductBulkMenuOpen(false);
+  }, [productListSelectedIds, products, showToast]);
+
   const closeAiBulkModal = useCallback(() => {
     if (aiBulkPhase === "running") return;
     setAiBulkModalOpen(false);
@@ -587,7 +609,11 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
 
     const pendingIds = aiBulkItems.filter((i) => i.status === "pending").map((i) => i.id);
     const aiOptions: AiCompleteFieldOptions | undefined =
-      aiBulkMode === "descriptions" ? { fields: ["description"] } : undefined;
+      aiBulkMode === "descriptions"
+        ? { fields: ["description"] }
+        : aiBulkMode === "descriptions-rewrite"
+          ? { fields: ["description"], forceRegenerate: true, rewriteDescriptions: true }
+          : undefined;
 
     try {
       const { summary } = await runAdminProductsAiCompleteParallel(
@@ -634,9 +660,11 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
       await loadProducts();
       setAiBulkPhase("done");
       showToast(
-        aiBulkMode === "descriptions"
-          ? `Descripciones: ${summary.succeeded} creada(s), ${summary.failed} sin cambios o error`
-          : `IA: ${summary.succeeded} enriquecido(s), ${summary.failed} sin cambios o error`,
+        aiBulkMode === "descriptions-rewrite"
+          ? `Descripciones reescritas: ${summary.succeeded} actualizada(s), ${summary.failed} sin cambios o error`
+          : aiBulkMode === "descriptions"
+            ? `Descripciones: ${summary.succeeded} creada(s), ${summary.failed} sin cambios o error`
+            : `IA: ${summary.succeeded} enriquecido(s), ${summary.failed} sin cambios o error`,
         summary.succeeded > 0 ? "success" : "default",
         "✦",
       );
@@ -1076,7 +1104,17 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                         style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
                         onClick={() => void handleBulkAiDescriptions()}
                       >
-                        📝 Generar descripciones con IA ({productListSelectedIds.size})
+                        📝 Generar descripciones (solo vacías) ({productListSelectedIds.size})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={productAiBusy || productListSelectedIds.size === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={() => void handleBulkAiRewriteDescriptions()}
+                      >
+                        ✨ Reescribir descripciones comerciales (IA) ({productListSelectedIds.size})
                       </button>
                       <button
                         type="button"
@@ -5101,13 +5139,18 @@ function AdminProductDetailModal({
                         const result = await postAdminProductsAiCompleteOne(product.id, {
                           fields: ["description"],
                           forceRegenerate: hasText,
+                          rewriteDescriptions: hasText,
                         });
                         if (result.product) {
                           onProductRefresh?.(result.product);
                           applyProductToForm(result.product);
                         }
                         if (result.ok && result.filled.includes("description")) {
-                          showToast("Descripción generada con IA", "success", "📝");
+                          showToast(
+                            hasText ? "Descripción reescrita con IA" : "Descripción generada con IA",
+                            "success",
+                            "📝",
+                          );
                         } else {
                           showToast(result.error ?? "No se pudo generar la descripción", "danger", "⚠️");
                         }

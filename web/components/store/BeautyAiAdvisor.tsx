@@ -4,21 +4,19 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { MotionDiv, MotionSpan } from "@/components/store/store-framer-motion";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import {
+  ADVISOR_QUICK_PROMPTS,
+  ADVISOR_RULES_LLM_THRESHOLD,
   buildAdvisorReply,
+  buildAdvisorReplyForQuickPrompt,
   type AdvisorHistoryTurn,
+  type AdvisorQuickPromptId,
   type AiAdvisorReply,
   type AiChatMessage,
 } from "@/lib/ai-advisor";
 import { getWhatsAppHref, WHATSAPP_DEFAULT_MESSAGE } from "@/lib/storefront-contact";
 import { formatPrice } from "@/lib/format";
 
-const QUICK_PROMPTS = [
-  { id: "skin", label: "Piel seca", text: "Tengo la piel seca y busco hidratación facial" },
-  { id: "hair", label: "Cabello dañado", text: "Mi cabello está dañado y necesito reparación" },
-  { id: "makeup", label: "Look natural", text: "Quiero maquillaje natural con glow" },
-  { id: "tint", label: "Tintes", text: "Busco tinte para cubrir canas en tono castaño" },
-  { id: "gift", label: "Regalo", text: "Busco un regalo de belleza especial" },
-] as const;
+const QUICK_PROMPTS = ADVISOR_QUICK_PROMPTS;
 
 const WELCOME: AiChatMessage = {
   id: "welcome",
@@ -37,19 +35,33 @@ function toHistoryTurns(messages: AiChatMessage[]): AdvisorHistoryTurn[] {
 }
 
 async function fetchAdvisorReply(message: string, history: AdvisorHistoryTurn[]): Promise<AiAdvisorReply | null> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12_000);
   try {
     const res = await fetch("/api/store/advisor", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
+      signal: controller.signal,
       body: JSON.stringify({ message, history }),
     });
     if (!res.ok) return null;
     return (await res.json()) as AiAdvisorReply;
   } catch {
     return null;
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
+
+function rulesReplyHasProducts(reply: AiAdvisorReply): boolean {
+  return reply.messages.some((m) => (m.productIds?.length ?? 0) > 0);
+}
+
+type PushReplyOptions = {
+  /** Chip predeterminado: respuesta local instantánea, cero tokens. */
+  quickPromptId?: AdvisorQuickPromptId;
+};
 
 export function BeautyAiAdvisor() {
   const { catalogProducts, ensureFullCatalog, openProductModal, openSearchWithQuery } = useStorefrontUi();
@@ -78,7 +90,7 @@ export function BeautyAiAdvisor() {
   }, [messages, typing, scrollToBottom]);
 
   const pushReply = useCallback(
-    (userText: string) => {
+    (userText: string, options?: PushReplyOptions) => {
       const userMsg: AiChatMessage = { id: nextId(), role: "user", text: userText };
       let historyForApi: AdvisorHistoryTurn[] = [];
 
@@ -90,26 +102,47 @@ export function BeautyAiAdvisor() {
 
       setTyping(true);
 
-      window.setTimeout(() => {
-        void (async () => {
-          let reply: AiAdvisorReply | null = await fetchAdvisorReply(userText, historyForApi);
+      const userHistory = historyForApi.filter((h) => h.role === "user").map((h) => h.text);
+      const isInstant = Boolean(options?.quickPromptId);
 
-          if (!reply) {
-            reply = buildAdvisorReply(userText, catalogProducts, {
-              history: historyForApi.filter((h) => h.role === "user").map((h) => h.text),
-              engine: "rules",
-            });
+      void (async () => {
+        if (isInstant) {
+          await new Promise((r) => window.setTimeout(r, 90));
+        }
+
+        let reply: AiAdvisorReply | null = null;
+
+        if (options?.quickPromptId && catalogProducts.length > 0) {
+          reply = buildAdvisorReplyForQuickPrompt(options.quickPromptId, catalogProducts);
+        } else if (catalogProducts.length > 0) {
+          const localRules = buildAdvisorReply(userText, catalogProducts, {
+            history: userHistory,
+            engine: "rules",
+          });
+          if (localRules.confidence >= ADVISOR_RULES_LLM_THRESHOLD && rulesReplyHasProducts(localRules)) {
+            reply = localRules;
           }
+        }
 
-          const botMsgs: AiChatMessage[] = reply.messages.map((m) => ({
-            ...m,
-            id: nextId(),
-          }));
+        if (!reply) {
+          reply = await fetchAdvisorReply(userText, historyForApi);
+        }
 
-          setMessages((current) => [...current, ...botMsgs].slice(-16));
-          setTyping(false);
-        })();
-      }, 450 + Math.random() * 350);
+        if (!reply) {
+          reply = buildAdvisorReply(userText, catalogProducts, {
+            history: userHistory,
+            engine: "rules",
+          });
+        }
+
+        const botMsgs: AiChatMessage[] = reply.messages.map((m) => ({
+          ...m,
+          id: nextId(),
+        }));
+
+        setMessages((current) => [...current, ...botMsgs].slice(-16));
+        setTyping(false);
+      })();
     },
     [catalogProducts],
   );
@@ -122,9 +155,9 @@ export function BeautyAiAdvisor() {
   }, [draft, typing, pushReply]);
 
   const handleQuickPrompt = useCallback(
-    (text: string) => {
+    (promptId: AdvisorQuickPromptId, text: string) => {
       if (typing) return;
-      pushReply(text);
+      pushReply(text, { quickPromptId: promptId });
     },
     [typing, pushReply],
   );
@@ -259,7 +292,7 @@ export function BeautyAiAdvisor() {
                 type="button"
                 className="gb-ai-chip"
                 disabled={typing}
-                onClick={() => handleQuickPrompt(p.text)}
+                onClick={() => handleQuickPrompt(p.id, p.text)}
               >
                 {p.label}
               </button>

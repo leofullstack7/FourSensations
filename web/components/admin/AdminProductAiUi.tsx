@@ -49,7 +49,7 @@ export function AdminProductDescriptionBlock({
           disabled={generating}
           onClick={onGenerate}
         >
-          {generating ? "Generando descripción…" : hasText ? "✦ Mejorar descripción con IA" : "✦ Generar descripción con IA"}
+          {generating ? "Generando descripción…" : hasText ? "✨ Reescribir descripción comercial (IA)" : "✦ Generar descripción con IA"}
         </button>
       ) : null}
     </div>

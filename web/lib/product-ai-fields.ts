@@ -56,6 +56,8 @@ export type AiCompleteFieldOptions = {
   fields?: AiCompletableField[];
   /** Regenera aunque el campo ya tenga valor (solo aplica a `fields`). */
   forceRegenerate?: boolean;
+  /** Reescribe descripción existente con copy comercial e-commerce (implica regenerar description). */
+  rewriteDescriptions?: boolean;
 };
 
 export function resolveAiTargetFields(
@@ -63,7 +65,8 @@ export function resolveAiTargetFields(
   options: AiCompleteFieldOptions = {},
 ): AiCompletableField[] {
   const pool = options.fields?.length ? options.fields : AI_COMPLETABLE_FIELDS;
-  if (options.forceRegenerate) return [...pool];
+  const force = options.forceRegenerate || options.rewriteDescriptions;
+  if (force) return [...pool];
   return pool.filter((f) => isFieldEmptyForAi(product, f));
 }
 

@@ -14,23 +14,61 @@ export type AiBulkProgressItem = {
   product?: AdminProduct;
 };
 
+export type AiBulkProgressMode = "all" | "descriptions" | "descriptions-rewrite";
+
 type AdminAiBulkProgressModalProps = {
   open: boolean;
   phase: "intro" | "running" | "done";
-  mode: "all" | "descriptions";
+  mode: AiBulkProgressMode;
   items: AiBulkProgressItem[];
   onStart: () => void;
   onClose: () => void;
 };
 
-function statusLabel(status: AiBulkProgressItem["status"]): string {
+function modeTitle(mode: AiBulkProgressMode, phase: "intro" | "running" | "done"): string {
+  if (mode === "descriptions-rewrite") {
+    if (phase === "intro") return "Reescribir descripciones comerciales";
+    if (phase === "running") return "Reescribiendo descripciones…";
+    return "Reescritura finalizada";
+  }
+  if (mode === "descriptions") {
+    if (phase === "intro") return "Descripciones con IA";
+    if (phase === "running") return "Escribiendo descripciones…";
+    return "Descripciones listas";
+  }
+  if (phase === "intro") return "Completar con IA";
+  if (phase === "running") return "Ginna IA trabajando…";
+  return "Proceso finalizado";
+}
+
+function modeIntroSubtitle(mode: AiBulkProgressMode, toProcess: number, total: number): string {
+  if (mode === "descriptions-rewrite") {
+    return `${toProcess} producto(s) por reescribir con copy comercial e-commerce`;
+  }
+  if (mode === "descriptions") {
+    return `${toProcess} producto(s) sin descripción · ${total - toProcess} ya tienen texto`;
+  }
+  return `${toProcess} producto(s) por enriquecer · ${total - toProcess} ya completos`;
+}
+
+function modeIntroBody(mode: AiBulkProgressMode): string {
+  if (mode === "descriptions-rewrite") {
+    return "La IA tomará la descripción actual (o el nombre y categoría si falta texto) y redactará una versión más comercial, llamativa y orientada a venta, como en tiendas online de belleza.";
+  }
+  if (mode === "descriptions") {
+    return "La IA redactará una descripción comercial clara para cada producto seleccionado que no tenga texto (mín. 12 caracteres).";
+  }
+  return "La IA completará descripción, etiquetas, emoji y badge donde falten. Verás cada producto actualizarse en tiempo real.";
+}
+
+function statusLabel(status: AiBulkProgressItem["status"], mode: AiBulkProgressMode): string {
   switch (status) {
     case "pending":
       return "En cola";
     case "running":
-      return "Generando…";
+      return mode === "descriptions-rewrite" ? "Reescribiendo…" : "Generando…";
     case "done":
-      return "Completado";
+      return mode === "descriptions-rewrite" ? "Reescrito" : "Completado";
     case "skipped":
       return "Ya estaba completo";
     case "error":
@@ -131,15 +169,10 @@ export function AdminAiBulkProgressModal({
           </div>
           <div>
             <h2 id="admin-ai-progress-title" className="admin-ai-progress-title">
-              {phase === "intro" && (mode === "descriptions" ? "Descripciones con IA" : "Completar con IA")}
-              {phase === "running" && (mode === "descriptions" ? "Escribiendo descripciones…" : "Ginna IA trabajando…")}
-              {phase === "done" && (mode === "descriptions" ? "Descripciones listas" : "Proceso finalizado")}
+              {modeTitle(mode, phase)}
             </h2>
             <p className="admin-ai-progress-subtitle">
-              {phase === "intro" &&
-                (mode === "descriptions"
-                  ? `${toProcess} producto(s) sin descripción · ${items.length - toProcess} ya tienen texto`
-                  : `${toProcess} producto(s) por enriquecer · ${items.length - toProcess} ya completos`)}
+              {phase === "intro" && modeIntroSubtitle(mode, toProcess, items.length)}
               {phase === "running" && `${stats.finished} de ${stats.total} · ${stats.pct}%`}
               {phase === "done" &&
                 `${stats.done} enriquecidos · ${stats.skipped} omitidos · ${stats.errors} con error`}
@@ -157,11 +190,7 @@ export function AdminAiBulkProgressModal({
 
         {phase === "intro" && (
           <div className="admin-ai-progress-intro">
-            <p>
-              {mode === "descriptions"
-                ? "La IA redactará una descripción comercial clara para cada producto seleccionado que no tenga texto (mín. 12 caracteres)."
-                : "La IA completará descripción, etiquetas, emoji y badge donde falten. Verás cada producto actualizarse en tiempo real."}
-            </p>
+            <p>{modeIntroBody(mode)}</p>
             <div className="admin-ai-progress-intro-actions">
               <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
                 Cancelar
@@ -191,7 +220,7 @@ export function AdminAiBulkProgressModal({
                   </span>
                   <div className="admin-ai-progress-item-copy">
                     <span className="admin-ai-progress-item-name">{item.name}</span>
-                    <span className="admin-ai-progress-item-meta">{statusLabel(item.status)}</span>
+                    <span className="admin-ai-progress-item-meta">{statusLabel(item.status, mode)}</span>
                   </div>
                 </div>
 
