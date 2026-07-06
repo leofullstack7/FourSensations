@@ -445,8 +445,9 @@ export function StorefrontShell({
 
           <nav className="main-nav" aria-label="Categorías">
             <ul className="nav-list">
-              {Object.entries(menuConfig).map(([cat, data]) => {
+              {Object.entries(menuConfig).map(([cat, data], navIndex) => {
                 const subKeys = Object.keys(data.subs);
+                const megaAlignLeft = navIndex >= 4;
                 const allLinks = Object.entries(data.subs).map(([group, items]) => (
                   <div key={group} className="mega-subcol">
                     <div className="mega-subcol-title">{group}</div>
@@ -463,7 +464,7 @@ export function StorefrontShell({
                   </div>
                 ));
                 return (
-                  <li key={cat} className="nav-item">
+                  <li key={cat} className={`nav-item${megaAlignLeft ? " nav-item--mega-left" : ""}`}>
                     <StoreNavLink href={`/categoria/${categoryPath(cat)}`} className="nav-link" prefetch>
                       {data.icon} {cat}
                       <svg width="10" height="10" viewBox="0 0 10 10">
