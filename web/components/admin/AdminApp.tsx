@@ -516,9 +516,13 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
       showToast("Selecciona al menos un producto", "danger", "⚠️");
       return;
     }
+    const batchNote =
+      ids.length > 40
+        ? `\n\nSe procesarán ${ids.length} productos en lotes de 40. Puede tardar varios minutos; no cierres esta pestaña.`
+        : "";
     if (
       !confirm(
-        `Completar con IA los campos vacíos de ${ids.length} producto(s)? Se usará categoría y subcategoría como contexto.`,
+        `Completar con IA los campos vacíos de ${ids.length} producto(s)? Se usará categoría y subcategoría como contexto.${batchNote}`,
       )
     ) {
       return;

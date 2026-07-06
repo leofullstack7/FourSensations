@@ -238,9 +238,28 @@ export function scoreProductsForQuery(
   return scored.sort((a, b) => b.score - a.score);
 }
 
-function matchesAny(text: string, phrases: string[]): boolean {
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Coincidencia por frase completa o palabra (evita que «hi» dispare en «hidratación»). */
+function matchesIntentPhrase(text: string, phrase: string): boolean {
   const n = normalizeAdvisorText(text);
-  return phrases.some((p) => n.includes(normalizeAdvisorText(p)));
+  const p = normalizeAdvisorText(phrase);
+  if (!p || !n) return false;
+
+  if (n === p) return true;
+
+  if (p.includes(" ") || p.length >= 5) {
+    return n.includes(p);
+  }
+
+  const re = new RegExp(`(?:^|[\\s,.;:!?¿¡/+-])${escapeRegExp(p)}(?:$|[\\s,.;:!?¿¡/+-])`);
+  return re.test(n);
+}
+
+function matchesAny(text: string, phrases: string[]): boolean {
+  return phrases.some((p) => matchesIntentPhrase(text, p));
 }
 
 function confidenceFromScore(topScore: number, secondScore: number): number {
@@ -315,7 +334,7 @@ export function buildAdvisorReply(
       messages: [
         {
           role: "bot",
-          text: `¡Hola! Soy Ginna AI 💫 ${STORE_ADVISOR_KNOWLEDGE.scope} Cuéntame qué quieres cuidar o elige una sugerencia abajo.`,
+          text: "¡Hola! Soy Ginna AI 💫 Cuéntame qué quieres cuidar — piel, cabello, maquillaje, tintes o un regalo. Elige una sugerencia abajo o escríbeme con detalle.",
         },
       ],
     };

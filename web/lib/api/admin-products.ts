@@ -124,16 +124,35 @@ export async function postAdminProductsAiComplete(ids: string[]): Promise<{
   results: AdminAiCompleteResult[];
   summary: { total: number; succeeded: number; failed: number };
 }> {
-  const res = await fetch("/api/admin/products/ai-complete", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ ids }),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return (await res.json()) as {
-    results: AdminAiCompleteResult[];
-    summary: { total: number; succeeded: number; failed: number };
+  const unique = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+  if (unique.length === 0) throw new Error("No hay productos seleccionados");
+
+  const CHUNK_SIZE = 40;
+  const allResults: AdminAiCompleteResult[] = [];
+  let succeeded = 0;
+  let failed = 0;
+
+  for (let i = 0; i < unique.length; i += CHUNK_SIZE) {
+    const chunk = unique.slice(i, i + CHUNK_SIZE);
+    const res = await fetch("/api/admin/products/ai-complete", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ ids: chunk }),
+    });
+    if (!res.ok) throw new Error(await parseError(res));
+    const data = (await res.json()) as {
+      results: AdminAiCompleteResult[];
+      summary: { total: number; succeeded: number; failed: number };
+    };
+    allResults.push(...data.results);
+    succeeded += data.summary.succeeded;
+    failed += data.summary.failed;
+  }
+
+  return {
+    results: allResults,
+    summary: { total: allResults.length, succeeded, failed },
   };
 }
 
