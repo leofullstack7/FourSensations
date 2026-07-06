@@ -22,9 +22,9 @@ import {
   postAdminProductsBulkDelete,
   postAdminProductsAiClear,
   postAdminProductsAiComplete,
-  postSyncProductTagsFromMenu,
   updateAdminProduct,
 } from "@/lib/api/admin-products";
+import { productNeedsAiComplete } from "@/lib/product-ai-fields";
 import {
   buildPrimaryVariantByGroup,
   buildVariantCountByGroup,
@@ -34,8 +34,8 @@ import {
 } from "@/lib/admin/variant-groups";
 import { AdminProductVariantsModal } from "@/components/admin/AdminProductVariantsModal";
 import { AdminBulkTemplateModal } from "@/components/admin/AdminBulkTemplateModal";
-import { AdminAiFieldCell, AdminProductAiDetailPanel } from "@/components/admin/AdminProductAiUi";
-import { productNeedsAiComplete } from "@/lib/product-ai-fields";
+import { AdminProductAiDetailPanel } from "@/components/admin/AdminProductAiUi";
+import { menuTagForProduct, productOwnTags, tagsToInputValue } from "@/lib/product-tags";
 import { fetchAdminPaidOrders } from "@/lib/api/admin-orders";
 import {
   addProductGalleryImage,
@@ -116,14 +116,6 @@ const ADMIN_NAV_ITEMS: {
 
 function categoryDisplayName(slug: string, tree: AdminCategoryTree[]): string {
   return tree.find((c) => c.slug === slug)?.name ?? slug;
-}
-
-/** Etiquetas mostradas/editadas: las guardadas en el producto, o la de menú de su subcategoría si aún no hay ninguna. */
-function resolvedMenuTagsForProduct(product: AdminProduct, tree: AdminCategoryTree[]): string[] {
-  const fromDb = (product.tags ?? []).filter(Boolean);
-  if (fromDb.length) return fromDb;
-  if (!product.category?.trim()) return [];
-  return menuTagOptionsFromTree(tree, product.category, product.subcategory || "");
 }
 
 function parseTagsInput(raw: string): string[] {
@@ -228,7 +220,6 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   const [detailProductId, setDetailProductId] = useState<string | null>(null);
   const [featuredHomeSavingId, setFeaturedHomeSavingId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<{ id: number; msg: string; type: string; icon: string }[]>([]);
-  const menuTagsSyncAttemptedRef = useRef(false);
 
   const showToast = useCallback((msg: string, type = "default", icon = "✅") => {
     const id = Date.now();
@@ -246,24 +237,6 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
       setProducts(list);
       if (process.env.NODE_ENV === "development") {
         console.debug("[AdminApp] Productos cargados desde API:", list.length);
-      }
-      const needsMenuTags =
-        list.some((p) => (p.tags?.length ?? 0) === 0) && !menuTagsSyncAttemptedRef.current;
-      if (needsMenuTags) {
-        menuTagsSyncAttemptedRef.current = true;
-        void (async () => {
-          try {
-            const r = await postSyncProductTagsFromMenu();
-            if (r.updated > 0) {
-              const fresh = await fetchAdminProducts();
-              setProducts(fresh);
-              showToast(`Etiquetas de menú asignadas a ${r.updated} producto(s)`, "success", "🏷️");
-            }
-          } catch (syncErr) {
-            menuTagsSyncAttemptedRef.current = false;
-            console.error("[AdminApp] sync-menu-tags:", syncErr);
-          }
-        })();
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error al cargar productos";
@@ -1120,7 +1093,6 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                       await createAdminProduct(body);
                       showToast(`"${String(body.name)}" agregado exitosamente`, "success", "✅");
                       setProductTab("list");
-                      menuTagsSyncAttemptedRef.current = false;
                       await loadProducts();
                     } catch (e) {
                       showToast(e instanceof Error ? e.message : "Error al crear", "danger", "⚠️");
@@ -1138,7 +1110,6 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                   showToast={showToast}
                   setMutation={setProductMutation}
                   onImported={async () => {
-                    menuTagsSyncAttemptedRef.current = false;
                     await loadProducts();
                   }}
                   onCategoriesUpdated={async () => {
@@ -1446,7 +1417,7 @@ function AdminProductListTab({
         </div>
         <div className="form-group" style={{ margin: 0, minWidth: 160, flex: "1 1 140px" }}>
           <label className="form-label" style={{ fontSize: 11, marginBottom: 4 }}>
-            Etiqueta
+            Etiqueta producto
           </label>
           <select
             className="form-select"
@@ -1505,10 +1476,6 @@ function AdminProductListTab({
               <th title="Orden en la sección Productos Destacados del home (sin etiqueta pública)">Prioridad home</th>
               <th>Precio</th>
               <th>Stock</th>
-              <th style={{ textAlign: "center", fontSize: 11 }} title="Descripción generada por IA">Desc. IA</th>
-              <th style={{ textAlign: "center", fontSize: 11 }} title="Etiquetas generadas por IA">Tags IA</th>
-              <th style={{ textAlign: "center", fontSize: 11 }} title="Emoji generado por IA">Emoji IA</th>
-              <th style={{ textAlign: "center", fontSize: 11 }} title="Badge generado por IA">Badge IA</th>
               <th style={{ textAlign: "center" }}>Variantes</th>
               <th>Estado</th>
               <th>Acciones</th>
@@ -1517,13 +1484,13 @@ function AdminProductListTab({
           <tbody>
             {listLoading && filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={14} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                <td colSpan={10} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   Cargando…
                 </td>
               </tr>
             ) : filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={14} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                <td colSpan={10} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   {totalProductCount === 0
                     ? "Sin productos"
                     : "Ningún producto coincide con la búsqueda o los filtros seleccionados."}
@@ -1575,18 +1542,6 @@ function AdminProductListTab({
                     </td>
                     <td>{formatPrice(p.price)}</td>
                     <td>{p.stock}</td>
-                    <td style={{ textAlign: "center" }}>
-                      <AdminAiFieldCell product={p} field="description" />
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <AdminAiFieldCell product={p} field="tags" />
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <AdminAiFieldCell product={p} field="emoji" />
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <AdminAiFieldCell product={p} field="badge" />
-                    </td>
                     <td style={{ textAlign: "center", verticalAlign: "middle" }}>
                       {isGroupRow ? (
                         <button
@@ -1734,7 +1689,7 @@ function AdminAddProductForm({
           </select>
         </div>
         <div className="form-group full-width">
-          <label className="form-label">Etiquetas (separadas por coma)</label>
+          <label className="form-label">Etiquetas del producto (separadas por coma)</label>
           <input
             type="text"
             className="form-input"
@@ -4777,7 +4732,7 @@ function AdminProductDetailModal({
   const [editBrand, setEditBrand] = useState("");
   const [editCategory, setEditCategory] = useState("");
   const [editSubcategory, setEditSubcategory] = useState("");
-  const [editTags, setEditTags] = useState<string[]>([]);
+  const [editTagsText, setEditTagsText] = useState("");
   const [editPrice, setEditPrice] = useState("");
   const [editOriginalPrice, setEditOriginalPrice] = useState("");
   const [editStock, setEditStock] = useState("");
@@ -4793,7 +4748,7 @@ function AdminProductDetailModal({
     setEditBrand(p.brand || "");
     setEditCategory(p.category);
     setEditSubcategory(p.subcategory || "");
-    setEditTags(resolvedMenuTagsForProduct(p, categoryTree));
+    setEditTagsText(tagsToInputValue(productOwnTags(p)));
     setEditPrice(String(p.price));
     setEditOriginalPrice(p.originalPrice != null ? String(p.originalPrice) : "");
     setEditStock(String(p.stock));
@@ -4825,26 +4780,18 @@ function AdminProductDetailModal({
     return c ? [...c.subcategories].sort((a, b) => a.sortOrder - b.sortOrder) : [];
   }, [editCategory, categoryTree]);
 
-  const mergedTagOptions = useMemo(() => {
-    if (!editCategory.trim()) return [];
-    const pool = menuTagOptionsFromTree(categoryTree, editCategory, editSubcategory);
-    const merged = new Map<string, string>();
-    for (const t of pool) {
-      const v = t.trim();
-      if (!v) continue;
-      merged.set(v.toLowerCase(), v);
-    }
-    for (const t of product?.tags ?? []) {
-      const v = t.trim();
-      if (!v) continue;
-      merged.set(v.toLowerCase(), v);
-    }
-    return Array.from(merged.values()).sort((a, b) => a.localeCompare(b, "es"));
-  }, [editCategory, editSubcategory, categoryTree, product?.tags]);
+  const editMenuTagPreview = useMemo(() => {
+    if (!product || !editCategory || !editSubcategory) return null;
+    return menuTagForProduct(
+      { category: editCategory, subcategory: editSubcategory },
+      categoryTree,
+    );
+  }, [product, editCategory, editSubcategory, categoryTree]);
 
   if (!open || !product) return null;
 
-  const displayTags = resolvedMenuTagsForProduct(product, categoryTree);
+  const ownTags = productOwnTags(product);
+  const productMenuTag = menuTagForProduct(product, categoryTree);
 
   const canMutateImages = editingMode && !saving;
   const canToggleFeatured = editingMode && !saving;
@@ -4917,21 +4864,27 @@ function AdminProductDetailModal({
                   <div className="admin-card" style={{ padding: 12 }}>
                     <strong>Badge:</strong> {product.badge || "—"}
                   </div>
+                  <div className="admin-card" style={{ padding: 12 }}>
+                    <strong>Etiqueta menú:</strong> {productMenuTag ?? "—"}
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+                      Columna dorada del mega menú (subcategoría). No es la etiqueta del producto.
+                    </div>
+                  </div>
                   <div className="admin-card" style={{ padding: 12, gridColumn: "1 / -1" }}>
-                    <strong style={{ display: "block", marginBottom: 8 }}>Etiquetas (menú)</strong>
-                    {displayTags.length === 0 ? (
+                    <strong style={{ display: "block", marginBottom: 8 }}>Etiquetas del producto</strong>
+                    {ownTags.length === 0 ? (
                       <span style={{ color: "var(--text-muted)" }}>—</span>
                     ) : (
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {displayTags.map((t) => (
+                        {ownTags.map((t) => (
                           <span
                             key={t}
                             style={{
                               fontSize: 12,
-                              border: "1px solid rgba(200,168,162,0.38)",
+                              border: "1px solid rgba(201, 145, 139, 0.45)",
                               padding: "6px 10px",
                               borderRadius: 999,
-                              background: "var(--ivory)",
+                              background: "rgba(255,255,255,0.9)",
                             }}
                           >
                             {t}
@@ -5009,7 +4962,6 @@ function AdminProductDetailModal({
                       const slug = e.target.value;
                       setEditCategory(slug);
                       setEditSubcategory("");
-                      setEditTags([]);
                     }}
                   >
                     <option value="">Seleccionar…</option>
@@ -5026,18 +4978,7 @@ function AdminProductDetailModal({
                   <select
                     className="form-select"
                     value={editSubcategory}
-                    onChange={(e) => {
-                      const name = e.target.value;
-                      setEditSubcategory(name);
-                      const pool = menuTagOptionsFromTree(categoryTree, editCategory, name);
-                      const allowed = new Set<string>();
-                      for (const t of pool) allowed.add(t.toLowerCase());
-                      for (const t of product.tags ?? []) {
-                        const v = t.trim();
-                        if (v) allowed.add(v.toLowerCase());
-                      }
-                      setEditTags((prev) => prev.filter((t) => allowed.has(t.toLowerCase())));
-                    }}
+                    onChange={(e) => setEditSubcategory(e.target.value)}
                     disabled={!editCategory}
                   >
                     <option value="">{editCategory ? "Seleccionar…" : "Elige categoría primero"}</option>
@@ -5052,31 +4993,30 @@ function AdminProductDetailModal({
                   </select>
                 </div>
                 <div className="form-group full-width">
-                  <label className="form-label">Etiquetas de menú (columnas del mega menú por subcategoría)</label>
-                  {mergedTagOptions.length === 0 ? (
-                    <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 8px" }}>
-                      No hay etiquetas de menú para esta categoría. Defínelas en <strong>Configuración → Categorías</strong> (campo de etiqueta en cada subcategoría).
-                    </p>
-                  ) : (
-                    <select
-                      multiple
-                      className="form-select"
-                      size={Math.min(10, Math.max(3, mergedTagOptions.length))}
-                      value={editTags}
-                      onChange={(e) => {
-                        const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
-                        setEditTags(selected);
-                      }}
-                      style={{ minHeight: 100 }}
-                    >
-                      {mergedTagOptions.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>Mantén Ctrl (o Cmd) para elegir varias.</p>
+                  <label className="form-label">Etiqueta menú (solo lectura)</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    readOnly
+                    value={editMenuTagPreview ?? "—"}
+                    style={{ opacity: 0.85, background: "var(--ivory)" }}
+                  />
+                  <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
+                    Se edita en Configuración → Categorías. Agrupa la subcategoría en el mega menú.
+                  </p>
+                </div>
+                <div className="form-group full-width">
+                  <label className="form-label">Etiquetas del producto (separadas por coma)</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={editTagsText}
+                    onChange={(e) => setEditTagsText(e.target.value)}
+                    placeholder="hidratante, serum, piel seca"
+                  />
+                  <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
+                    Palabras de búsqueda propias del producto. No uses la etiqueta dorada del menú.
+                  </p>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Nombre</label>
@@ -5276,7 +5216,7 @@ function AdminProductDetailModal({
                         brand: editBrand.trim() || "GinnaBeauty",
                         category: editCategory.trim(),
                         subcategory: editSubcategory.trim(),
-                        tags: editTags,
+                        tags: parseTagsInput(editTagsText),
                         price: Number(editPrice),
                         originalPrice: editOriginalPrice.trim() ? Number(editOriginalPrice) : null,
                         stock: Number(editStock),

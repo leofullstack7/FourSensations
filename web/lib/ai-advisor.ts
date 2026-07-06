@@ -88,8 +88,9 @@ export function scoreProductsForQuery(products: StoreProduct[], rawQuery: string
     for (const token of expandedTokens) {
       if (token.length < 2) continue;
       if (nameNorm.includes(token)) score += 4;
-      if (normalizeAdvisorText(product.subcategory).includes(token)) score += 3;
-      if (product.tags.some((t) => normalizeAdvisorText(t).includes(token))) score += 3;
+      if (normalizeAdvisorText(product.subcategory).includes(token)) score += 2;
+      // Solo etiquetas propias del producto (Product.tags), no la etiqueta del menú
+      if (product.tags.some((t) => normalizeAdvisorText(t).includes(token))) score += 6;
       if (blob.includes(token)) score += 1;
     }
 

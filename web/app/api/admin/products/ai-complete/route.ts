@@ -9,6 +9,7 @@ import {
   type AiCompletableField,
 } from "@/lib/product-ai-fields";
 import { generateProductAiSuggestions } from "@/lib/server/product-ai-openai";
+import { filterOutMenuTags } from "@/lib/product-tags";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { adminProductAiCompleteSchema } from "@/lib/validation/admin-product-ai";
 import { formatZodError } from "@/lib/validation/admin-product";
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
 
       const cat = categoryBySlug.get(row.category);
       const sub = cat?.subcategories.find((s) => s.name === row.subcategory);
-      const menuTagHints = sub?.menuTag ? [sub.menuTag] : [];
+      const menuTagForSub = sub?.menuTag?.trim() || null;
 
       try {
         const suggestion = await generateProductAiSuggestions({
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
           subcategory: row.subcategory,
           priceCop: row.price,
           emptyFields,
-          menuTagHints,
+          menuTagForSubcategory: menuTagForSub,
         });
 
         const filled: AiCompletableField[] = [];
@@ -92,8 +93,11 @@ export async function POST(req: NextRequest) {
           filled.push("description");
         }
         if (emptyFields.includes("tags") && suggestion.tags?.length) {
-          updateData.tags = suggestion.tags;
-          filled.push("tags");
+          const cleaned = filterOutMenuTags(suggestion.tags, menuTagForSub ? [menuTagForSub] : []);
+          if (cleaned.length) {
+            updateData.tags = cleaned;
+            filled.push("tags");
+          }
         }
         if (emptyFields.includes("emoji") && suggestion.emoji) {
           updateData.emoji = suggestion.emoji;

@@ -15,7 +15,8 @@ export type ProductAiContext = {
   subcategory: string;
   priceCop: number;
   emptyFields: AiCompletableField[];
-  menuTagHints: string[];
+  /** Solo contexto: NO copiar a Product.tags */
+  menuTagForSubcategory: string | null;
 };
 
 function getOpenAiConfig() {
@@ -30,23 +31,23 @@ function getOpenAiConfig() {
 function buildPrompt(ctx: ProductAiContext): string {
   const fields = ctx.emptyFields.join(", ");
   return `Eres redactora de e-commerce de cosméticos para GinnaBeauty (Colombia).
-Completa SOLO los campos vacíos del producto usando categoría y subcategoría como contexto principal.
+Completa SOLO los campos vacíos del producto. Usa el NOMBRE del producto como contexto principal (tipo, línea, tono, formato, beneficios implícitos); refuerza con categoría y subcategoría.
 Responde ÚNICAMENTE JSON válido (sin markdown) con las claves que correspondan a campos vacíos.
 
 Producto:
-- Nombre: ${ctx.name}
+- Nombre (contexto principal): ${ctx.name}
 - Marca: ${ctx.brand}
 - Categoría: ${ctx.categoryLabel} (${ctx.categorySlug})
 - Subcategoría: ${ctx.subcategory}
 - Precio COP: ${ctx.priceCop}
-- Etiquetas de menú sugeridas: ${ctx.menuTagHints.length ? ctx.menuTagHints.join(", ") : "ninguna"}
+- Grupo del mega menú (solo referencia, NO usar como tags del producto): ${ctx.menuTagForSubcategory ?? "—"}
 
 Campos a completar: ${fields}
 
 Reglas:
-- description: 2-4 frases en español, beneficios claros, tono premium y cercano. Sin inventar ingredientes específicos si no aparecen en el nombre.
-- tags: array de 3-8 strings cortos en español (intención de búsqueda: hidratante, mate, reparación…). Preferir etiquetas de menú cuando encajen.
-- emoji: un solo emoji representativo del producto (string de 1 emoji).
+- description: 2-4 frases en español alineadas con el nombre del producto, beneficios claros, tono premium y cercano. Puedes inferir uso y tipo desde el nombre; no inventes ingredientes específicos que no sugiera el nombre.
+- tags: array de 3-8 etiquetas PROPIAS del producto en español, derivadas del nombre y la ficha (intención de búsqueda: hidratante, mate, reparación, vitamina c…). NO uses el nombre del grupo de menú ni la etiqueta dorada del mega menú.
+- emoji: un solo emoji que represente el producto según su nombre y categoría (string de 1 emoji).
 - badge: uno de "new", "hot", "sale", "best" o null. Usar solo si encaja; si dudas, null.
 
 JSON ejemplo:
