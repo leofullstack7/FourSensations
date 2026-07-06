@@ -120,6 +120,37 @@ export type AdminAiCompleteResult = {
   product?: AdminProduct;
 };
 
+async function fetchAdminProductsAiCompleteChunk(ids: string[]): Promise<{
+  results: AdminAiCompleteResult[];
+  summary: { total: number; succeeded: number; failed: number };
+}> {
+  const res = await fetch("/api/admin/products/ai-complete", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as {
+    results: AdminAiCompleteResult[];
+    summary: { total: number; succeeded: number; failed: number };
+  };
+}
+
+/** Un solo producto — para progreso en vivo y paralelismo. */
+export async function postAdminProductsAiCompleteOne(id: string): Promise<AdminAiCompleteResult> {
+  const data = await fetchAdminProductsAiCompleteChunk([id.trim()]);
+  return (
+    data.results[0] ?? {
+      id,
+      name: id,
+      ok: false,
+      filled: [],
+      error: "Sin respuesta del servidor",
+    }
+  );
+}
+
 export async function postAdminProductsAiComplete(ids: string[]): Promise<{
   results: AdminAiCompleteResult[];
   summary: { total: number; succeeded: number; failed: number };
@@ -134,17 +165,7 @@ export async function postAdminProductsAiComplete(ids: string[]): Promise<{
 
   for (let i = 0; i < unique.length; i += CHUNK_SIZE) {
     const chunk = unique.slice(i, i + CHUNK_SIZE);
-    const res = await fetch("/api/admin/products/ai-complete", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ ids: chunk }),
-    });
-    if (!res.ok) throw new Error(await parseError(res));
-    const data = (await res.json()) as {
-      results: AdminAiCompleteResult[];
-      summary: { total: number; succeeded: number; failed: number };
-    };
+    const data = await fetchAdminProductsAiCompleteChunk(chunk);
     allResults.push(...data.results);
     succeeded += data.summary.succeeded;
     failed += data.summary.failed;

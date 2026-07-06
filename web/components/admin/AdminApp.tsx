@@ -21,9 +21,9 @@ import {
   fetchAdminProducts,
   postAdminProductsBulkDelete,
   postAdminProductsAiClear,
-  postAdminProductsAiComplete,
   updateAdminProduct,
 } from "@/lib/api/admin-products";
+import { runAdminProductsAiCompleteParallel } from "@/lib/api/admin-products-ai-runner";
 import { productNeedsAiComplete } from "@/lib/product-ai-fields";
 import {
   buildPrimaryVariantByGroup,
@@ -33,6 +33,10 @@ import {
   resolveAdminListRowsAfterFilter,
 } from "@/lib/admin/variant-groups";
 import { AdminCategoryStorefrontPanel } from "@/components/admin/AdminCategoryStorefrontPanel";
+import {
+  AdminAiBulkProgressModal,
+  type AiBulkProgressItem,
+} from "@/components/admin/AdminAiBulkProgressModal";
 import { AdminProductVariantsModal } from "@/components/admin/AdminProductVariantsModal";
 import { AdminBulkTemplateModal } from "@/components/admin/AdminBulkTemplateModal";
 import { AdminProductAiDetailPanel } from "@/components/admin/AdminProductAiUi";
@@ -213,6 +217,10 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   const [productBulkMenuOpen, setProductBulkMenuOpen] = useState(false);
   const [productBulkDeleting, setProductBulkDeleting] = useState(false);
   const [productAiBusy, setProductAiBusy] = useState(false);
+  const [aiBulkModalOpen, setAiBulkModalOpen] = useState(false);
+  const [aiBulkPhase, setAiBulkPhase] = useState<"intro" | "running" | "done">("intro");
+  const [aiBulkItems, setAiBulkItems] = useState<AiBulkProgressItem[]>([]);
+  const aiBulkRunLock = useRef(false);
   const productBulkMenuRef = useRef<HTMLDivElement>(null);
   /** Menú lateral expandido (texto + iconos); al colapsar solo iconos y más ancho útil. */
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
@@ -510,44 +518,95 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
     }
   }, [productListSelectedIds, showToast, loadProducts, clearProductListSelection]);
 
-  const handleBulkAiComplete = useCallback(async () => {
+  const handleBulkAiComplete = useCallback(() => {
     const ids = Array.from(productListSelectedIds);
     if (ids.length === 0) {
       showToast("Selecciona al menos un producto", "danger", "⚠️");
       return;
     }
-    const batchNote =
-      ids.length > 40
-        ? `\n\nSe procesarán ${ids.length} productos en lotes de 40. Puede tardar varios minutos; no cierres esta pestaña.`
-        : "";
-    if (
-      !confirm(
-        `Completar con IA los campos vacíos de ${ids.length} producto(s)? Se usará categoría y subcategoría como contexto.${batchNote}`,
-      )
-    ) {
-      return;
-    }
-    setProductAiBusy(true);
+    const items: AiBulkProgressItem[] = ids.map((id) => {
+      const p = products.find((x) => x.id === id);
+      const needs = p ? productNeedsAiComplete(p) : true;
+      return {
+        id,
+        name: p?.name ?? id,
+        status: needs ? "pending" : "skipped",
+        filled: [],
+      };
+    });
+    setAiBulkItems(items);
+    setAiBulkPhase("intro");
+    setAiBulkModalOpen(true);
     setProductBulkMenuOpen(false);
+  }, [productListSelectedIds, products, showToast]);
+
+  const closeAiBulkModal = useCallback(() => {
+    if (aiBulkPhase === "running") return;
+    setAiBulkModalOpen(false);
+    setAiBulkItems([]);
+    setAiBulkPhase("intro");
+  }, [aiBulkPhase]);
+
+  const runAiBulkComplete = useCallback(async () => {
+    if (aiBulkRunLock.current) return;
+    aiBulkRunLock.current = true;
+    setAiBulkPhase("running");
+    setProductAiBusy(true);
+
+    const pendingIds = aiBulkItems.filter((i) => i.status === "pending").map((i) => i.id);
+
     try {
-      const { results, summary } = await postAdminProductsAiComplete(ids);
+      const { summary } = await runAdminProductsAiCompleteParallel(pendingIds, {
+        onStart(id) {
+          setAiBulkItems((prev) =>
+            prev.map((it) => (it.id === id ? { ...it, status: "running" as const } : it)),
+          );
+        },
+        onDone(result) {
+          setAiBulkItems((prev) =>
+            prev.map((it) => {
+              if (it.id !== result.id) return it;
+              if (result.ok && result.filled.length > 0) {
+                return {
+                  ...it,
+                  status: "done" as const,
+                  filled: result.filled,
+                  product: result.product,
+                  name: result.name,
+                };
+              }
+              if (result.ok) {
+                return { ...it, status: "skipped" as const, name: result.name };
+              }
+              return {
+                ...it,
+                status: "error" as const,
+                error: result.error,
+                name: result.name,
+              };
+            }),
+          );
+          if (result.product) {
+            setProducts((prev) => prev.map((x) => (x.id === result.product!.id ? result.product! : x)));
+          }
+        },
+      });
+
       await loadProducts();
+      setAiBulkPhase("done");
       showToast(
-        `IA: ${summary.succeeded} completado(s), ${summary.failed} sin cambios o con error`,
+        `IA: ${summary.succeeded} enriquecido(s), ${summary.failed} sin cambios o error`,
         summary.succeeded > 0 ? "success" : "default",
         "✦",
       );
-      const firstOk = results.find((r) => r.ok && r.filled.length > 0);
-      if (firstOk?.id) {
-        setDetailProductId(firstOk.id);
-        setDetailOpen(true);
-      }
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Error al completar con IA", "danger", "⚠️");
+      setAiBulkPhase("done");
     } finally {
       setProductAiBusy(false);
+      aiBulkRunLock.current = false;
     }
-  }, [productListSelectedIds, showToast, loadProducts]);
+  }, [aiBulkItems, loadProducts, showToast]);
 
   const handleBulkAiClear = useCallback(async () => {
     const ids = Array.from(productListSelectedIds);
@@ -1258,6 +1317,14 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
           setProducts((prev) => prev.map((x) => (x.id === p.id ? p : x)));
         }}
         showToast={showToast}
+      />
+
+      <AdminAiBulkProgressModal
+        open={aiBulkModalOpen}
+        phase={aiBulkPhase}
+        items={aiBulkItems}
+        onStart={() => void runAiBulkComplete()}
+        onClose={closeAiBulkModal}
       />
 
       <div className="admin-toast-container" id="admin-toast-container">
