@@ -101,6 +101,24 @@ export type CategoryRow = {
   subcategories: { slug: string; name: string }[];
 };
 
+/** Sinónimos frecuentes del proveedor → slug de categoría en tienda (si existe en el árbol). */
+const CATEGORY_SLUG_ALIASES: Record<string, string> = {
+  tinte: "tintes",
+  tintes: "tintes",
+  coloracion: "tintes",
+  coloración: "tintes",
+  "coloracion capilar": "tintes",
+  "coloración capilar": "tintes",
+};
+
+function categorySlugFromAlias(input: string, tree: CategoryRow[]): string | null {
+  const key = normalizeTaxonomyText(input);
+  const compactKey = compactText(input);
+  const aliasSlug = CATEGORY_SLUG_ALIASES[key] ?? CATEGORY_SLUG_ALIASES[compactKey];
+  if (!aliasSlug) return null;
+  return tree.some((c) => c.slug === aliasSlug) ? aliasSlug : null;
+}
+
 const STOPWORDS = new Set(["de", "del", "la", "las", "el", "los", "y", "e"]);
 
 function normalizeTaxonomyText(input: string): string {
@@ -116,10 +134,8 @@ function compactText(input: string): string {
   return normalizeTaxonomyText(input).replace(/\s+/g, "");
 }
 
-/** Nombre de categoría/subcategoría persistido: MAYÚSCULAS (importación masiva). */
-export function normalizeTaxonomyNameForDb(raw: string): string {
-  return raw.trim().toUpperCase();
-}
+/** Nombre de categoría/subcategoría persistido (formatea MAYÚSCULAS → capital inicial). */
+export { normalizeTaxonomyNameForDb, formatTaxonomyDisplayName, isAllCapsTaxonomyText } from "@/lib/taxonomy-display-name";
 
 /** Igualdad estricta tras normalizar (sin `includes` para evitar «Permanente» ⊂ «PERMANENTE / SIN AMONIACO»). */
 function taxonomyExactEqual(input: string, candidateSlug: string, candidateName: string): boolean {
@@ -153,6 +169,8 @@ function tokenSimilarity(a: string, b: string): number {
  */
 export function resolveCategorySlug(input: string | null, tree: CategoryRow[]): string | null {
   if (!input?.trim()) return null;
+  const fromAlias = categorySlugFromAlias(input, tree);
+  if (fromAlias) return fromAlias;
   const key = normalizeTaxonomyText(input);
   const compactKey = compactText(input);
   for (const c of tree) {
@@ -408,6 +426,40 @@ export function resolveSubcategoryGlobal(
   tree: CategoryRow[]
 ): { categorySlug: string; subcategoryName: string } | null {
   return resolveCategoryBySubcategory(subInput, tree);
+}
+
+/**
+ * Cuando la columna «Categoría» del CSV trae en realidad una subcategoría registrada
+ * (p. ej. «Labios»), devuelve categoría padre + sub sin bloquear la fila.
+ */
+export function resolveCategoryWhenCsvLooksLikeSubcategory(
+  csvCategory: string | null,
+  csvSubcategory: string | null,
+  tree: CategoryRow[]
+): { categorySlug: string; subcategoryName: string } | null {
+  const rawCat = csvCategory?.trim() ?? "";
+  if (!rawCat) return null;
+  const exact = findAllExactGlobalSubcategoryMatches(rawCat, tree);
+  if (exact.length === 1) {
+    let subName = exact[0]!.subcategoryName;
+    if (csvSubcategory?.trim()) {
+      const sub2 = resolveSubcategoryName(exact[0]!.categorySlug, csvSubcategory, tree);
+      if (sub2) subName = sub2;
+    }
+    return { categorySlug: exact[0]!.categorySlug, subcategoryName: subName };
+  }
+  if (exact.length === 0) {
+    const fuzzy = findUniqueGlobalSubcategoryFuzzyMatch(rawCat, tree, { minScore: 0.72, minGap: 0.12 });
+    if (fuzzy) {
+      let subName = fuzzy.subcategoryName;
+      if (csvSubcategory?.trim()) {
+        const sub2 = resolveSubcategoryName(fuzzy.categorySlug, csvSubcategory, tree);
+        if (sub2) subName = sub2;
+      }
+      return { categorySlug: fuzzy.categorySlug, subcategoryName: subName };
+    }
+  }
+  return null;
 }
 
 export function firstSubcategoryName(cat: CategoryRow | undefined): string {

@@ -1,10 +1,14 @@
 import type { AdminProduct } from "@/lib/types/admin";
+import {
+  canonicalVariantGroupCode,
+  variantGroupCodesMatch,
+} from "@/lib/bulk-import/variant-group-code";
 
 /** Cantidad de productos por código de grupo de variantes. */
 export function buildVariantCountByGroup(products: AdminProduct[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const p of products) {
-    const code = p.variantGroupCode?.trim();
+    const code = canonicalVariantGroupCode(p.variantGroupCode);
     if (!code) continue;
     counts.set(code, (counts.get(code) ?? 0) + 1);
   }
@@ -15,7 +19,7 @@ export function buildVariantCountByGroup(products: AdminProduct[]): Map<string, 
 export function buildPrimaryVariantByGroup(products: AdminProduct[]): Map<string, AdminProduct> {
   const primaries = new Map<string, AdminProduct>();
   for (const p of products) {
-    const code = p.variantGroupCode?.trim();
+    const code = canonicalVariantGroupCode(p.variantGroupCode);
     if (!code) continue;
     const existing = primaries.get(code);
     if (!existing) {
@@ -33,9 +37,8 @@ export function listVariantsInGroup(
   products: AdminProduct[],
   variantGroupCode: string
 ): AdminProduct[] {
-  const code = variantGroupCode.trim();
   return products
-    .filter((p) => p.variantGroupCode?.trim() === code)
+    .filter((p) => variantGroupCodesMatch(p.variantGroupCode, variantGroupCode))
     .sort(
       (a, b) =>
         (a.variantGroupOrder ?? 9999) - (b.variantGroupOrder ?? 9999) ||
@@ -48,7 +51,7 @@ export function isPrimaryVariantInGroup(
   product: AdminProduct,
   primaryByGroup: Map<string, AdminProduct>
 ): boolean {
-  const code = product.variantGroupCode?.trim();
+  const code = canonicalVariantGroupCode(product.variantGroupCode);
   if (!code) return true;
   return primaryByGroup.get(code)?.id === product.id;
 }
@@ -72,7 +75,7 @@ export function resolveAdminListRowsAfterFilter(
   const displayIds = new Set<string>();
 
   for (const p of matchedProducts) {
-    const code = p.variantGroupCode?.trim();
+    const code = canonicalVariantGroupCode(p.variantGroupCode);
     if (!code) {
       displayIds.add(p.id);
       continue;
@@ -89,7 +92,7 @@ export function groupListThumbnail(
   product: AdminProduct,
   primaryByGroup: Map<string, AdminProduct>
 ): string | null {
-  const code = product.variantGroupCode?.trim();
+  const code = canonicalVariantGroupCode(product.variantGroupCode);
   if (!code) return product.imageUrl ?? null;
   const primary = primaryByGroup.get(code);
   return primary?.imageUrl ?? product.imageUrl ?? null;

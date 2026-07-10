@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useReveal } from "@/hooks/useReveal";
+import { useStoreNavigation } from "@/components/store/StoreNavigationProvider";
 import { TechAmbient } from "@/components/ui/TechAmbient";
 import { getCategoryLandingCopy } from "@/lib/category-landing-theme";
 import { TINTES_CATEGORY_SLUG } from "@/lib/bulk-import/tintes";
@@ -14,11 +15,11 @@ import { TintShowcasePanel } from "./TintShowcasePanel";
 import "./tints.css";
 
 type TintCategoryPageClientProps = {
-  initialItems: TintBubbleItem[];
   addToCart: (item: TintBubbleItem) => void;
   formatPrice: (value: number) => string;
   categoryLabel?: string;
   categoryIcon?: string;
+  defaultSub?: string;
 };
 
 function buildOptions(items: TintBubbleItem[], key: keyof TintBubbleItem): TintFilterOption[] {
@@ -35,23 +36,63 @@ function buildOptions(items: TintBubbleItem[], key: keyof TintBubbleItem): TintF
 }
 
 export function TintCategoryPageClient({
-  initialItems,
   addToCart,
   formatPrice,
   categoryLabel = "Tintes",
   categoryIcon = "🎨",
+  defaultSub = "",
 }: TintCategoryPageClientProps) {
   const searchParams = useSearchParams();
+  const { categoryNavFilters } = useStoreNavigation();
   const copy = useMemo(
     () => getCategoryLandingCopy(categoryLabel, TINTES_CATEGORY_SLUG),
     [categoryLabel]
   );
 
+  const [items, setItems] = useState<TintBubbleItem[]>([]);
+  const [itemsLoading, setItemsLoading] = useState(true);
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [activeFamily, setActiveFamily] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<string | null>(null);
   const [activeSubcategory, setActiveSubcategory] = useState<string | null>(null);
   const [selected, setSelected] = useState<TintBubbleItem | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setItemsLoading(true);
+    void fetch("/api/store/tints/items", { cache: "force-cache" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("No se pudieron cargar tintes"))))
+      .then((data: { items?: TintBubbleItem[] }) => {
+        if (cancelled) return;
+        setItems(Array.isArray(data.items) ? data.items : []);
+      })
+      .catch(() => {
+        if (!cancelled) setItems([]);
+      })
+      .finally(() => {
+        if (!cancelled) setItemsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const syncFiltersFromUrl = (params: URLSearchParams | null) => {
+    const sub = params?.get("sub") ?? defaultSub;
+    const tipo = params?.get("tipo");
+    if (sub.trim()) setActiveSubcategory(sub.trim());
+    if (tipo?.trim()) setActiveType(tipo.trim());
+  };
+
+  useEffect(() => {
+    syncFiltersFromUrl(searchParams);
+  }, [searchParams, defaultSub]);
+
+  useEffect(() => {
+    if (!categoryNavFilters) return;
+    if (categoryNavFilters.sub) setActiveSubcategory(categoryNavFilters.sub);
+    if (categoryNavFilters.tag) setActiveType(categoryNavFilters.tag);
+  }, [categoryNavFilters]);
 
   const clearFilters = () => {
     setActiveGroup(null);
@@ -60,25 +101,21 @@ export function TintCategoryPageClient({
     setActiveSubcategory(null);
   };
 
-  useEffect(() => {
-    const tipoParam = searchParams?.get("tipo");
-    if (tipoParam) setActiveType(tipoParam);
-  }, [searchParams]);
-
-  const groups = useMemo(() => buildOptions(initialItems, "group"), [initialItems]);
-  const families = useMemo(() => buildOptions(initialItems, "family"), [initialItems]);
-  const types = useMemo(() => buildOptions(initialItems, "type"), [initialItems]);
-  const subcategories = useMemo(() => buildOptions(initialItems, "subcategory"), [initialItems]);
+  const groups = useMemo(() => buildOptions(items, "group"), [items]);
+  const families = useMemo(() => buildOptions(items, "family"), [items]);
+  const types = useMemo(() => buildOptions(items, "type"), [items]);
+  const subcategories = useMemo(() => buildOptions(items, "subcategory"), [items]);
 
   const filteredItems = useMemo(() => {
-    return initialItems.filter((item) => {
+    const subQ = activeSubcategory?.trim().toLowerCase() ?? "";
+    return items.filter((item) => {
       if (activeGroup && item.group !== activeGroup) return false;
       if (activeFamily && item.family !== activeFamily) return false;
       if (activeType && item.type !== activeType) return false;
-      if (activeSubcategory && item.subcategory !== activeSubcategory) return false;
+      if (subQ && (item.subcategory?.trim().toLowerCase() ?? "") !== subQ) return false;
       return true;
     });
-  }, [initialItems, activeGroup, activeFamily, activeType, activeSubcategory]);
+  }, [items, activeGroup, activeFamily, activeType, activeSubcategory]);
 
   useEffect(() => {
     if (selected && !filteredItems.some((i) => i.id === selected.id)) {
@@ -118,7 +155,9 @@ export function TintCategoryPageClient({
             <h1 className="category-landing-title">{copy.headline}</h1>
             <p className="category-landing-subtitle">{copy.subtitle}</p>
             <div className="category-landing-stats">
-              <span className="category-landing-stat">◈ {initialItems.length} tonos</span>
+              <span className="category-landing-stat">
+                ◈ {itemsLoading ? "…" : items.length} tonos
+              </span>
               <span className="category-landing-stat">⬡ {families.length} familias</span>
               <span className="category-landing-stat">✦ Selector interactivo</span>
             </div>
@@ -156,18 +195,28 @@ export function TintCategoryPageClient({
           />
 
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "14px 0 20px" }}>
-            {filteredItems.length} tinte(s) en <strong>{categoryLabel}</strong>
-            {hasActiveFilters ? " con filtros activos" : ""}
+            {itemsLoading ? (
+              "Cargando catálogo de tintes…"
+            ) : (
+              <>
+                {filteredItems.length} tinte(s) en <strong>{categoryLabel}</strong>
+                {hasActiveFilters ? " con filtros activos" : ""}
+              </>
+            )}
           </p>
 
           <div className="tint-category__body reveal-stagger">
             <div className="tint-category__bubbles tint-bubbles-field--tech">
-              <TintBubbleField
-                items={filteredItems}
-                selectedId={selected?.id ?? null}
-                onSelect={setSelected}
-                size="md"
-              />
+              {itemsLoading ? (
+                <div className="tint-category-loading">Cargando tonos…</div>
+              ) : (
+                <TintBubbleField
+                  items={filteredItems}
+                  selectedId={selected?.id ?? null}
+                  onSelect={setSelected}
+                  size="md"
+                />
+              )}
             </div>
 
             <div className="tint-category__panel tint-showcase--tech">

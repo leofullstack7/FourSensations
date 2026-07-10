@@ -3,27 +3,26 @@
 import { Suspense } from "react";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { formatPrice } from "@/lib/format";
-import type { TintBubbleItem } from "@/lib/tints";
 import { TintCategoryPageClient } from "./TintCategoryPageClient";
 
 type TintCategoryPageBridgeProps = {
-  initialItems: TintBubbleItem[];
   categoryLabel?: string;
   categoryIcon?: string;
+  defaultSub?: string;
 };
 
 function TintCategoryPageInner({
-  initialItems,
   categoryLabel,
   categoryIcon,
+  defaultSub,
 }: TintCategoryPageBridgeProps) {
   const { addToCart, showToast } = useStorefrontUi();
 
   return (
     <TintCategoryPageClient
-      initialItems={initialItems}
       categoryLabel={categoryLabel}
       categoryIcon={categoryIcon}
+      defaultSub={defaultSub}
       formatPrice={formatPrice}
       addToCart={(item) => {
         addToCart(item.id);
@@ -34,18 +33,16 @@ function TintCategoryPageInner({
 }
 
 export function TintCategoryPageBridge({
-  initialItems,
   categoryLabel,
   categoryIcon,
+  defaultSub,
 }: TintCategoryPageBridgeProps) {
   return (
-    <Suspense
-      fallback={<div className="tint-category-loading">Cargando tintes…</div>}
-    >
+    <Suspense fallback={<div className="tint-category-loading">Cargando tintes…</div>}>
       <TintCategoryPageInner
-        initialItems={initialItems}
         categoryLabel={categoryLabel}
         categoryIcon={categoryIcon}
+        defaultSub={defaultSub}
       />
     </Suspense>
   );

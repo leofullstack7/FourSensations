@@ -168,6 +168,19 @@
   min-height: 50vh;
 }
 
+.gb-loading-page--inline {
+  min-height: 0;
+  padding: 24px 20px 32px;
+}
+
+.gb-loading-page--inline .gb-loading-inner {
+  padding-top: 0;
+}
+
+.gb-loading-page--inline .gb-loading-grid {
+  margin-top: 0;
+}
+
 @keyframes gb-nav-overlay-in {
   from {
     opacity: 0;

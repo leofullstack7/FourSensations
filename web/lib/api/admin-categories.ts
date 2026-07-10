@@ -112,3 +112,20 @@ export async function reorderAdminSubcategories(
   });
   if (!res.ok) throw new Error(await parseError(res));
 }
+
+export type NormalizeTaxonomyTextsResult = {
+  categoriesUpdated: number;
+  subcategoriesUpdated: number;
+  menuTagsUpdated: number;
+  productsUpdated: number;
+};
+
+export async function normalizeAdminCategoryTexts(): Promise<NormalizeTaxonomyTextsResult> {
+  const res = await fetch("/api/admin/categories/normalize-texts", {
+    ...fetchOpts,
+    method: "POST",
+    headers: { ...fetchOpts.headers, "Content-Type": "application/json" },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as NormalizeTaxonomyTextsResult;
+}

@@ -25,6 +25,11 @@ function toRawImageCode(baseName: string): string {
   const upper = baseName.trim().toUpperCase();
   if (!upper) return "";
 
+  // Referencias con segmentos unidos por guión (p. ej. C1-ROJ-SHA).
+  if (/^[A-Z0-9]+(?:-[A-Z0-9]+)+$/.test(upper)) {
+    return upper;
+  }
+
   // Tokens robustos: soporta "_", "-", espacios y otros separadores.
   const tokens = upper
     .split(/[^A-Z0-9]+/g)

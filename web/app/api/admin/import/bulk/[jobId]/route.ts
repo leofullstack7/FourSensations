@@ -40,6 +40,9 @@ const patchSchema = z.object({
   activeTintFamilyId: z.string().min(1).nullable().optional(),
   tintTypeLinks: z.record(z.string(), z.string()).optional(),
   tintFamilyLinks: z.record(z.string(), z.string()).optional(),
+  defaultTintTypeApplied: z.boolean().optional(),
+  defaultTintFamilyApplied: z.boolean().optional(),
+  tintTypeOverrides: z.record(z.string(), z.string()).optional(),
   tintRowSelections: z.record(z.string(), tintRowSelectionEntry).optional(),
 });
 
@@ -129,6 +132,18 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   const prevTint = readTintCatalogStateFromPreview(job.previewPayload as BulkPreviewResult);
   const tintTypeLinks = { ...prevTint.tintTypeLinks, ...(parsed.data.tintTypeLinks ?? {}) };
   const tintFamilyLinks = { ...prevTint.tintFamilyLinks, ...(parsed.data.tintFamilyLinks ?? {}) };
+  const tintTypeOverrides = {
+    ...(prevTint.tintTypeOverrides ?? {}),
+    ...(parsed.data.tintTypeOverrides ?? {}),
+  };
+  const defaultTintTypeApplied =
+    parsed.data.defaultTintTypeApplied !== undefined
+      ? parsed.data.defaultTintTypeApplied
+      : prevTint.defaultTintTypeApplied === true;
+  const defaultTintFamilyApplied =
+    parsed.data.defaultTintFamilyApplied !== undefined
+      ? parsed.data.defaultTintFamilyApplied
+      : prevTint.defaultTintFamilyApplied === true;
   let activeTintTypeCsvKey =
     parsed.data.activeTintTypeCsvKey !== undefined
       ? parsed.data.activeTintTypeCsvKey
@@ -172,6 +187,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       activeTintFamilyId,
       tintTypeLinks,
       tintFamilyLinks,
+      defaultTintTypeApplied,
+      defaultTintFamilyApplied,
+      tintTypeOverrides,
     },
   });
   await markBulkPreviewExistingByExternalRef(prisma, preview);

@@ -1,11 +1,18 @@
 import type { PrismaClient } from "@prisma/client";
 import type { BulkPreviewResult } from "@/lib/bulk-import/build-preview";
+import { buildPreviewNewTaxonomyItems } from "@/lib/bulk-import/build-preview";
 import type { BulkPreviewDbVariant } from "@/lib/bulk-import/variant-groups-preview";
 import {
   applyVariantGroupsToPreview,
   dbVariantsByGroupFromProducts,
   normalizedVariantGroupKey,
 } from "@/lib/bulk-import/variant-groups-preview";
+import {
+  canonicalExternalRef,
+  canonicalVariantGroupCode,
+  variantGroupCodesMatch,
+} from "@/lib/bulk-import/variant-group-code";
+import { fetchCategoryTreeForImport } from "@/lib/server/admin-category-tree";
 
 /**
  * Marca filas existentes por `externalRef`, enriquece grupos de barras y compara con DB.
@@ -30,7 +37,7 @@ export async function enrichBulkPreviewFromDatabase(
 
   const codeList = Array.from(codes);
   const existingByRef = await prisma.product.findMany({
-    where: { externalRef: { in: codeList } },
+    where: { externalRef: { not: null } },
     select: {
       id: true,
       name: true,
@@ -50,8 +57,9 @@ export async function enrichBulkPreviewFromDatabase(
     }
   >();
   for (const p of existingByRef) {
-    if (p.externalRef == null || p.externalRef === "") continue;
-    byRef.set(p.externalRef, {
+    const refKey = canonicalExternalRef(p.externalRef);
+    if (!refKey || !codes.has(refKey)) continue;
+    byRef.set(refKey, {
       id: p.id,
       name: p.name,
       variantGroupCode: p.variantGroupCode,
@@ -80,8 +88,8 @@ export async function enrichBulkPreviewFromDatabase(
     }
 
     const csvGroup = normalizedVariantGroupKey(row.mapped.variantGroupCode);
-    const dbGroup = hit.variantGroupCode?.trim() || null;
-    if (csvGroup && dbGroup && csvGroup !== dbGroup) {
+    const dbGroup = canonicalVariantGroupCode(hit.variantGroupCode);
+    if (csvGroup && dbGroup && !variantGroupCodesMatch(csvGroup, dbGroup)) {
       const msg = "Código de barras distinto al registrado en tienda";
       if (!row.issues.includes(msg)) row.issues.push(msg);
     }
@@ -95,7 +103,7 @@ export async function enrichBulkPreviewFromDatabase(
   let dbByGroup = new Map<string, BulkPreviewDbVariant[]>();
   if (groupKeys.size > 0) {
     const inGroups = await prisma.product.findMany({
-      where: { variantGroupCode: { in: Array.from(groupKeys) } },
+      where: { variantGroupCode: { not: null } },
       select: {
         id: true,
         name: true,
@@ -104,10 +112,19 @@ export async function enrichBulkPreviewFromDatabase(
         variantGroupOrder: true,
       },
     });
-    dbByGroup = dbVariantsByGroupFromProducts(inGroups);
+    const filtered = inGroups.filter((p) => {
+      const key = canonicalVariantGroupCode(p.variantGroupCode);
+      return key != null && groupKeys.has(key);
+    });
+    dbByGroup = dbVariantsByGroupFromProducts(filtered);
   }
 
   applyVariantGroupsToPreview(preview, dbByGroup);
+
+  const categoryTree = await fetchCategoryTreeForImport();
+  preview.newCategories = buildPreviewNewTaxonomyItems(preview.rows, categoryTree, {
+    excludeExistingProducts: true,
+  });
 }
 
 /** @deprecated Usar enrichBulkPreviewFromDatabase */

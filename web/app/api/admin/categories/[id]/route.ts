@@ -5,6 +5,7 @@ import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { allocateUniqueCategorySlug } from "@/lib/server/category-slugs";
 import { revalidateStorefrontMenu } from "@/lib/server/revalidate-storefront-menu";
 import { slugify } from "@/lib/slugify";
+import { normalizeTaxonomyNameForDb } from "@/lib/taxonomy-display-name";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import {
   adminCategoryUpdateSchema,
@@ -89,6 +90,8 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
       return noStoreJson({ error: "Sin campos para actualizar" }, { status: 400 });
     }
 
+    const nextName = d.name !== undefined ? normalizeTaxonomyNameForDb(d.name) : undefined;
+
     let nextSlug = existing.slug;
     if (d.slug !== undefined) {
       const s = slugify(d.slug);
@@ -97,8 +100,8 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
       });
       if (clash) return noStoreJson({ error: "Slug ya en uso" }, { status: 409 });
       nextSlug = s;
-    } else if (d.name !== undefined && d.name !== existing.name) {
-      nextSlug = await allocateUniqueCategorySlug(d.name, id);
+    } else if (nextName !== undefined && nextName !== existing.name) {
+      nextSlug = await allocateUniqueCategorySlug(nextName, id);
     }
 
     const oldSlug = existing.slug;
@@ -106,7 +109,7 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
       const updated = await tx.category.update({
         where: { id },
         data: {
-          ...(d.name !== undefined && { name: d.name }),
+          ...(nextName !== undefined && { name: nextName }),
           ...(d.icon !== undefined && { icon: d.icon }),
           ...(d.sortOrder !== undefined && { sortOrder: d.sortOrder }),
           slug: nextSlug,

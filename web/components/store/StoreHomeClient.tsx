@@ -14,6 +14,10 @@ import { CategoryShowcaseStrip } from "@/components/store/CategoryShowcaseStrip"
 import { TechAmbient } from "@/components/ui/TechAmbient";
 import { TintHomePreview } from "@/components/store/tints/TintHomePreview";
 import { sortProductsForHomeDisplay } from "@/lib/storefront-product-order";
+import {
+  enrichStorefrontDisplayProducts,
+  resolveStorefrontDisplayAfterFilter,
+} from "@/lib/store/variant-groups";
 import { catKeyFromDisplayName } from "@/lib/category-labels";
 import type { StoreProduct } from "@/lib/types/product";
 import type { TintBubbleItem } from "@/lib/tints";
@@ -72,7 +76,11 @@ export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreH
     }
 
     if (sortValue === "default") {
-      return sortProductsForHomeDisplay(list);
+      const sorted = sortProductsForHomeDisplay(list);
+      return enrichStorefrontDisplayProducts(
+        resolveStorefrontDisplayAfterFilter(sorted, products),
+        products
+      );
     }
 
     const copy = [...list];
@@ -80,7 +88,7 @@ export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreH
     else if (sortValue === "price-desc") copy.sort((a, b) => b.price - a.price);
     else if (sortValue === "rating") copy.sort((a, b) => b.rating - a.rating);
     else if (sortValue === "new") copy.sort((a, b) => Number(b.isNew) - Number(a.isNew));
-    return copy;
+    return enrichStorefrontDisplayProducts(resolveStorefrontDisplayAfterFilter(copy, products), products);
   }, [products, activeCategory, manualSub, sortValue]);
 
   useEffect(() => {
@@ -155,7 +163,7 @@ export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreH
             <div className={`hero-center-content${isPrimaryOnScreen ? "" : " hero-center-content-minimal"}`}>
               <div className="hero-cta-group">
                 <button type="button" className="btn btn-primary btn-lg btn-glow" onClick={() => document.getElementById("featured")?.scrollIntoView({ behavior: "smooth" })}>
-                  🛍️ Explorar Colección
+                  🛍️ Ver Productos
                 </button>
                 <button
                   type="button"

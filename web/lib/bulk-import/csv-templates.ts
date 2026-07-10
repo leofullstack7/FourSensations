@@ -88,6 +88,21 @@ export const BULK_CSV_GENERAL_COLUMNS: BulkCsvTemplateColumn[] = [
     example: "7701234567890",
     aliases: ["Código de barras", "Codigo de barras", "EAN"],
   },
+  {
+    header: "Color",
+    required: false,
+    description:
+      "Color del producto en hexadecimal (#RRGGBB o RRGGBB). Opcional: nombre después del hex o columna «Nombre color».",
+    example: "#C41E3A",
+    aliases: ["Colour", "Hex", "Color hex"],
+  },
+  {
+    header: "Nombre color",
+    required: false,
+    description: "Nombre legible del color (ej. Rojo cereza). Opcional si va en la misma celda que Color.",
+    example: "Rojo cereza",
+    aliases: ["Color nombre", "Nombre del color", "Shade"],
+  },
 ];
 
 export const BULK_CSV_TINTES_COLUMNS: BulkCsvTemplateColumn[] = [

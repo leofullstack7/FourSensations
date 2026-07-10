@@ -3,6 +3,54 @@ import { normalizeKey } from "./normalize";
 /** Slug esperado de la categoría Tintes en el árbol de la tienda. */
 export const TINTES_CATEGORY_SLUG = "tintes";
 
+/** Etiquetas de columna Categoría que sí indican tintes en el CSV del proveedor. */
+export function csvCategoryLabelIsTintes(category: string | null | undefined): boolean {
+  const raw = category?.trim();
+  if (!raw) return false;
+  const k = normalizeKey(raw);
+  return (
+    k === TINTES_CATEGORY_SLUG ||
+    k === "tinte" ||
+    k === "coloracion" ||
+    k === "coloración" ||
+    k === "coloracion capilar" ||
+    k === "coloración capilar"
+  );
+}
+
+/**
+ * El CSV trae un valor en Categoría que no es tintes (p. ej. «Sin categoría web», «Maquillaje»).
+ * En ese caso nunca se debe inferir ni tratar la fila como tinte.
+ */
+export function csvHasExplicitNonTintesCategory(category: string | null | undefined): boolean {
+  const raw = category?.trim();
+  if (!raw) return false;
+  return !csvCategoryLabelIsTintes(raw);
+}
+
+/** Columnas dedicadas de tinte en el CSV (no cuenta Marca genérica). */
+export function rowHasDedicatedTintCsvColumns(mapped: {
+  tintLevel?: string | null;
+  tintType?: string | null;
+  tintFamily?: string | null;
+}): boolean {
+  return Boolean(
+    mapped.tintLevel?.trim() || mapped.tintType?.trim() || mapped.tintFamily?.trim()
+  );
+}
+
+/**
+ * Fila que realmente pertenece al flujo Tintes en carga masiva
+ * (categoría tintes + CSV sin otra categoría explícita).
+ */
+export function bulkPreviewRowIsTintes(row: {
+  mapped: { category?: string | null; categorySlug?: string | null };
+}): boolean {
+  if (!isTintesCategory(row.mapped.categorySlug)) return false;
+  if (csvHasExplicitNonTintesCategory(row.mapped.category)) return false;
+  return true;
+}
+
 /**
  * Clave normalizada para emparejar columna «Nivel» del CSV con el nombre del archivo en el ZIP.
  * Conserva guiones; unifica coma/punto decimal para tolerar variantes (9,5-1 ↔ 9.5-1).

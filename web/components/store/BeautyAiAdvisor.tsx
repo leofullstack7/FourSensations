@@ -18,6 +18,7 @@ import { ADVISOR_MAX_TURNS } from "@/lib/ai-advisor-context";
 import { GINNA_WELCOME_MESSAGE } from "@/lib/ai-advisor-persona";
 import { getWhatsAppHref, WHATSAPP_DEFAULT_MESSAGE } from "@/lib/storefront-contact";
 import { formatPrice } from "@/lib/format";
+import { preloadStorefrontProductImages } from "@/lib/preload-storefront-image";
 
 const QUICK_PROMPTS = ADVISOR_QUICK_PROMPTS;
 const CHAT_STORAGE_KEY = "ginna-ai-chat-v1";
@@ -134,6 +135,15 @@ export function BeautyAiAdvisor() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, typing, scrollToBottom]);
+
+  useEffect(() => {
+    const byId = new Map(catalogProducts.map((p) => [p.id, p]));
+    for (const msg of messages) {
+      for (const id of msg.productIds ?? []) {
+        preloadStorefrontProductImages(byId.get(id));
+      }
+    }
+  }, [messages, catalogProducts]);
 
   const pushReply = useCallback(
     (userText: string, options?: PushReplyOptions) => {

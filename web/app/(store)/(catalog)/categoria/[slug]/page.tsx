@@ -2,9 +2,7 @@ import { notFound } from "next/navigation";
 import { CategoryLandingClient } from "@/components/store/CategoryLandingClient";
 import { TintCategoryPageBridge } from "@/components/store/tints/TintCategoryPageBridge";
 import { TINTES_CATEGORY_SLUG } from "@/lib/bulk-import/tintes";
-import { getStorefrontCategoryFeaturedProducts } from "@/lib/products";
 import { getStorefrontCategoryBySlug, type StoreCategoryWithSubs } from "@/lib/store-categories";
-import { getTintBubbleItems } from "@/lib/tints";
 import { getMenuCategoryBySlug } from "@/lib/menu-config";
 import { slugify } from "@/lib/slugify";
 
@@ -42,12 +40,7 @@ function categoryFromStaticMenu(slug: string): StoreCategoryWithSubs | null {
 export default async function CategoryPage({ params, searchParams }: Props) {
   const slug = params.slug;
 
-  let [cat, featuredBundle] = await Promise.all([
-    getStorefrontCategoryBySlug(slug),
-    slug === TINTES_CATEGORY_SLUG
-      ? Promise.resolve({ products: [], featuredIds: [], totalCount: 0 })
-      : getStorefrontCategoryFeaturedProducts(slug),
-  ]);
+  let cat = await getStorefrontCategoryBySlug(slug);
 
   if (!cat && !process.env.DATABASE_URL) {
     cat = categoryFromStaticMenu(slug);
@@ -55,12 +48,11 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   if (!cat) return notFound();
 
   if (cat.slug === TINTES_CATEGORY_SLUG) {
-    const tintItems = await getTintBubbleItems();
     return (
       <TintCategoryPageBridge
-        initialItems={tintItems}
         categoryLabel={cat.name}
         categoryIcon={cat.icon ?? "🎨"}
+        defaultSub={searchParams?.sub ?? ""}
       />
     );
   }
@@ -70,25 +62,21 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     new Set(cat.subcategories.map((s) => (s.menuTag?.trim() ? s.menuTag.trim() : "General"))),
   ).sort((a, b) => a.localeCompare(b, "es"));
 
-  const defaultGrupo =
-    searchParams?.grupo && grupoLabels.includes(searchParams.grupo) ? searchParams.grupo : "";
-  const defaultSub =
-    searchParams?.sub && dbSubNames.includes(searchParams.sub) ? searchParams.sub : "";
+  const matchFromList = (list: string[], value: string | undefined): string => {
+    if (!value?.trim()) return "";
+    const q = value.trim().toLowerCase();
+    return list.find((item) => item.trim().toLowerCase() === q) ?? "";
+  };
 
-  const productTags = Array.from(
-    new Set(featuredBundle.products.flatMap((p) => p.tags ?? [])),
-  ).sort((a, b) => a.localeCompare(b, "es"));
-  const defaultProductTag =
-    searchParams?.tag && productTags.includes(searchParams.tag) ? searchParams.tag : "";
+  const defaultGrupo = matchFromList(grupoLabels, searchParams?.grupo);
+  const defaultSub = matchFromList(dbSubNames, searchParams?.sub);
+  const defaultProductTag = searchParams?.tag?.trim() ?? "";
 
   return (
     <CategoryLandingClient
       categoryLabel={cat.name}
       categorySlug={cat.slug}
       categoryIcon={cat.icon ?? "📦"}
-      featuredProducts={featuredBundle.products}
-      featuredOrderIds={featuredBundle.featuredIds}
-      totalProductCount={featuredBundle.totalCount}
       subcategoriesFromDb={cat.subcategories.map((s) => ({
         name: s.name,
         menuTag: s.menuTag,
@@ -96,7 +84,6 @@ export default async function CategoryPage({ params, searchParams }: Props) {
       grupoLabels={grupoLabels}
       defaultGrupo={defaultGrupo}
       defaultSubcategory={defaultSub}
-      productTagOptions={productTags}
       defaultProductTag={defaultProductTag}
     />
   );

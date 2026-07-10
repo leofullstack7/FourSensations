@@ -9,6 +9,7 @@ export type StorefrontUiContextValue = {
   categoryPath: (categoryDisplayName: string) => string;
   catalogProducts: StoreProduct[];
   mergeCatalogProducts: (extra: StoreProduct[]) => void;
+  markFullCatalogLoaded: () => void;
   ensureFullCatalog: () => Promise<void>;
   showToast: (msg: string, type?: string, icon?: string) => void;
   openProductModal: (id: string) => void;

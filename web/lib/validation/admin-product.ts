@@ -42,6 +42,14 @@ export const adminProductCreateSchema = z.object({
   slug: z.string().trim().min(1).max(200).optional(),
   /** Referencia / código (importación masiva, único). */
   externalRef: z.string().trim().min(1).max(120).optional(),
+  colorHex: z
+    .string()
+    .trim()
+    .max(7)
+    .nullable()
+    .optional()
+    .refine((v) => v == null || v === "" || /^#[0-9A-Fa-f]{6}$/.test(v), "colorHex inválido"),
+  colorName: z.string().trim().max(80).nullable().optional(),
   /** URLs ya subidas a nuestro CDN (vía `/api/admin/upload`); se validan en el handler. */
   extraImageUrls: z.array(z.string().url()).max(24).optional(),
 });
@@ -70,6 +78,14 @@ export const adminProductUpdateSchema = z
     active: z.boolean().optional(),
     slug: z.string().trim().min(1).max(200).optional(),
     externalRef: z.string().trim().min(1).max(120).nullable().optional(),
+    colorHex: z
+      .string()
+      .trim()
+      .max(7)
+      .nullable()
+      .optional()
+      .refine((v) => v == null || v === "" || /^#[0-9A-Fa-f]{6}$/.test(v), "colorHex inválido"),
+    colorName: z.string().trim().max(80).nullable().optional(),
   });
 
 export type AdminProductUpdateInput = z.infer<typeof adminProductUpdateSchema>;

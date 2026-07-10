@@ -1,6 +1,6 @@
 import type { BulkPreviewResult, BulkPreviewRow } from "./build-preview";
 import { normalizeTaxonomyNameForDb } from "./category-resolve";
-import { isTintesCategory, effectiveTintFamily } from "./tintes";
+import { isTintesCategory, effectiveTintFamily, bulkPreviewRowIsTintes } from "./tintes";
 
 export type TintCatalogEntry = { id: string; name: string };
 
@@ -33,6 +33,12 @@ export type TintCatalogState = {
   activeTintFamilyId: string | null;
   tintTypeLinks: Record<string, string>;
   tintFamilyLinks: Record<string, string>;
+  /** CSV sin columna Tipo: el admin asignó un tipo por defecto a filas sin valor. */
+  defaultTintTypeApplied?: boolean;
+  /** CSV sin columna Familia/Marca útil: familia elegida manualmente para filas sin valor. */
+  defaultTintFamilyApplied?: boolean;
+  /** Overrides de tipo por fila (previewRowId → tintTypeId). */
+  tintTypeOverrides?: Record<string, string>;
 };
 
 function catalogNameKey(name: string): string {
@@ -45,24 +51,15 @@ function findIdByCatalogName(name: string, catalog: TintCatalogEntry[]): string 
   return hit?.id ?? null;
 }
 
+export function countTintRowsInPreview(rows: BulkPreviewRow[]): number {
+  return rows.filter((r) => bulkPreviewRowIsTintes(r)).length;
+}
+
 function countTintRowsByType(rows: BulkPreviewRow[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const r of rows) {
-    if (!isTintesCategory(r.mapped.categorySlug)) continue;
+    if (!bulkPreviewRowIsTintes(r)) continue;
     const raw = (r.mapped.tintType ?? "").trim();
-    if (!raw) continue;
-    const key = catalogNameKey(raw);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return counts;
-}
-
-function countTintFamiliesForType(rows: BulkPreviewRow[], typeKey: string): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const r of rows) {
-    if (!isTintesCategory(r.mapped.categorySlug)) continue;
-    if (rowTintTypeKey(r) !== typeKey) continue;
-    const raw = effectiveTintFamily(r.mapped);
     if (!raw) continue;
     const key = catalogNameKey(raw);
     counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -82,16 +79,60 @@ function rowTintFamilyKey(row: BulkPreviewRow): string | null {
   return catalogNameKey(raw);
 }
 
+function rowEffectiveTintTypeKey(
+  row: BulkPreviewRow,
+  activeTypeKey: string | null,
+  defaultTypeApplied: boolean
+): string | null {
+  const fromCsv = rowTintTypeKey(row);
+  if (fromCsv) return fromCsv;
+  if (defaultTypeApplied && activeTypeKey) return activeTypeKey;
+  return null;
+}
+
+function rowEffectiveTintFamilyKey(
+  row: BulkPreviewRow,
+  activeFamilyKey: string | null,
+  defaultFamilyApplied: boolean
+): string | null {
+  const fromCsv = rowTintFamilyKey(row);
+  if (fromCsv) return fromCsv;
+  if (defaultFamilyApplied && activeFamilyKey) return activeFamilyKey;
+  return null;
+}
+
+function countTintFamiliesForType(
+  rows: BulkPreviewRow[],
+  typeKey: string,
+  defaultTypeApplied: boolean
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const r of rows) {
+    if (!bulkPreviewRowIsTintes(r)) continue;
+    if (rowEffectiveTintTypeKey(r, typeKey, defaultTypeApplied) !== typeKey) continue;
+    const raw = effectiveTintFamily(r.mapped);
+    if (!raw) continue;
+    const key = catalogNameKey(raw);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
 function isTintRowInActiveScope(
   row: BulkPreviewRow,
   activeTypeKey: string | null,
   activeTypeId: string | null,
   activeFamilyKey: string | null,
-  activeFamilyId: string | null
+  activeFamilyId: string | null,
+  defaultTypeApplied: boolean,
+  defaultFamilyApplied: boolean
 ): boolean {
-  if (!isTintesCategory(row.mapped.categorySlug)) return true;
+  if (!bulkPreviewRowIsTintes(row)) return true;
   if (!activeTypeKey || !activeTypeId || !activeFamilyKey || !activeFamilyId) return false;
-  return rowTintTypeKey(row) === activeTypeKey && rowTintFamilyKey(row) === activeFamilyKey;
+  return (
+    rowEffectiveTintTypeKey(row, activeTypeKey, defaultTypeApplied) === activeTypeKey &&
+    rowEffectiveTintFamilyKey(row, activeFamilyKey, defaultFamilyApplied) === activeFamilyKey
+  );
 }
 
 function filterRowLists(
@@ -99,10 +140,20 @@ function filterRowLists(
   activeTypeKey: string | null,
   activeTypeId: string | null,
   activeFamilyKey: string | null,
-  activeFamilyId: string | null
+  activeFamilyId: string | null,
+  defaultTypeApplied: boolean,
+  defaultFamilyApplied: boolean
 ) {
   const keep = (r: BulkPreviewRow) =>
-    isTintRowInActiveScope(r, activeTypeKey, activeTypeId, activeFamilyKey, activeFamilyId);
+    isTintRowInActiveScope(
+      r,
+      activeTypeKey,
+      activeTypeId,
+      activeFamilyKey,
+      activeFamilyId,
+      defaultTypeApplied,
+      defaultFamilyApplied
+    );
   return {
     matchedRows: preview.matchedRows.filter(keep),
     unmatchedRows: preview.unmatchedRows.filter(keep),
@@ -114,9 +165,14 @@ export function buildCsvTintFamilyOptions(
   rows: BulkPreviewRow[],
   typeKey: string,
   existingTintFamilies: TintCatalogEntry[],
-  tintFamilyLinks: Record<string, string>
+  tintFamilyLinks: Record<string, string>,
+  options?: { defaultTintTypeApplied?: boolean }
 ): CsvTintFamilyOption[] {
-  const familyCounts = countTintFamiliesForType(rows, typeKey);
+  const familyCounts = countTintFamiliesForType(
+    rows,
+    typeKey,
+    options?.defaultTintTypeApplied === true
+  );
   return Array.from(familyCounts.entries())
     .map(([name, rowCount]) => {
       const linkedId = tintFamilyLinks[name] ?? null;
@@ -131,6 +187,30 @@ export function buildCsvTintFamilyOptions(
     .sort((a, b) => b.rowCount - a.rowCount || a.name.localeCompare(b.name));
 }
 
+function resolveRowTintTypeId(
+  row: BulkPreviewRow,
+  state: {
+    activeTintTypeCsvKey: string | null;
+    activeTintTypeId: string | null;
+    defaultTintTypeApplied: boolean;
+    tintTypeOverrides: Record<string, string>;
+  }
+): string | null {
+  const override = state.tintTypeOverrides[row.previewRowId];
+  if (override) return override;
+
+  if (!state.activeTintTypeCsvKey || !state.activeTintTypeId) return null;
+
+  const effectiveKey = rowEffectiveTintTypeKey(
+    row,
+    state.activeTintTypeCsvKey,
+    state.defaultTintTypeApplied
+  );
+  if (effectiveKey === state.activeTintTypeCsvKey) return state.activeTintTypeId;
+  if (rowTintTypeKey(row) === state.activeTintTypeCsvKey) return state.activeTintTypeId;
+  return null;
+}
+
 /**
  * Enriquece el preview Tintes: un tipo + una familia por importación.
  * El matching de imágenes por nivel solo aplica tras elegir ambos.
@@ -140,6 +220,10 @@ export function applyTintCatalogToPreview(
   state: TintCatalogState
 ): BulkPreviewResult {
   const { existingTintFamilies, existingTintTypes, tintTypeLinks, tintFamilyLinks } = state;
+  const defaultTintTypeApplied = state.defaultTintTypeApplied === true;
+  const defaultTintFamilyApplied = state.defaultTintFamilyApplied === true;
+  const tintTypeOverrides = state.tintTypeOverrides ?? {};
+
   let {
     activeTintTypeCsvKey,
     activeTintTypeId,
@@ -148,7 +232,9 @@ export function applyTintCatalogToPreview(
   } = state;
 
   const typeCounts = countTintRowsByType(preview.rows);
-  const hasTintesRows = typeCounts.size > 0 || preview.rows.some((r) => isTintesCategory(r.mapped.categorySlug));
+  const tintRowCount = countTintRowsInPreview(preview.rows);
+  const hasTintesRows = typeCounts.size > 0 || tintRowCount > 0;
+  const csvMissingTintType = hasTintesRows && typeCounts.size === 0;
 
   const csvTintTypeOptions: CsvTintTypeOption[] = Array.from(typeCounts.entries())
     .map(([name, rowCount]) => {
@@ -176,7 +262,9 @@ export function applyTintCatalogToPreview(
   }
 
   const csvTintFamilyOptions = activeTintTypeCsvKey
-    ? buildCsvTintFamilyOptions(preview.rows, activeTintTypeCsvKey, existingTintFamilies, tintFamilyLinks)
+    ? buildCsvTintFamilyOptions(preview.rows, activeTintTypeCsvKey, existingTintFamilies, tintFamilyLinks, {
+        defaultTintTypeApplied,
+      })
     : [];
 
   const tintSelectionResolved =
@@ -187,27 +275,26 @@ export function applyTintCatalogToPreview(
       !!activeTintFamilyId);
 
   const applyToRow = (r: BulkPreviewRow) => {
-    if (!isTintesCategory(r.mapped.categorySlug)) {
+    if (!bulkPreviewRowIsTintes(r)) {
       r.tintFamilyId = null;
       r.tintTypeId = null;
       return;
     }
 
-    if (
-      activeTintTypeCsvKey &&
-      activeTintTypeId &&
-      rowTintTypeKey(r) === activeTintTypeCsvKey
-    ) {
-      r.tintTypeId = activeTintTypeId;
-    } else {
-      r.tintTypeId = null;
-    }
+    r.tintTypeId = resolveRowTintTypeId(r, {
+      activeTintTypeCsvKey,
+      activeTintTypeId,
+      defaultTintTypeApplied,
+      tintTypeOverrides,
+    });
 
     if (
       activeTintFamilyCsvKey &&
       activeTintFamilyId &&
-      rowTintFamilyKey(r) === activeTintFamilyCsvKey
+      rowEffectiveTintFamilyKey(r, activeTintFamilyCsvKey, defaultTintFamilyApplied) === activeTintFamilyCsvKey
     ) {
+      r.tintFamilyId = activeTintFamilyId;
+    } else if (rowTintFamilyKey(r) === activeTintFamilyCsvKey && activeTintFamilyId) {
       r.tintFamilyId = activeTintFamilyId;
     } else {
       const familyRaw = effectiveTintFamily(r.mapped);
@@ -219,11 +306,16 @@ export function applyTintCatalogToPreview(
         !x.startsWith("Familia sin resolver") &&
         !x.startsWith("Tipo sin resolver") &&
         x !== "Selecciona un tipo de tinte para importar" &&
-        x !== "Selecciona tipo y familia de tinte para importar"
+        x !== "Selecciona tipo y familia de tinte para importar" &&
+        x !== "Falta tipo de tinte en el CSV"
     );
 
     if (!tintSelectionResolved) {
-      r.issues.push("Selecciona tipo y familia de tinte para importar");
+      if (csvMissingTintType && !defaultTintTypeApplied) {
+        r.issues.push("Falta tipo de tinte en el CSV");
+      } else {
+        r.issues.push("Selecciona tipo y familia de tinte para importar");
+      }
     }
   };
 
@@ -236,10 +328,12 @@ export function applyTintCatalogToPreview(
           activeTintTypeCsvKey,
           activeTintTypeId,
           activeTintFamilyCsvKey,
-          activeTintFamilyId
+          activeTintFamilyId,
+          defaultTintTypeApplied,
+          defaultTintFamilyApplied
         )
       : hasTintesRows
-        ? filterRowLists(preview, null, null, null, null)
+        ? filterRowLists(preview, null, null, null, null, defaultTintTypeApplied, defaultTintFamilyApplied)
         : {
             matchedRows: preview.matchedRows,
             unmatchedRows: preview.unmatchedRows,
@@ -257,6 +351,16 @@ export function applyTintCatalogToPreview(
     ? csvTintFamilyOptions.find((o) => o.name === activeTintFamilyCsvKey) ?? null
     : null;
 
+  const activeTintTypeRowCount =
+    activeTypeOption?.rowCount ??
+    (defaultTintTypeApplied && activeTintTypeCsvKey
+      ? preview.rows.filter(
+          (r) =>
+            bulkPreviewRowIsTintes(r) &&
+            rowEffectiveTintTypeKey(r, activeTintTypeCsvKey, true) === activeTintTypeCsvKey
+        ).length
+      : 0);
+
   return {
     ...preview,
     ...filtered,
@@ -265,10 +369,15 @@ export function applyTintCatalogToPreview(
     csvTintTypeOptions,
     csvTintFamilyOptions,
     hasTintesRows,
+    csvMissingTintType,
+    tintRowsWithoutCsvType: csvMissingTintType ? tintRowCount : 0,
+    defaultTintTypeApplied,
+    defaultTintFamilyApplied,
+    tintTypeOverrides,
     activeTintTypeCsvKey,
     activeTintTypeId,
     activeTintTypeLabel: activeTypeOption?.name ?? activeTintTypeCsvKey,
-    activeTintTypeRowCount: activeTypeOption?.rowCount ?? 0,
+    activeTintTypeRowCount,
     activeTintFamilyCsvKey,
     activeTintFamilyId,
     activeTintFamilyLabel: activeFamilyOption?.name ?? activeTintFamilyCsvKey,
@@ -295,6 +404,9 @@ export function readTintCatalogStateFromPreview(preview: BulkPreviewResult | nul
       activeTintFamilyId: null,
       tintTypeLinks: {},
       tintFamilyLinks: {},
+      defaultTintTypeApplied: false,
+      defaultTintFamilyApplied: false,
+      tintTypeOverrides: {},
     };
   }
   return {
@@ -306,6 +418,9 @@ export function readTintCatalogStateFromPreview(preview: BulkPreviewResult | nul
     activeTintFamilyId: preview.activeTintFamilyId ?? null,
     tintTypeLinks: preview.tintTypeLinks ?? {},
     tintFamilyLinks: preview.tintFamilyLinks ?? {},
+    defaultTintTypeApplied: preview.defaultTintTypeApplied === true,
+    defaultTintFamilyApplied: preview.defaultTintFamilyApplied === true,
+    tintTypeOverrides: preview.tintTypeOverrides ?? {},
   };
 }
 

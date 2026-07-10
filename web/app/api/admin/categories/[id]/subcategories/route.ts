@@ -5,6 +5,7 @@ import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { allocateUniqueSubcategorySlug } from "@/lib/server/category-slugs";
 import { revalidateStorefrontMenu } from "@/lib/server/revalidate-storefront-menu";
 import { slugify } from "@/lib/slugify";
+import { normalizeTaxonomyNameForDb } from "@/lib/taxonomy-display-name";
 import type { AdminSubcategoryRow } from "@/lib/types/admin-category";
 import {
   adminSubcategoryCreateSchema,
@@ -84,12 +85,12 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
         ? null
         : data.menuTag === null
           ? null
-          : data.menuTag.trim() || null;
+          : normalizeTaxonomyNameForDb(data.menuTag) || null;
 
     const row = await prisma.subcategory.create({
       data: {
         categoryId,
-        name: data.name,
+        name: normalizeTaxonomyNameForDb(data.name),
         slug,
         sortOrder,
         menuTag,

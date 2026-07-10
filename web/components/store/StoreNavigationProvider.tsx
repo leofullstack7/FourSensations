@@ -1,25 +1,26 @@
 "use client";
 
-import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
-  useRef,
   useState,
-  useTransition,
   type ReactNode,
 } from "react";
-import logoImage from "@/app/logo.png";
 
-/** Respaldo si la navegación se queda colgada (p. ej. error de red). */
-const NAV_LOADER_SAFETY_MS = 20000;
+export type CategoryNavFilters = {
+  grupo: string;
+  sub: string;
+  tag: string;
+};
 
 type StoreNavigationContextValue = {
   isNavigating: boolean;
   navigateTo: (href: string) => void;
+  /** Filtros aplicados al instante sin recarga de servidor (misma ruta). */
+  categoryNavFilters: CategoryNavFilters | null;
 };
 
 const StoreNavigationContext = createContext<StoreNavigationContextValue | null>(null);
@@ -43,71 +44,53 @@ function hrefKey(pathname: string, searchParams: URLSearchParams): string {
   return qs ? `${pathname}?${qs}` : pathname;
 }
 
+function parseHref(href: string): { pathname: string; search: string } {
+  const [pathname, search = ""] = href.split("?");
+  return { pathname, search };
+}
+
+function filtersFromSearch(search: string): CategoryNavFilters {
+  const qs = new URLSearchParams(search);
+  return {
+    grupo: qs.get("grupo")?.trim() ?? "",
+    sub: qs.get("sub")?.trim() ?? "",
+    tag: qs.get("tag")?.trim() ?? "",
+  };
+}
+
 export function StoreNavigationProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [isPending, startTransition] = useTransition();
-  const [navActive, setNavActive] = useState(false);
-  const safetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clearSafetyTimer = useCallback(() => {
-    if (safetyTimerRef.current) {
-      clearTimeout(safetyTimerRef.current);
-      safetyTimerRef.current = null;
-    }
-  }, []);
-
-  const stopNavigation = useCallback(() => {
-    clearSafetyTimer();
-    setNavActive(false);
-  }, [clearSafetyTimer]);
+  const [categoryNavFilters, setCategoryNavFilters] = useState<CategoryNavFilters | null>(null);
 
   const navigateTo = useCallback(
     (href: string) => {
       const target = normalizeHref(href);
       const current = hrefKey(pathname, searchParams);
 
-      if (target === current) {
-        stopNavigation();
+      if (target === current) return;
+
+      const { pathname: targetPath, search: targetSearch } = parseHref(target);
+
+      if (targetPath === pathname) {
+        setCategoryNavFilters(filtersFromSearch(targetSearch));
+        window.history.replaceState(null, "", target);
         return;
       }
 
-      setNavActive(true);
-      clearSafetyTimer();
-      safetyTimerRef.current = setTimeout(stopNavigation, NAV_LOADER_SAFETY_MS);
-
-      startTransition(() => {
-        router.push(target);
-      });
+      router.push(target);
     },
-    [pathname, searchParams, router, clearSafetyTimer, stopNavigation],
+    [pathname, searchParams, router],
   );
 
   useEffect(() => {
-    if (!isPending && navActive) {
-      stopNavigation();
-    }
-  }, [isPending, navActive, stopNavigation]);
-
-  useEffect(() => () => clearSafetyTimer(), [clearSafetyTimer]);
-
-  const showOverlay = navActive || isPending;
+    setCategoryNavFilters(null);
+  }, [pathname]);
 
   return (
-    <StoreNavigationContext.Provider value={{ isNavigating: showOverlay, navigateTo }}>
+    <StoreNavigationContext.Provider value={{ isNavigating: false, navigateTo, categoryNavFilters }}>
       {children}
-      {showOverlay ? (
-        <div className="gb-nav-overlay" role="status" aria-live="polite" aria-busy="true" aria-label="Cargando página">
-          <div className="gb-nav-overlay__panel">
-            <div className="gb-loading-brand-ring gb-nav-overlay__logo">
-              <Image src={logoImage} alt="" width={56} height={56} priority />
-            </div>
-            <div className="gb-loading-pulse-bar" aria-hidden />
-            <p className="gb-nav-overlay__text">Preparando tu experiencia…</p>
-          </div>
-        </div>
-      ) : null}
     </StoreNavigationContext.Provider>
   );
 }

@@ -5,6 +5,7 @@ import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { allocateUniqueSubcategorySlug } from "@/lib/server/category-slugs";
 import { revalidateStorefrontMenu } from "@/lib/server/revalidate-storefront-menu";
 import { slugify } from "@/lib/slugify";
+import { normalizeTaxonomyNameForDb } from "@/lib/taxonomy-display-name";
 import type { AdminSubcategoryRow } from "@/lib/types/admin-category";
 import {
   adminSubcategoryUpdateSchema,
@@ -65,6 +66,14 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
       return noStoreJson({ error: "Sin campos para actualizar" }, { status: 400 });
     }
 
+    const nextName = d.name !== undefined ? normalizeTaxonomyNameForDb(d.name) : undefined;
+    const nextMenuTag =
+      d.menuTag === undefined
+        ? undefined
+        : d.menuTag === null
+          ? null
+          : normalizeTaxonomyNameForDb(d.menuTag) || null;
+
     const oldName = existing.name;
     let nextSlug = existing.slug;
 
@@ -75,40 +84,37 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
       });
       if (clash) return noStoreJson({ error: "Slug ya en uso en esta categoría" }, { status: 409 });
       nextSlug = s;
-    } else if (d.name !== undefined && d.name !== existing.name) {
+    } else if (nextName !== undefined && nextName !== existing.name) {
       nextSlug = await allocateUniqueSubcategorySlug(
         existing.categoryId,
-        d.name,
+        nextName,
         id
       );
     }
 
     const row = await prisma.$transaction(async (tx) => {
-      if (d.name !== undefined && d.name !== oldName) {
+      if (nextName !== undefined && nextName !== oldName) {
         await tx.product.updateMany({
           where: {
             category: existing.category.slug,
             subcategory: oldName,
           },
-          data: { subcategory: d.name },
+          data: { subcategory: nextName },
         });
       }
 
       const updated = await tx.subcategory.update({
         where: { id },
         data: {
-          ...(d.name !== undefined && { name: d.name }),
+          ...(nextName !== undefined && { name: nextName }),
           ...(d.sortOrder !== undefined && { sortOrder: d.sortOrder }),
-          ...(d.menuTag !== undefined && {
-            menuTag:
-              d.menuTag === null ? null : d.menuTag.trim() ? d.menuTag.trim() : null,
-          }),
+          ...(d.menuTag !== undefined && { menuTag: nextMenuTag }),
           slug: nextSlug,
         },
       });
 
       if (d.menuTag !== undefined) {
-        const subName = d.name ?? oldName;
+        const subName = nextName ?? oldName;
         const tag = (updated.menuTag?.trim() || "General").trim();
         const products = await tx.product.findMany({
           where: {

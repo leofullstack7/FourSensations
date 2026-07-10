@@ -5,6 +5,7 @@ import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { allocateUniqueCategorySlug } from "@/lib/server/category-slugs";
 import { revalidateStorefrontMenu } from "@/lib/server/revalidate-storefront-menu";
 import { slugify } from "@/lib/slugify";
+import { normalizeTaxonomyNameForDb } from "@/lib/taxonomy-display-name";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import {
   adminCategoryCreateSchema,
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
 
     const row = await prisma.category.create({
       data: {
-        name: data.name,
+        name: normalizeTaxonomyNameForDb(data.name),
         slug,
         icon: data.icon ?? null,
         sortOrder,

@@ -11,12 +11,19 @@ import { prismaProductToAdmin } from "@/lib/mappers/admin-product";
 import { listZipImages } from "@/lib/bulk-import/zip-manifest";
 import { mimeFromImagePath } from "@/lib/bulk-import/mime";
 import { bulkImportStableRowId } from "@/lib/bulk-import/bulk-import-row-id";
+import {
+  bulkRowBlockingIssues,
+  bulkRowIsReadyForVariantGroupAssign,
+  bulkRowIsVariantGroupAssign,
+} from "@/lib/bulk-import/variant-group-assign";
 import type { BulkPreviewResult, BulkPreviewRow } from "@/lib/bulk-import/build-preview";
 import { effectiveProductTitle, normalizeProductNameForDb } from "@/lib/bulk-import/semantic-map";
-import { isTintesCategory, effectiveTintFamily } from "@/lib/bulk-import/tintes";
+import { isTintesCategory, effectiveTintFamily, bulkPreviewRowIsTintes } from "@/lib/bulk-import/tintes";
 import { normalizeTintCatalogName } from "@/lib/bulk-import/tint-catalog";
 import { normalizeTaxonomyNameForDb } from "@/lib/bulk-import/category-resolve";
-import { normalizeKey } from "@/lib/bulk-import/normalize";
+import { canonicalExternalRef, canonicalVariantGroupCode } from "@/lib/bulk-import/variant-group-code";
+import { normalizeColorHex } from "@/lib/product-color";
+import { revalidateStorefrontProducts } from "@/lib/server/revalidate-storefront-products";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,24 +41,63 @@ const commitSchema = z
     message: "Selecciona al menos una fila",
   });
 
-/** «Producto ya registrado» se gestiona en el bucle (omitir o reemplazar), no aquí. */
-const BLOCKING_FILTER = (x: string) =>
-  x !== "Sin imagen en ZIP para este código" &&
-  x !== "Sin imagen en ZIP para este nivel" &&
-  x !== "Producto ya registrado" &&
-  x !== "Código de barras distinto al registrado en tienda" &&
-  !x.startsWith("Familia sin resolver") &&
-  !x.startsWith("Tipo sin resolver");
-
 function variantGroupFieldsFromRow(row: BulkPreviewRow): {
   variantGroupCode: string | null;
   variantGroupOrder: number | null;
 } {
-  const variantGroupRaw = row.mapped.variantGroupCode?.trim() || null;
-  const variantGroupCode = variantGroupRaw ? normalizeKey(variantGroupRaw) : null;
+  const variantGroupCode = canonicalVariantGroupCode(row.mapped.variantGroupCode);
   const variantGroupOrder =
     variantGroupCode != null && row.variantGroupOrder != null ? row.variantGroupOrder : null;
   return { variantGroupCode, variantGroupOrder };
+}
+
+function colorFieldsFromRow(row: BulkPreviewRow): {
+  colorHex: string | null;
+  colorName: string | null;
+} {
+  return {
+    colorHex: normalizeColorHex(row.mapped.colorHex),
+    colorName: row.mapped.colorName?.trim() || null,
+  };
+}
+
+type ExistingProductHit = { id: string; name: string; externalRef: string | null };
+
+function buildExistingProductLookups(
+  products: ExistingProductHit[],
+  refsBatch: Set<string>,
+  existingIds: Set<string>
+): {
+  clashByRef: Map<string, ExistingProductHit>;
+  clashById: Map<string, ExistingProductHit>;
+} {
+  const clashByRef = new Map<string, ExistingProductHit>();
+  const clashById = new Map<string, ExistingProductHit>();
+  for (const p of products) {
+    clashById.set(p.id, p);
+    const refKey = canonicalExternalRef(p.externalRef);
+    if (refKey && refsBatch.has(refKey)) {
+      clashByRef.set(refKey, p);
+    }
+    if (existingIds.has(p.id) && refKey) {
+      clashByRef.set(refKey, p);
+    }
+  }
+  return { clashByRef, clashById };
+}
+
+function resolveExistingProductForRow(
+  row: BulkPreviewRow,
+  clashByRef: Map<string, ExistingProductHit>,
+  clashById: Map<string, ExistingProductHit>
+): ExistingProductHit | null {
+  if (row.existingProductId) {
+    const byId = clashById.get(row.existingProductId);
+    if (byId) return byId;
+  }
+  const ref = row.normalizedCode;
+  if (!ref) return null;
+  return clashByRef.get(ref) ?? null;
 }
 
 function parsePreview(raw: unknown): BulkPreviewResult | null {
@@ -99,16 +145,29 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     return noStoreJson({ error: "Preview no disponible" }, { status: 500 });
   }
 
+  const existingPolicy = parsed.data.existingPolicy ?? "skip";
+
   if (preview.tintSelectionResolved === false) {
-    return noStoreJson(
-      { error: "Selecciona y confirma el tipo y la familia de tinte a importar antes de continuar" },
-      { status: 400 }
+    const idSetEarly = new Set(parsed.data.rowIds ?? []);
+    const indexSetEarly = new Set(parsed.data.rowIndexes ?? []);
+    const chosenRows = preview.rows.filter((row) =>
+      idSetEarly.size > 0
+        ? idSetEarly.has(bulkImportStableRowId(row))
+        : indexSetEarly.has(row.rowIndex)
     );
+    const needsTintForSelection = chosenRows.some(
+      (row) => bulkPreviewRowIsTintes(row) && !bulkRowIsVariantGroupAssign(row, existingPolicy)
+    );
+    if (needsTintForSelection) {
+      return noStoreJson(
+        { error: "Selecciona y confirma el tipo y la familia de tinte a importar antes de continuar" },
+        { status: 400 }
+      );
+    }
   }
 
   const idSet = new Set(parsed.data.rowIds ?? []);
   const indexSet = new Set(parsed.data.rowIndexes ?? []);
-  const existingPolicy = parsed.data.existingPolicy ?? "skip";
   /** Todas las filas del CSV (necesario para grupos de barras y filas ya registradas). */
   const sourceRows = preview.rows;
   const toImport: BulkPreviewRow[] = [];
@@ -117,7 +176,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const chosen =
       idSet.size > 0 ? idSet.has(bulkImportStableRowId(row)) : indexSet.has(row.rowIndex);
     if (!chosen) continue;
-    const blocking = row.issues.filter((x) => BLOCKING_FILTER(x));
+    const isVariantAssign = bulkRowIsVariantGroupAssign(row, existingPolicy);
+    const blocking = bulkRowBlockingIssues(row, existingPolicy);
     if (blocking.length > 0) {
       return noStoreJson(
         { error: `Fila ${row.rowIndex + 1}: ${blocking.join("; ")}` },
@@ -125,10 +185,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       );
     }
     const title = effectiveProductTitle(row.mapped);
-    const isExistingVariantGroupAssign =
-      existingPolicy === "skip" &&
-      row.isExistingProduct &&
-      !!row.mapped.variantGroupCode?.trim();
+    const isExistingVariantGroupAssign = isVariantAssign;
 
     if (!row.normalizedCode) {
       return noStoreJson({ error: `Fila ${row.rowIndex + 1}: código vacío` }, { status: 400 });
@@ -156,12 +213,24 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     return noStoreJson({ error: "Ninguna fila vÃ¡lida para importar" }, { status: 400 });
   }
 
-  const refsBatch = toImport.map((r) => r.normalizedCode!);
+  const refsBatch = new Set(toImport.map((r) => r.normalizedCode!).filter(Boolean));
+  const existingIds = new Set(
+    toImport.map((r) => r.existingProductId).filter((id): id is string => !!id)
+  );
   const existingAtCommit = await prisma.product.findMany({
-    where: { externalRef: { in: refsBatch } },
+    where: {
+      OR: [
+        { externalRef: { not: null } },
+        ...(existingIds.size > 0 ? [{ id: { in: Array.from(existingIds) } }] : []),
+      ],
+    },
     select: { id: true, name: true, externalRef: true },
   });
-  const clashByRef = new Map(existingAtCommit.map((p) => [p.externalRef!, p] as const));
+  const { clashByRef, clashById } = buildExistingProductLookups(
+    existingAtCommit,
+    refsBatch,
+    existingIds
+  );
 
   await prisma.bulkImportJob.update({
     where: { id: jobId },
@@ -173,23 +242,33 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const errors: string[] = [];
   let skippedExistingDuplicates = 0;
   let variantGroupsAssigned = 0;
+  const assignedGroupCodes = new Set<string>();
 
   try {
     for (const row of toImport) {
       const ref = row.normalizedCode!;
       try {
-        const clash = clashByRef.get(ref) ?? null;
+        const clash = resolveExistingProductForRow(row, clashByRef, clashById);
         const { variantGroupCode, variantGroupOrder } = variantGroupFieldsFromRow(row);
+        const { colorHex, colorName } = colorFieldsFromRow(row);
 
         if (clash && existingPolicy === "skip") {
-          if (variantGroupCode) {
+          const hasVariantGroup = !!variantGroupCode;
+          const hasColor = !!colorHex;
+          if (hasVariantGroup || hasColor) {
             const productRow = await prisma.product.update({
               where: { id: clash.id },
-              data: { variantGroupCode, variantGroupOrder },
+              data: {
+                ...(hasVariantGroup ? { variantGroupCode, variantGroupOrder } : {}),
+                ...(hasColor ? { colorHex, colorName } : {}),
+              },
               include: { images: true },
             });
             createdProducts.push(prismaProductToAdmin(productRow));
-            variantGroupsAssigned += 1;
+            if (hasVariantGroup) {
+              variantGroupsAssigned += 1;
+              assignedGroupCodes.add(variantGroupCode!);
+            }
           } else {
             skippedExistingDuplicates += 1;
           }
@@ -202,7 +281,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
               m.matchedBy === "exact" ||
               m.matchedBy === "numericPrefix" ||
               m.matchedBy === "sixDigitPrefix" ||
-              m.matchedBy === "tintLevel"
+              m.matchedBy === "tintLevel" ||
+              m.matchedBy === "fuzzy"
           )
           .map((m) => m.imageFilename);
         const uniqueFiles = Array.from(new Set(matchFiles));
@@ -277,6 +357,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
                 ...tintData,
                 variantGroupCode,
                 variantGroupOrder,
+                colorHex,
+                colorName,
                 imageUrl: mainUrl,
                 active: true,
                 images: {
@@ -311,6 +393,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
                 active: true,
                 variantGroupCode,
                 variantGroupOrder,
+                colorHex,
+                colorName,
                 ...tintData,
                 ...(galleryUrls.length > 0 && {
                   images: {
@@ -322,8 +406,13 @@ export async function POST(req: NextRequest, { params }: Ctx) {
             });
         createdProducts.push(prismaProductToAdmin(productRow));
         if (!clash) {
-          clashByRef.set(ref, { id: productRow.id, name: productRow.name, externalRef: ref });
+          const refKey = canonicalExternalRef(ref);
+          if (refKey) {
+            clashByRef.set(refKey, { id: productRow.id, name: productRow.name, externalRef: ref });
+            clashById.set(productRow.id, { id: productRow.id, name: productRow.name, externalRef: ref });
+          }
         }
+        if (variantGroupCode) assignedGroupCodes.add(variantGroupCode);
       } catch (e) {
         const code = (e as { code?: string })?.code;
         if (code === "P2002") {
@@ -337,11 +426,29 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       }
     }
 
+    let variantGroupsWithMultipleMembers = 0;
+    let variantGroupsSingleton = 0;
+    if (assignedGroupCodes.size > 0) {
+      const groupStats = await prisma.product.groupBy({
+        by: ["variantGroupCode"],
+        _count: { id: true },
+        where: { variantGroupCode: { in: Array.from(assignedGroupCodes) } },
+      });
+      variantGroupsWithMultipleMembers = groupStats.filter((g) => g._count.id >= 2).length;
+      variantGroupsSingleton = groupStats.filter((g) => g._count.id === 1).length;
+    }
+
+    if (variantGroupsAssigned > 0 || createdProducts.length > 0) {
+      revalidateStorefrontProducts();
+    }
+
     const finalStats = {
       imported: createdProducts.length,
       failed: errors.length,
       skippedExistingDuplicates,
       variantGroupsAssigned,
+      variantGroupsWithMultipleMembers,
+      variantGroupsSingleton,
       errors,
     };
 
@@ -376,6 +483,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       products: createdProducts,
       skippedExistingDuplicates,
       variantGroupsAssigned,
+      variantGroupsWithMultipleMembers,
+      variantGroupsSingleton,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error en importaciÃ³n";

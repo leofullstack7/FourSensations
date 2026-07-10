@@ -16,12 +16,25 @@ import type { MenuConfig } from "@/lib/types/admin";
 import type { CartLine, StoreProduct } from "@/lib/types/product";
 import { getCategoryLabel } from "@/lib/category-labels";
 import { formatPrice } from "@/lib/format";
+import { preloadStorefrontProductImages } from "@/lib/preload-storefront-image";
 import { computeShippingCop, loadCart, saveCart } from "@/lib/cart-storage";
 import { loadFavorites, saveFavorites } from "@/lib/favorites-storage";
 import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
 import { isHttpImageUrl } from "@/lib/util/image-url";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { StoreFloatingActions } from "@/components/store/StoreFloatingActions";
+import { ProductModalZoomImage } from "@/components/store/ProductModalZoomImage";
+import { ProductVariantsPickerModal } from "@/components/store/ProductVariantsPickerModal";
+import {
+  ProductColorSwatchField,
+  productHasColorSwatch,
+  variantsHaveColorSwatches,
+} from "@/components/store/ProductColorSwatchField";
+import {
+  enrichStorefrontDisplayProducts,
+  listStorefrontVariantsInGroup,
+  resolveStorefrontDisplayAfterFilter,
+} from "@/lib/store/variant-groups";
 
 type ToastItem = { id: number; msg: string; type: string; icon: string };
 
@@ -82,6 +95,10 @@ export function StorefrontShell({
     });
   }, []);
 
+  const markFullCatalogLoaded = useCallback(() => {
+    fullCatalogLoaded.current = true;
+  }, []);
+
   const ensureFullCatalog = useCallback(async () => {
     if (fullCatalogLoaded.current || fullCatalogLoading.current) return;
     fullCatalogLoading.current = true;
@@ -131,6 +148,8 @@ export function StorefrontShell({
   const [authMode, setAuthMode] = useState<"login" | "fav-warning">("login");
   const [customerAuthTab, setCustomerAuthTab] = useState<"login" | "register">("login");
   const [selectedProduct, setSelectedProduct] = useState<StoreProduct | null>(null);
+  const [variantPickerOpen, setVariantPickerOpen] = useState(false);
+  const [variantPickerProducts, setVariantPickerProducts] = useState<StoreProduct[]>([]);
   const [modalImgIdx, setModalImgIdx] = useState(0);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   /** Loader global (correo o redirección Google). */
@@ -316,24 +335,68 @@ export function StorefrontShell({
       }
     }
 
-    return [...starts, ...contains];
+    return enrichStorefrontDisplayProducts(
+      resolveStorefrontDisplayAfterFilter([...starts, ...contains], products),
+      products
+    );
   }, [products, searchQuery]);
   const normalizedSearchQuery = useMemo(() => normalizeSearchText(searchQuery), [searchQuery]);
   const hasSearchQuery = normalizedSearchQuery.length >= 1;
 
-  const openProductModal = (id: string) => {
+  const openProductDetail = useCallback((id: string) => {
     const p = products.find((x) => x.id === id);
     if (!p) return;
+    preloadStorefrontProductImages(p);
     setSelectedProduct(p);
     setModalImgIdx(0);
     document.body.style.overflow = "hidden";
-  };
+  }, [products]);
+
+  const closeVariantPicker = useCallback(() => {
+    setVariantPickerOpen(false);
+    setVariantPickerProducts([]);
+    if (!selectedProduct) document.body.style.overflow = "";
+  }, [selectedProduct]);
+
+  const openProductModal = useCallback((id: string) => {
+    const p = products.find((x) => x.id === id);
+    if (!p) return;
+
+    preloadStorefrontProductImages(p);
+
+    const groupCode = p.variantGroupCode?.trim();
+    if (groupCode) {
+      const variants = listStorefrontVariantsInGroup(products, groupCode);
+      if (variants.length >= 2) {
+        setVariantPickerProducts(variants);
+        setVariantPickerOpen(true);
+        document.body.style.overflow = "hidden";
+        return;
+      }
+    }
+
+    openProductDetail(id);
+  }, [products, openProductDetail]);
+
+  const selectVariantFromPicker = useCallback((id: string) => {
+    setVariantPickerOpen(false);
+    setVariantPickerProducts([]);
+    openProductDetail(id);
+  }, [openProductDetail]);
 
   const closeProductModal = () => {
     setSelectedProduct(null);
     setModalImgIdx(0);
     document.body.style.overflow = "";
   };
+
+  const selectedProductVariants = useMemo(() => {
+    if (!selectedProduct?.variantGroupCode?.trim()) return [];
+    return listStorefrontVariantsInGroup(products, selectedProduct.variantGroupCode);
+  }, [products, selectedProduct]);
+
+  const showSelectedProductColorPicker =
+    selectedProductVariants.length >= 2 && variantsHaveColorSwatches(selectedProductVariants);
 
   const openSearch = () => {
     void ensureFullCatalog();
@@ -401,6 +464,7 @@ export function StorefrontShell({
         categoryPath,
         catalogProducts: products,
         mergeCatalogProducts,
+        markFullCatalogLoaded,
         ensureFullCatalog,
         showToast,
         openProductModal,
@@ -764,6 +828,17 @@ export function StorefrontShell({
         </div>
       </aside>
 
+      <ProductVariantsPickerModal
+        open={variantPickerOpen}
+        variants={variantPickerProducts}
+        groupLabel={variantPickerProducts[0]?.name}
+        favorites={favorites}
+        onSelect={selectVariantFromPicker}
+        onToggleFav={toggleFavorite}
+        onAddCart={addToCart}
+        onClose={closeVariantPicker}
+      />
+
       <div
         className={`modal-overlay modal-overlay--product-tech${selectedProduct ? " open" : ""}`}
         id="product-overlay"
@@ -797,14 +872,7 @@ export function StorefrontShell({
                       <>
                         <div className="modal-gallery-placeholder">
                           {src ? (
-                            <Image
-                              src={src}
-                              alt=""
-                              fill
-                              sizes="(max-width: 900px) 100vw, 45vw"
-                              loading="lazy"
-                              style={{ objectFit: "cover" }}
-                            />
+                            <ProductModalZoomImage src={src} alt={selectedProduct.name} />
                           ) : (
                             selectedProduct.emoji
                           )}
@@ -876,6 +944,37 @@ export function StorefrontShell({
                         </span>
                       )}
                     </div>
+                    {showSelectedProductColorPicker ? (
+                      <div className="product-modal-color-picker" style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dark)", marginBottom: 10 }}>
+                          Colores disponibles
+                        </div>
+                        <ProductColorSwatchField
+                          items={selectedProductVariants}
+                          selectedId={selectedProduct.id}
+                          onSelect={(id) => {
+                            const next = products.find((p) => p.id === id);
+                            if (next) {
+                              setSelectedProduct(next);
+                              setModalImgIdx(0);
+                            }
+                          }}
+                          size="sm"
+                        />
+                      </div>
+                    ) : productHasColorSwatch(selectedProduct) ? (
+                      <div className="product-modal-color-single" style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dark)", marginBottom: 10 }}>
+                          Color
+                        </div>
+                        <ProductColorSwatchField
+                          items={[selectedProduct]}
+                          selectedId={selectedProduct.id}
+                          onSelect={() => {}}
+                          size="sm"
+                        />
+                      </div>
+                    ) : null}
                     <p style={{ fontSize: 14, color: "var(--text-light)", lineHeight: 1.75, marginBottom: 24 }}>{selectedProduct.description}</p>
                   </div>
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>

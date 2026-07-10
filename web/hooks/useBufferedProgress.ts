@@ -1,10 +1,11 @@
 import { useCallback, useRef, useState } from "react";
 
-export type BufferedProgressMode = "analyze" | "import" | "default";
+export type BufferedProgressMode = "analyze" | "import" | "optimize" | "default";
 
 const MODE_CONFIG: Record<BufferedProgressMode, { cap: number; estimatedMs: number }> = {
   analyze: { cap: 90, estimatedMs: 14_000 },
   import: { cap: 94, estimatedMs: 55_000 },
+  optimize: { cap: 92, estimatedMs: 35_000 },
   default: { cap: 88, estimatedMs: 12_000 },
 };
 

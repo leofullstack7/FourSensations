@@ -7,6 +7,7 @@ import { slugify } from "@/lib/slugify";
 import { isTrustedCdnImageUrl } from "@/lib/server/bunny-config";
 import { stripAiFlagsForManualEdit } from "@/lib/product-ai-fields";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
+import { revalidateStorefrontProducts } from "@/lib/server/revalidate-storefront-products";
 import {
   adminProductUpdateSchema,
   formatZodError,
@@ -128,6 +129,8 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
         ...(d.emoji !== undefined && { emoji: d.emoji }),
         ...(d.imageUrl !== undefined && { imageUrl: d.imageUrl }),
         ...(d.externalRef !== undefined && { externalRef: nextExternalRef }),
+        ...(d.colorHex !== undefined && { colorHex: d.colorHex ? d.colorHex.toUpperCase() : null }),
+        ...(d.colorName !== undefined && { colorName: d.colorName?.trim() || null }),
         ...(d.isNew !== undefined && { isNew: d.isNew }),
         ...(d.featuredInHome !== undefined && { featuredInHome: d.featuredInHome }),
         ...(d.active !== undefined && { active: d.active }),
@@ -140,11 +143,23 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
       include: { images: true },
     });
 
+    if (d.colorHex !== undefined || d.colorName !== undefined) {
+      revalidateStorefrontProducts();
+    }
+
     return NextResponse.json({ product: prismaProductToAdmin(row) });
   } catch (e) {
+    const msg = e instanceof Error ? e.message : "Error desconocido";
     console.error("[PUT /api/admin/products/[id]]", e);
+    const staleClient =
+      msg.includes("Unknown argument `colorHex`") || msg.includes("Unknown argument `colorName`");
     return NextResponse.json(
-      { error: "Error al actualizar producto" },
+      {
+        error: staleClient
+          ? "Base de datos desactualizada en el servidor. Reinicia «npm run dev» y vuelve a intentar."
+          : "Error al actualizar producto",
+        ...(process.env.NODE_ENV === "development" && { detail: msg.slice(0, 400) }),
+      },
       { status: 500 }
     );
   }

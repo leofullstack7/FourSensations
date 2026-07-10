@@ -34,6 +34,8 @@ export function prismaProductToAdmin(p: ProductWithImages): AdminProduct {
     externalRef: p.externalRef ?? null,
     variantGroupCode: p.variantGroupCode ?? null,
     variantGroupOrder: p.variantGroupOrder ?? null,
+    colorHex: p.colorHex ?? null,
+    colorName: p.colorName ?? null,
     imageUrl: p.imageUrl,
     images: mapImages(p.images),
     aiGeneratedFields: parseAiGeneratedFields(p.aiGeneratedFields) as AiGeneratedFieldsMap,

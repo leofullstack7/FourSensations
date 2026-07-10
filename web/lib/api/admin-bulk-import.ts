@@ -31,6 +31,40 @@ export async function postBulkImportPreview(form: FormData): Promise<BulkPreview
   return (await res.json()) as BulkPreviewResponse;
 }
 
+export type BulkZipOptimizeResult = {
+  file: File;
+  beforeBytes: number;
+  afterBytes: number;
+  savedBytes: number;
+  savedPercent: number;
+  imageCount: number;
+  skippedCount: number;
+};
+
+export async function postBulkZipOptimize(zip: File): Promise<BulkZipOptimizeResult> {
+  const fd = new FormData();
+  fd.append("zip", zip);
+  const res = await fetch("/api/admin/import/bulk/zip-optimize", {
+    method: "POST",
+    body: fd,
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+
+  const blob = await res.blob();
+  const beforeBytes = Number(res.headers.get("X-Zip-Before-Bytes") ?? 0);
+  const afterBytes = Number(res.headers.get("X-Zip-After-Bytes") ?? 0);
+  const savedBytes = Number(res.headers.get("X-Zip-Saved-Bytes") ?? 0);
+  const savedPercent = Number(res.headers.get("X-Zip-Saved-Percent") ?? 0);
+  const imageCount = Number(res.headers.get("X-Zip-Image-Count") ?? 0);
+  const skippedCount = Number(res.headers.get("X-Zip-Skipped-Count") ?? 0);
+
+  const baseName = zip.name.replace(/\.zip$/i, "");
+  const file = new File([blob], `${baseName}-optimizado.zip`, { type: "application/zip" });
+
+  return { file, beforeBytes, afterBytes, savedBytes, savedPercent, imageCount, skippedCount };
+}
+
 export async function patchBulkImportJob(
   jobId: string,
   body: {
@@ -46,6 +80,9 @@ export async function patchBulkImportJob(
     activeTintFamilyId?: string | null;
     tintTypeLinks?: Record<string, string>;
     tintFamilyLinks?: Record<string, string>;
+    defaultTintTypeApplied?: boolean;
+    defaultTintFamilyApplied?: boolean;
+    tintTypeOverrides?: Record<string, string>;
   }
 ): Promise<{ preview: BulkPreviewResult }> {
   const res = await fetch(`/api/admin/import/bulk/${jobId}`, {
@@ -74,6 +111,10 @@ export type BulkCommitResponse = {
   skippedExistingDuplicates?: number;
   /** Productos existentes a los que se asignó grupo de barras (modo omitir). */
   variantGroupsAssigned?: number;
+  /** Grupos de barras con 2 o más productos tras el commit. */
+  variantGroupsWithMultipleMembers?: number;
+  /** Grupos de barras con un solo producto (no se verán unidos en la lista). */
+  variantGroupsSingleton?: number;
   errors: string[];
   products: AdminProduct[];
 };

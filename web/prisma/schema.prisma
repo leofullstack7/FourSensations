@@ -98,6 +98,10 @@ model Product {
   tintLevel      String?
   /// Grupo de color dentro de la línea — texto libre, importación Tintes.
   tintGroup      String?
+  /// Color del producto en hexadecimal (#RRGGBB), columna CSV «Color» o asignación manual.
+  colorHex       String?
+  /// Nombre legible del color (opcional).
+  colorName      String?
   active        Boolean        @default(true)
   /// Mapa JSON de campos generados por IA, ej. { "description": true, "tags": true }
   aiGeneratedFields Json?

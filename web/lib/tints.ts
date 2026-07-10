@@ -92,9 +92,6 @@ const getCachedTintBubbleItems = unstable_cache(
 export async function getTintBubbleItems(): Promise<TintBubbleItem[]> {
   if (!process.env.DATABASE_URL) return [];
   try {
-    if (process.env.NODE_ENV === "development") {
-      return await fetchTintBubbleItemsFromDb();
-    }
     return await getCachedTintBubbleItems();
   } catch {
     return [];

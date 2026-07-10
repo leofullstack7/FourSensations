@@ -1,6 +1,7 @@
 import type { ZipImageEntry } from "./zip-manifest";
 import { computeOrphanFiles } from "./zip-manifest";
 import { normalizeKey } from "./normalize";
+import { canonicalVariantGroupCode } from "./variant-group-code";
 import type {
   BulkPreviewDbVariant,
   BulkPreviewVariantGroup,
@@ -20,14 +21,25 @@ import {
   resolveCategorySlug,
   resolveSubcategoryName,
   resolveSubcategoryGlobal,
+  resolveCategoryWhenCsvLooksLikeSubcategory,
   resolveTaxonomyFromCsvFixedMap,
   taxonomyPairKey,
   computeTaxonomyRehomeSuggestion,
   normalizeTaxonomyNameForDb,
+  firstSubcategoryName,
   type TaxonomyRehomeKind,
 } from "./category-resolve";
-import { isTintesCategory, normalizeTintLevelKey, effectiveTintFamily } from "./tintes";
+import {
+  normalizeTintLevelKey,
+  bulkPreviewRowIsTintes,
+  csvCategoryLabelIsTintes,
+  csvHasExplicitNonTintesCategory,
+  rowHasDedicatedTintCsvColumns,
+  effectiveTintFamily,
+  TINTES_CATEGORY_SLUG,
+} from "./tintes";
 import type { TintCatalogEntry, CsvTintTypeOption, CsvTintFamilyOption } from "./tint-catalog";
+import { bestFuzzyCodeMatches } from "./code-similarity";
 
 export type TintMatchScope = {
   typeKey: string;
@@ -41,7 +53,7 @@ function rowTintCatalogKey(raw: string | null | undefined): string | null {
 }
 
 function rowInTintMatchScope(row: BulkPreviewRow, scope: TintMatchScope): boolean {
-  if (!isTintesCategory(row.mapped.categorySlug)) return false;
+  if (!bulkPreviewRowIsTintes(row)) return false;
   return (
     rowTintCatalogKey(row.mapped.tintType) === scope.typeKey &&
     rowTintCatalogKey(effectiveTintFamily(row.mapped)) === scope.familyKey
@@ -53,7 +65,9 @@ export type BulkPreviewImageMatch = {
   rawImageCode: string;
   numericPrefixCode: string | null;
   matchedCsvCode: string | null;
-  matchedBy: "exact" | "numericPrefix" | "sixDigitPrefix" | "tintLevel" | "none" | "ambiguous";
+  matchedBy: "exact" | "numericPrefix" | "sixDigitPrefix" | "tintLevel" | "fuzzy" | "none" | "ambiguous";
+  /** Similitud 0–1 cuando matchedBy es fuzzy. */
+  fuzzySimilarity?: number | null;
 };
 
 /** Dígitos iniciales del código en CSV (ej. "103718CYE" → "103718"). */
@@ -74,7 +88,8 @@ function assignVariantGroupOrders(rows: BulkPreviewRow[]): void {
     row.variantGroupOrder = null;
     const raw = row.mapped.variantGroupCode?.trim();
     if (!raw) continue;
-    const key = normalizeKey(raw);
+    const key = canonicalVariantGroupCode(raw);
+    if (!key) continue;
     if (!byGroup.has(key)) byGroup.set(key, []);
     byGroup.get(key)!.push(row);
   }
@@ -142,15 +157,95 @@ export type BulkPreviewNewTaxonomyItem =
       kind: "newCategory";
       categoryName: string;
       subcategories: string[];
+      /** Filas de productos NUEVOS que necesitan esta taxonomía. */
       rowCount: number;
     }
-    | {
+  | {
       kind: "newSubcategoriesOnly";
       parentCategorySlug: string;
       parentCategoryName: string;
       subcategories: string[];
+      /** Filas de productos NUEVOS que necesitan esta taxonomía. */
       rowCount: number;
     };
+
+type BuildNewTaxonomyOptions = {
+  /** Excluir filas cuyo código ya está registrado (no necesitan crear categoría/sub). */
+  excludeExistingProducts?: boolean;
+};
+
+/** Detecta categorías/subcategorías del CSV que aún no existen en el sistema. */
+export function buildPreviewNewTaxonomyItems(
+  rows: BulkPreviewRow[],
+  categoryTree: CategoryRow[],
+  options?: BuildNewTaxonomyOptions
+): BulkPreviewNewTaxonomyItem[] {
+  const excludeExisting = options?.excludeExistingProducts === true;
+  const source = excludeExisting ? rows.filter((r) => !r.isExistingProduct) : rows;
+
+  const newCategoryMap = new Map<string, { categoryName: string; subs: Set<string>; rowCount: number }>();
+  source.forEach((r) => {
+    const rawCategory = (r.mapped.category ?? "").trim();
+    if (!rawCategory) return;
+    if (resolveTaxonomyFromCsvFixedMap(r.mapped.category, r.mapped.subcategory)) return;
+    const resolved = resolveCategorySlug(rawCategory, categoryTree);
+    if (resolved) return;
+    const key = normalizeKey(rawCategory);
+    const current = newCategoryMap.get(key) ?? {
+      categoryName: rawCategory,
+      subs: new Set<string>(),
+      rowCount: 0,
+    };
+    current.rowCount += 1;
+    const rawSub = (r.mapped.subcategory ?? "").trim();
+    if (rawSub) current.subs.add(normalizeTaxonomyNameForDb(rawSub));
+    newCategoryMap.set(key, current);
+  });
+
+  const newSubsByParentSlug = new Map<
+    string,
+    { parentCategorySlug: string; parentCategoryName: string; subs: Set<string>; rowCount: number }
+  >();
+  source.forEach((r) => {
+    if (!r.issues.includes("Subcategoría CSV no reconocida en la categoría detectada")) return;
+    const slug = r.mapped.categorySlug;
+    if (!slug) return;
+    const rawSub = (r.mapped.subcategory ?? "").trim();
+    if (!rawSub) return;
+    const catRow = categoryTree.find((c) => c.slug === slug);
+    const parentCategoryName = catRow?.name ?? slug;
+    const current = newSubsByParentSlug.get(slug) ?? {
+      parentCategorySlug: slug,
+      parentCategoryName,
+      subs: new Set<string>(),
+      rowCount: 0,
+    };
+    current.rowCount += 1;
+    current.subs.add(normalizeTaxonomyNameForDb(rawSub));
+    newSubsByParentSlug.set(slug, current);
+  });
+
+  const fromNewCategories: BulkPreviewNewTaxonomyItem[] = Array.from(newCategoryMap.values()).map((x) => ({
+    kind: "newCategory" as const,
+    categoryName: x.categoryName,
+    subcategories: Array.from(x.subs).sort((a, b) => a.localeCompare(b)),
+    rowCount: x.rowCount,
+  }));
+
+  const fromNewSubsOnly: BulkPreviewNewTaxonomyItem[] = Array.from(newSubsByParentSlug.values()).map((x) => ({
+    kind: "newSubcategoriesOnly" as const,
+    parentCategorySlug: x.parentCategorySlug,
+    parentCategoryName: x.parentCategoryName,
+    subcategories: Array.from(x.subs).sort((a, b) => a.localeCompare(b)),
+    rowCount: x.rowCount,
+  }));
+
+  const taxonomySortLabel = (x: BulkPreviewNewTaxonomyItem) =>
+    x.kind === "newCategory" ? x.categoryName : x.parentCategoryName;
+  return [...fromNewCategories, ...fromNewSubsOnly].sort(
+    (a, b) => b.rowCount - a.rowCount || taxonomySortLabel(a).localeCompare(taxonomySortLabel(b))
+  );
+}
 
 /** Sugerencia: el CSV parece confundir categoría/sub con otra rama ya registrada. */
 export type BulkTaxonomyRehomeHint = {
@@ -194,6 +289,16 @@ export type BulkPreviewResult = {
   /** Familias del tipo activo en el CSV. */
   csvTintFamilyOptions: CsvTintFamilyOption[];
   hasTintesRows: boolean;
+  /** El CSV incluye filas Tintes pero ninguna trae valor en columna Tipo. */
+  csvMissingTintType: boolean;
+  /** Filas Tintes sin tipo en CSV (solo cuando csvMissingTintType). */
+  tintRowsWithoutCsvType: number;
+  /** Tipo por defecto asignado manualmente cuando falta columna Tipo. */
+  defaultTintTypeApplied: boolean;
+  /** Familia por defecto asignada manualmente cuando falta en CSV. */
+  defaultTintFamilyApplied: boolean;
+  /** Overrides de tipo por fila (previewRowId → tintTypeId). */
+  tintTypeOverrides: Record<string, string>;
   /** Tipo del CSV elegido para importar en esta sesión (MAYÚSCULAS). */
   activeTintTypeCsvKey: string | null;
   activeTintTypeId: string | null;
@@ -243,7 +348,18 @@ function collectBaseRowIssues(
   if (m.price == null) issues.push("Precio inválido o vacío");
   if (m.stock == null) issues.push("Stock inválido");
   if (!effectiveCat) issues.push("Falta categoría");
-  if (m.category?.trim() && !categoryFromCsvResolved) issues.push("Categoría CSV no reconocida en el sistema");
+  if (m.category?.trim() && !categoryFromCsvResolved) {
+    const csvCat = m.category.trim();
+    if (!effectiveCat) {
+      issues.push(
+        `Categoría CSV «${csvCat}» no reconocida — créala con el modal «Categorías faltantes» o corrige la columna Categoría`
+      );
+    } else {
+      issues.push(
+        `Aviso: «${csvCat}» en columna Categoría no coincide; se asignó otra categoría del sistema`
+      );
+    }
+  }
   if (effectiveCat && !tree.some((c) => c.slug === effectiveCat)) issues.push("Categoría no reconocida");
   if (effectiveCat && !subcategoryName) issues.push("Falta subcategoría");
   if (m.subcategory?.trim() && effectiveCat && !subcategoryFromCsvResolved) {
@@ -257,11 +373,13 @@ function isValidImageMatch(m: BulkPreviewImageMatch): boolean {
     m.matchedBy === "exact" ||
     m.matchedBy === "numericPrefix" ||
     m.matchedBy === "sixDigitPrefix" ||
-    m.matchedBy === "tintLevel"
+    m.matchedBy === "tintLevel" ||
+    m.matchedBy === "fuzzy"
   );
 }
 
 function isBlockingIssue(issue: string): boolean {
+  if (issue.startsWith("Aviso:")) return false;
   return issue !== "Sin imagen en ZIP para este código" && issue !== "Sin imagen en ZIP para este nivel";
 }
 
@@ -351,8 +469,22 @@ export function buildBulkPreview(params: {
       resolvedCategoryFromCsv = resolveCategorySlug(mappedBase.category, categoryTree);
       categorySlug = resolvedCategoryFromCsv;
 
+      if (!categorySlug && mappedBase.category?.trim()) {
+        const csvLooksLikeSub = resolveCategoryWhenCsvLooksLikeSubcategory(
+          mappedBase.category,
+          mappedBase.subcategory,
+          categoryTree
+        );
+        if (csvLooksLikeSub) {
+          categorySlug = csvLooksLikeSub.categorySlug;
+          subcategoryName = csvLooksLikeSub.subcategoryName;
+          subcategoryFromCsvResolved = true;
+          resolvedCategoryFromCsv = categorySlug;
+        }
+      }
+
       // 1) Si tengo categoría detectada, intento resolver sub dentro de esa categoría.
-      if (categorySlug) {
+      if (categorySlug && !subcategoryName) {
         subcategoryName = resolveSubcategoryName(categorySlug, mappedBase.subcategory, categoryTree);
         subcategoryFromCsvResolved = !!subcategoryName;
       }
@@ -366,12 +498,45 @@ export function buildBulkPreview(params: {
           subcategoryFromCsvResolved = true;
         }
       }
+
+      // 3) Inferir Tintes solo si Categoría CSV vacía o ya dice tintes, y hay columnas dedicadas.
+      const csvCategoryRaw = mappedBase.category?.trim() ?? "";
+      const mayInferTintes =
+        !csvCategoryRaw || csvCategoryLabelIsTintes(mappedBase.category);
+      if (
+        !categorySlug &&
+        mayInferTintes &&
+        !csvHasExplicitNonTintesCategory(mappedBase.category) &&
+        categoryTree.some((c) => c.slug === TINTES_CATEGORY_SLUG) &&
+        rowHasDedicatedTintCsvColumns(mappedBase)
+      ) {
+        categorySlug = TINTES_CATEGORY_SLUG;
+        resolvedCategoryFromCsv = TINTES_CATEGORY_SLUG;
+        if (!subcategoryName) {
+          const tintesCat = categoryTree.find((c) => c.slug === TINTES_CATEGORY_SLUG);
+          subcategoryName = firstSubcategoryName(tintesCat);
+          if (subcategoryName) subcategoryFromCsvResolved = true;
+        }
+      }
     }
 
-    // 3) Fallback: categoría por defecto solo si no hubo categoría desde CSV/inferencia.
+    // Fallback: categoría por defecto solo si no hubo categoría desde CSV/inferencia.
     let effectiveCat = categorySlug ?? defaultCategorySlug;
     let categoryFromCsvResolvedFlag = !!resolvedCategoryFromCsv;
     let subFromCsvResolvedFlag = subcategoryFromCsvResolved;
+
+    if (
+      effectiveCat === TINTES_CATEGORY_SLUG &&
+      csvHasExplicitNonTintesCategory(mappedBase.category)
+    ) {
+      categorySlug = null;
+      effectiveCat = defaultCategorySlug;
+      categoryFromCsvResolvedFlag = false;
+      if (!mappedBase.subcategory?.trim()) {
+        subcategoryName = null;
+        subFromCsvResolvedFlag = false;
+      }
+    }
 
     const taxonomyBeforeOverride: { categorySlug: string | null; subcategoryName: string | null } = {
       categorySlug: effectiveCat ?? null,
@@ -438,7 +603,7 @@ export function buildBulkPreview(params: {
   const rowsByTintLevel = new Map<string, number[]>();
   const tintScopeActive = !!(tintMatchScope?.typeKey && tintMatchScope?.familyKey);
   rows.forEach((r) => {
-    if (!isTintesCategory(r.mapped.categorySlug)) return;
+    if (!bulkPreviewRowIsTintes(r)) return;
     if (!tintScopeActive || !tintMatchScope) return;
     if (!rowInTintMatchScope(r, tintMatchScope)) return;
     const nivelKey = normalizeTintLevelKey(r.mapped.tintLevel);
@@ -455,6 +620,7 @@ export function buildBulkPreview(params: {
     let matchedBy: BulkPreviewImageMatch["matchedBy"] = "none";
     let matchedCsvCode: string | null = null;
     let matchedRowIndex: number | null = null;
+    let fuzzySimilarity: number | null = null;
 
     // Tintes: nombre de archivo ≈ columna Nivel del CSV (prioridad sobre código).
     const nivelKeyFromImage = normalizeTintLevelKey(img.baseName);
@@ -515,6 +681,31 @@ export function buildBulkPreview(params: {
         }
       }
     }
+
+    if (matchedBy === "none") {
+      const fuzzyHits = bestFuzzyCodeMatches(
+        [img.baseName, img.rawImageCode, img.fileName.replace(/\.[^.]+$/i, "")],
+        rows.map((r) => ({
+          rowIndex: r.rowIndex,
+          codeRaw: r.codeRaw,
+          normalizedCode: r.normalizedCode,
+        }))
+      );
+      if (fuzzyHits.length > 0) {
+        const top = fuzzyHits[0]!;
+        const tied = fuzzyHits.filter((h) => Math.abs(h.score - top.score) < 0.0001);
+        if (tied.length === 1) {
+          matchedBy = "fuzzy";
+          matchedRowIndex = top.rowIndex;
+          matchedCsvCode = top.csvCode;
+          fuzzySimilarity = top.score;
+        } else {
+          matchedBy = "ambiguous";
+          matchedCsvCode = img.rawImageCode;
+          tied.forEach((h) => ambiguousRowIndexes.add(h.rowIndex));
+        }
+      }
+    }
     }
 
     const detail: BulkPreviewImageMatch = {
@@ -523,6 +714,7 @@ export function buildBulkPreview(params: {
       numericPrefixCode: img.numericPrefixCode,
       matchedCsvCode,
       matchedBy,
+      fuzzySimilarity,
     };
     imageMatches.push(detail);
 
@@ -547,7 +739,7 @@ export function buildBulkPreview(params: {
 
   const tintLevelCount = new Map<string, number>();
   rows.forEach((r) => {
-    if (!isTintesCategory(r.mapped.categorySlug)) return;
+    if (!bulkPreviewRowIsTintes(r)) return;
     if (!tintScopeActive || !tintMatchScope) return;
     if (!rowInTintMatchScope(r, tintMatchScope)) return;
     const tk = normalizeTintLevelKey(r.mapped.tintLevel);
@@ -559,7 +751,7 @@ export function buildBulkPreview(params: {
     r.imageFileNames.sort((a, b) => a.localeCompare(b));
 
     if (!r.imageFileNames.length) {
-      if (isTintesCategory(r.mapped.categorySlug) && r.mapped.tintLevel?.trim()) {
+      if (bulkPreviewRowIsTintes(r) && r.mapped.tintLevel?.trim()) {
         if (tintScopeActive && tintMatchScope && rowInTintMatchScope(r, tintMatchScope)) {
           r.issues.push("Sin imagen en ZIP para este nivel");
         }
@@ -571,7 +763,7 @@ export function buildBulkPreview(params: {
       r.issues.push("Código duplicado en el CSV");
       ambiguousRowIndexes.add(r.rowIndex);
     }
-    if (isTintesCategory(r.mapped.categorySlug) && tintScopeActive && tintMatchScope) {
+    if (bulkPreviewRowIsTintes(r) && tintScopeActive && tintMatchScope) {
       if (!rowInTintMatchScope(r, tintMatchScope)) return;
       const tk = normalizeTintLevelKey(r.mapped.tintLevel);
       if (tk && (tintLevelCount.get(tk) ?? 0) > 1) {
@@ -606,69 +798,7 @@ export function buildBulkPreview(params: {
 
   const unmatchedImages = imageMatches.filter((m) => m.matchedBy === "none");
   const orphanFileNames = computeOrphanFiles(zipEntries, usedImageFileNames);
-  const newCategoryMap = new Map<string, { categoryName: string; subs: Set<string>; rowCount: number }>();
-  rows.forEach((r) => {
-    const rawCategory = (r.mapped.category ?? "").trim();
-    if (!rawCategory) return;
-    if (resolveTaxonomyFromCsvFixedMap(r.mapped.category, r.mapped.subcategory)) return;
-    const resolved = resolveCategorySlug(rawCategory, categoryTree);
-    if (resolved) return;
-    const key = normalizeKey(rawCategory);
-    const current = newCategoryMap.get(key) ?? {
-      categoryName: rawCategory,
-      subs: new Set<string>(),
-      rowCount: 0,
-    };
-    current.rowCount += 1;
-    const rawSub = (r.mapped.subcategory ?? "").trim();
-    if (rawSub) current.subs.add(normalizeTaxonomyNameForDb(rawSub));
-    newCategoryMap.set(key, current);
-  });
-
-  /** Subcategoría en CSV no reconocida dentro de la categoría efectiva (categoría sí existe en sistema). */
-  const newSubsByParentSlug = new Map<
-    string,
-    { parentCategorySlug: string; parentCategoryName: string; subs: Set<string>; rowCount: number }
-  >();
-  rows.forEach((r) => {
-    if (!r.issues.includes("Subcategoría CSV no reconocida en la categoría detectada")) return;
-    const slug = r.mapped.categorySlug;
-    if (!slug) return;
-    const rawSub = (r.mapped.subcategory ?? "").trim();
-    if (!rawSub) return;
-    const catRow = categoryTree.find((c) => c.slug === slug);
-    const parentCategoryName = catRow?.name ?? slug;
-    const current = newSubsByParentSlug.get(slug) ?? {
-      parentCategorySlug: slug,
-      parentCategoryName,
-      subs: new Set<string>(),
-      rowCount: 0,
-    };
-    current.rowCount += 1;
-    current.subs.add(normalizeTaxonomyNameForDb(rawSub));
-    newSubsByParentSlug.set(slug, current);
-  });
-
-  const fromNewCategories: BulkPreviewNewTaxonomyItem[] = Array.from(newCategoryMap.values()).map((x) => ({
-    kind: "newCategory" as const,
-    categoryName: x.categoryName,
-    subcategories: Array.from(x.subs).sort((a, b) => a.localeCompare(b)),
-    rowCount: x.rowCount,
-  }));
-
-  const fromNewSubsOnly: BulkPreviewNewTaxonomyItem[] = Array.from(newSubsByParentSlug.values()).map((x) => ({
-    kind: "newSubcategoriesOnly" as const,
-    parentCategorySlug: x.parentCategorySlug,
-    parentCategoryName: x.parentCategoryName,
-    subcategories: Array.from(x.subs).sort((a, b) => a.localeCompare(b)),
-    rowCount: x.rowCount,
-  }));
-
-  const taxonomySortLabel = (x: BulkPreviewNewTaxonomyItem) =>
-    x.kind === "newCategory" ? x.categoryName : x.parentCategoryName;
-  const newCategories = [...fromNewCategories, ...fromNewSubsOnly].sort(
-    (a, b) => b.rowCount - a.rowCount || taxonomySortLabel(a).localeCompare(taxonomySortLabel(b))
-  );
+  const newCategories = buildPreviewNewTaxonomyItems(rows, categoryTree);
 
   const hintAgg = new Map<
     string,
@@ -756,6 +886,11 @@ export function buildBulkPreview(params: {
     csvTintTypeOptions: [],
     csvTintFamilyOptions: [],
     hasTintesRows: false,
+    csvMissingTintType: false,
+    tintRowsWithoutCsvType: 0,
+    defaultTintTypeApplied: false,
+    defaultTintFamilyApplied: false,
+    tintTypeOverrides: {},
     activeTintTypeCsvKey: null,
     activeTintTypeId: null,
     activeTintTypeLabel: null,

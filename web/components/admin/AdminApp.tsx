@@ -11,6 +11,7 @@ import {
   deleteAdminCategory,
   deleteAdminSubcategory,
   fetchAdminCategories,
+  normalizeAdminCategoryTexts,
   updateAdminCategory,
   updateAdminSubcategory,
 } from "@/lib/api/admin-categories";
@@ -26,11 +27,13 @@ import {
 } from "@/lib/api/admin-products";
 import { runAdminProductsAiCompleteParallel } from "@/lib/api/admin-products-ai-runner";
 import { productNeedsAiComplete, productNeedsDescription, type AiCompleteFieldOptions } from "@/lib/product-ai-fields";
+import { normalizeColorHex } from "@/lib/product-color";
 import {
   buildPrimaryVariantByGroup,
   buildVariantCountByGroup,
   collapseProductsForAdminList,
   groupListThumbnail,
+  listVariantsInGroup,
   resolveAdminListRowsAfterFilter,
 } from "@/lib/admin/variant-groups";
 import { AdminCategoryStorefrontPanel } from "@/components/admin/AdminCategoryStorefrontPanel";
@@ -39,6 +42,7 @@ import {
   type AiBulkProgressItem,
 } from "@/components/admin/AdminAiBulkProgressModal";
 import { AdminProductVariantsModal } from "@/components/admin/AdminProductVariantsModal";
+import { AdminProductColorModal } from "@/components/admin/AdminProductColorModal";
 import { AdminBulkTemplateModal } from "@/components/admin/AdminBulkTemplateModal";
 import { AdminProductAiDetailPanel, AdminProductDescriptionBlock } from "@/components/admin/AdminProductAiUi";
 import { menuTagForProduct, productOwnTags, tagsToInputValue } from "@/lib/product-tags";
@@ -53,9 +57,21 @@ import {
   patchBulkImportJob,
   postBulkImportCommit,
   postBulkImportPreview,
+  postBulkZipOptimize,
   postTintResolveCatalog,
+  type BulkPreviewResponse,
 } from "@/lib/api/admin-bulk-import";
 import { bulkImportStableRowId } from "@/lib/bulk-import/bulk-import-row-id";
+import {
+  bulkRowBlockingIssues,
+  bulkRowIsReadyForVariantGroupAssign,
+  bulkRowIsVariantGroupAssign,
+} from "@/lib/bulk-import/variant-group-assign";
+import {
+  formatZipBytes,
+  inspectZipFileClient,
+  type ZipInspectResult,
+} from "@/lib/bulk-import/zip-client-inspect";
 import { normalizeKey } from "@/lib/bulk-import/normalize";
 import type {
   BulkPreviewNewTaxonomyItem,
@@ -64,12 +80,21 @@ import type {
 } from "@/lib/bulk-import/build-preview";
 import { taxonomyPairKey, normalizeTaxonomyNameForDb } from "@/lib/bulk-import/category-resolve";
 import { effectiveProductTitle } from "@/lib/bulk-import/semantic-map";
-import { isTintesCategory, effectiveTintFamily } from "@/lib/bulk-import/tintes";
+import {
+  effectiveTintFamily,
+  bulkPreviewRowIsTintes,
+} from "@/lib/bulk-import/tintes";
 import {
   buildCsvTintFamilyOptions,
+  countTintRowsInPreview,
   normalizeTintCatalogName,
 } from "@/lib/bulk-import/tint-catalog";
 import type { CsvTintTypeOption } from "@/lib/bulk-import/tint-catalog";
+import {
+  computeBulkCsvZipMatchBreakdown,
+  formatBulkMatchPercent,
+  isBulkCsvZipMatchRateTooLow,
+} from "@/lib/bulk-import/match-rate";
 
 import { isHttpImageUrl } from "@/lib/util/image-url";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
@@ -1253,6 +1278,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                     });
                     await loadProducts();
                   }}
+                  onProductsRefresh={loadProducts}
                   showToast={showToast}
                 />
               )}
@@ -1477,6 +1503,7 @@ function AdminProductListTab({
   onView,
   onDelete,
   onDeleteVariant,
+  onProductsRefresh,
   showToast,
 }: {
   productSearch: string;
@@ -1506,10 +1533,13 @@ function AdminProductListTab({
   onView: (p: AdminProduct) => void;
   onDelete: (id: string) => void | Promise<void>;
   onDeleteVariant: (id: string) => void | Promise<void>;
+  onProductsRefresh: () => void | Promise<void>;
   showToast: (msg: string, type?: string, icon?: string) => void;
 }) {
   const [variantsModalProduct, setVariantsModalProduct] = useState<AdminProduct | null>(null);
   const [variantDeletingId, setVariantDeletingId] = useState<string | null>(null);
+  const [colorModalProduct, setColorModalProduct] = useState<AdminProduct | null>(null);
+  const [colorSaving, setColorSaving] = useState(false);
 
   const variantCountByGroup = useMemo(() => buildVariantCountByGroup(allProducts), [allProducts]);
   const primaryByGroup = useMemo(() => buildPrimaryVariantByGroup(allProducts), [allProducts]);
@@ -1517,7 +1547,7 @@ function AdminProductListTab({
   useEffect(() => {
     if (!variantsModalProduct?.variantGroupCode?.trim()) return;
     const code = variantsModalProduct.variantGroupCode.trim();
-    const inGroup = allProducts.filter((p) => p.variantGroupCode?.trim() === code);
+    const inGroup = listVariantsInGroup(allProducts, code);
     if (inGroup.length < 1) {
       setVariantsModalProduct(null);
       return;
@@ -1669,6 +1699,7 @@ function AdminProductListTab({
               <th>Precio</th>
               <th>Stock</th>
               <th style={{ textAlign: "center" }}>Variantes</th>
+              <th style={{ textAlign: "center" }}>Color</th>
               <th>Estado</th>
               <th>Acciones</th>
             </tr>
@@ -1676,13 +1707,13 @@ function AdminProductListTab({
           <tbody>
             {listLoading && filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                <td colSpan={11} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   Cargando…
                 </td>
               </tr>
             ) : filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                <td colSpan={11} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   {totalProductCount === 0
                     ? "Sin productos"
                     : "Ningún producto coincide con la búsqueda o los filtros seleccionados."}
@@ -1696,6 +1727,7 @@ function AdminProductListTab({
                 const variantCount = groupCode ? (variantCountByGroup.get(groupCode) ?? 0) : 0;
                 const listThumb = groupListThumbnail(p, primaryByGroup);
                 const isGroupRow = variantCount >= 2;
+                const colorHex = normalizeColorHex(p.colorHex);
                 return (
                   <tr key={p.id}>
                     <td style={{ textAlign: "center", verticalAlign: "middle" }}>
@@ -1764,6 +1796,50 @@ function AdminProductListTab({
                         <span style={{ color: "var(--text-muted)" }}>—</span>
                       )}
                     </td>
+                    <td style={{ textAlign: "center", verticalAlign: "middle" }}>
+                      {colorHex ? (
+                        <button
+                          type="button"
+                          title={`Color ${colorHex}${p.colorName ? ` · ${p.colorName}` : ""}`}
+                          onClick={() => setColorModalProduct(p)}
+                          style={{
+                            display: "inline-flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: 4,
+                            border: "none",
+                            background: "none",
+                            cursor: "pointer",
+                            padding: 0,
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: "50%",
+                              backgroundColor: colorHex,
+                              border: "2px solid white",
+                              boxShadow: "0 0 0 1px var(--line)",
+                              display: "block",
+                            }}
+                          />
+                          {p.colorName?.trim() ? (
+                            <span style={{ fontSize: 10, color: "var(--text-muted)", maxWidth: 72, lineHeight: 1.2 }}>
+                              {p.colorName.trim()}
+                            </span>
+                          ) : null}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          onClick={() => setColorModalProduct(p)}
+                        >
+                          Agregar color
+                        </button>
+                      )}
+                    </td>
                     <td>
                       <span className={`status-chip ${stockStatus}`}>{stockLabel}</span>
                     </td>
@@ -1798,6 +1874,31 @@ function AdminProductListTab({
             showToast(e instanceof Error ? e.message : "No se pudo eliminar", "danger", "⚠️");
           } finally {
             setVariantDeletingId(null);
+          }
+        }}
+        onEditVariantColor={(variant) => setColorModalProduct(variant)}
+      />
+      <AdminProductColorModal
+        open={colorModalProduct != null}
+        product={colorModalProduct}
+        saving={colorSaving}
+        onClose={() => setColorModalProduct(null)}
+        onSave={async (payload) => {
+          if (!colorModalProduct) return;
+          setColorSaving(true);
+          try {
+            await updateAdminProduct(colorModalProduct.id, payload);
+            showToast(
+              payload.colorHex ? "Color guardado" : "Color eliminado",
+              "success",
+              "🎨"
+            );
+            setColorModalProduct(null);
+            await onProductsRefresh();
+          } catch (e) {
+            showToast(e instanceof Error ? e.message : "No se pudo guardar el color", "danger", "⚠️");
+          } finally {
+            setColorSaving(false);
           }
         }}
       />
@@ -2085,6 +2186,10 @@ function AdminBulkTab({
 }) {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [zipFile, setZipFile] = useState<File | null>(null);
+  const [zipInspect, setZipInspect] = useState<ZipInspectResult | null>(null);
+  const [zipInspecting, setZipInspecting] = useState(false);
+  const [zipOptimizing, setZipOptimizing] = useState(false);
+  const [zipOptimized, setZipOptimized] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [preview, setPreview] = useState<BulkPreviewResult | null>(null);
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
@@ -2100,6 +2205,8 @@ function AdminBulkTab({
   const [tintModalDismissed, setTintModalDismissed] = useState(false);
   const [resolvingTintType, setResolvingTintType] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showLowMatchModal, setShowLowMatchModal] = useState(false);
+  const [pendingAnalyzeResult, setPendingAnalyzeResult] = useState<BulkPreviewResponse | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [editingTaxonomyRowId, setEditingTaxonomyRowId] = useState<string | null>(null);
   const [manualCategorySlug, setManualCategorySlug] = useState("");
@@ -2134,6 +2241,10 @@ function AdminBulkTab({
     setExpiresAt(null);
     setCsvFile(null);
     setZipFile(null);
+    setZipInspect(null);
+    setZipInspecting(false);
+    setZipOptimizing(false);
+    setZipOptimized(false);
     setSelectedRowIds([]);
     setExistingPolicy("skip");
     setShowNewCategoriesModal(false);
@@ -2144,9 +2255,36 @@ function AdminBulkTab({
     setTintModalDismissed(false);
     setResolvingTintType(false);
     setIsAnalyzing(false);
+    setShowLowMatchModal(false);
+    setPendingAnalyzeResult(null);
     bulkProgress.reset();
     setFileInputKey((k) => k + 1);
   };
+
+  useEffect(() => {
+    if (!zipFile) {
+      setZipInspect(null);
+      setZipOptimized(false);
+      return;
+    }
+
+    let cancelled = false;
+    setZipInspecting(true);
+    void inspectZipFileClient(zipFile)
+      .then((result) => {
+        if (!cancelled) setZipInspect(result);
+      })
+      .catch(() => {
+        if (!cancelled) setZipInspect(null);
+      })
+      .finally(() => {
+        if (!cancelled) setZipInspecting(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [zipFile]);
 
   const prepareForNewAnalyze = useCallback(
     (previousJobId: string | null) => {
@@ -2158,6 +2296,8 @@ function AdminBulkTab({
       setShowTaxonomyHintsModal(false);
       setShowNewCategoriesModal(false);
       setNewCategoriesModalAcknowledged(false);
+      setShowLowMatchModal(false);
+      setPendingAnalyzeResult(null);
       setEditingTaxonomyRowId(null);
       setJobId(null);
       setPreview(null);
@@ -2170,6 +2310,58 @@ function AdminBulkTab({
       }
     },
     [bulkProgress]
+  );
+
+  const applyAnalyzeResult = useCallback(
+    (res: BulkPreviewResponse) => {
+      setJobId(res.jobId);
+      setPreview(res.preview);
+      setExpiresAt(res.expiresAt);
+      setSelectedRowIds(
+        res.preview.csvHasVariantGroupColumn
+          ? (() => {
+              const rows = res.preview.rows ?? [];
+              const groupable = rows.filter((r) =>
+                bulkRowIsReadyForVariantGroupAssign(r, "skip")
+              );
+              if (groupable.length > 0) {
+                return groupable.map(bulkImportStableRowId);
+              }
+              return rows
+                .filter((r) => r.mapped.variantGroupCode?.trim() && r.normalizedCode)
+                .map(bulkImportStableRowId);
+            })()
+          : (res.preview.matchedRows ?? [])
+              .filter((r) => !r.isExistingProduct)
+              .map(bulkImportStableRowId)
+      );
+      const hintN = res.preview.taxonomyRehomeHints?.length ?? 0;
+      const newN = res.preview.newCategories?.length ?? 0;
+      if (hintN > 0) {
+        showToast(
+          `Hay ${hintN} sugerencia(s) de reubicación de categoría/subcategoría. Revísalas en el modal.`,
+          "default",
+          "💡"
+        );
+      } else if (newN > 0) {
+        showToast(
+          newN > 0
+            ? "Hay productos nuevos que necesitan categorías en el sistema. Revisa el modal."
+            : "Análisis listo. Puedes agrupar variantes de productos ya registrados.",
+          "default",
+          newN > 0 ? "🆕" : "📦"
+        );
+      } else {
+        showToast("Vista previa lista. Revisa columnas y filas.", "success", "🔍");
+      }
+    },
+    [showToast]
+  );
+
+  const pendingLowMatchBreakdown = useMemo(
+    () =>
+      pendingAnalyzeResult ? computeBulkCsvZipMatchBreakdown(pendingAnalyzeResult.preview.stats) : null,
+    [pendingAnalyzeResult]
   );
 
   useEffect(() => {
@@ -2202,8 +2394,10 @@ function AdminBulkTab({
     return Array.isArray(raw) ? raw : [];
   }, [preview]);
 
-  const needsTintSelection =
-    preview?.hasTintesRows === true && preview.tintSelectionResolved !== true;
+  const needsTintSelection = useMemo(() => {
+    if (preview?.hasTintesRows !== true || preview.tintSelectionResolved === true) return false;
+    return (preview.rows ?? []).some((row) => bulkPreviewRowIsTintes(row) && !row.isExistingProduct);
+  }, [preview]);
 
   const tintTypeOptions = useMemo(() => preview?.csvTintTypeOptions ?? [], [preview]);
 
@@ -2245,13 +2439,7 @@ function AdminBulkTab({
     const sourceRows = preview.csvHasVariantGroupColumn ? preview.rows : preview.matchedRows;
     const next = new Set<string>();
     for (const r of sourceRows) {
-      const blocking = r.issues.filter((x) => {
-        if (x === "Sin imagen en ZIP para este código") return false;
-        if (x === "Sin imagen en ZIP para este nivel") return false;
-        if (x === "Producto ya registrado") return false;
-        if (x === "Código de barras distinto al registrado en tienda") return false;
-        return true;
-      });
+      const blocking = bulkRowBlockingIssues(r, existingPolicy);
       if (blocking.length === 0 && r.normalizedCode) next.add(bulkImportStableRowId(r));
     }
     setSelectedRowIds(Array.from(next));
@@ -2260,7 +2448,7 @@ function AdminBulkTab({
   const selectAllForVariantGroups = () => {
     if (!preview?.csvHasVariantGroupColumn) return;
     const next = (preview.rows ?? [])
-      .filter((r) => r.mapped.variantGroupCode?.trim() && r.normalizedCode)
+      .filter((r) => bulkRowIsReadyForVariantGroupAssign(r, "skip"))
       .map(bulkImportStableRowId);
     setSelectedRowIds(next);
   };
@@ -2279,20 +2467,16 @@ function AdminBulkTab({
       : preview?.matchedRows ?? [];
     return sourceRows.map((r) => {
         const previewRowId = bulkImportStableRowId(r);
-        const blockingErrors = r.issues.filter((x) => {
-          if (x === "Sin imagen en ZIP para este código") return false;
-          if (x === "Sin imagen en ZIP para este nivel") return false;
-          if (x === "Producto ya registrado") return false;
-          if (x === "Código de barras distinto al registrado en tienda") return false;
-          return true;
-        });
+        const variantGroupAssign = bulkRowIsVariantGroupAssign(r, existingPolicy);
+        const blockingErrors = bulkRowBlockingIssues(r, existingPolicy);
         const hasExisting = r.isExistingProduct;
         const hasImageMatch = r.imageMatches.some(
           (m) =>
             m.matchedBy === "exact" ||
             m.matchedBy === "numericPrefix" ||
             m.matchedBy === "sixDigitPrefix" ||
-            m.matchedBy === "tintLevel"
+            m.matchedBy === "tintLevel" ||
+            m.matchedBy === "fuzzy"
         );
         const categoryLabel = r.mapped.categorySlug
           ? categoryDisplayName(r.mapped.categorySlug, categories)
@@ -2320,7 +2504,7 @@ function AdminBulkTab({
           tintTypeId: r.tintTypeId,
           tintLevelValue: r.mapped.tintLevel,
           tintGroupValue: r.mapped.tintGroup,
-          isTintesRow: isTintesCategory(r.mapped.categorySlug, categoryLabel),
+          isTintesRow: bulkPreviewRowIsTintes(r),
           tagsValue: r.mapped.tags ?? [],
           matchedImages: r.imageMatches,
           hasImageMatch,
@@ -2331,14 +2515,34 @@ function AdminBulkTab({
             (x) =>
               x === "Sin imagen en ZIP para este código" ||
               x === "Sin imagen en ZIP para este nivel" ||
-              x === "Código de barras distinto al registrado en tienda"
+              x === "Código de barras distinto al registrado en tienda" ||
+              x.startsWith("Aviso:")
           ),
           hasExisting,
+          variantGroupAssign,
+          readyForVariantGroup: bulkRowIsReadyForVariantGroupAssign(r, existingPolicy),
           existingProductName: r.existingProductName,
           existingVariantGroupCode: r.existingVariantGroupCode,
         };
       });
-  }, [preview, selectedRowIdSet, categories]);
+  }, [preview, selectedRowIdSet, categories, existingPolicy]);
+
+  const selectedVariantGroupRowIds = useMemo(() => {
+    if (!preview) return [];
+    const source = preview.csvHasVariantGroupColumn ? preview.rows ?? [] : preview.matchedRows ?? [];
+    return source
+      .filter(
+        (r) =>
+          selectedRowIdSet.has(bulkImportStableRowId(r)) &&
+          bulkRowIsReadyForVariantGroupAssign(r, "skip")
+      )
+      .map(bulkImportStableRowId);
+  }, [preview, selectedRowIdSet]);
+
+  const selectedNewProductRowIds = useMemo(
+    () => selectedRowIds.filter((id) => !selectedVariantGroupRowIds.includes(id)),
+    [selectedRowIds, selectedVariantGroupRowIds]
+  );
 
   const previewRowsByBarcodeGroup = useMemo(() => {
     if (!preview?.csvHasVariantGroupColumn) return null;
@@ -2490,7 +2694,9 @@ function AdminBulkTab({
                         ? "prefijo"
                         : m.matchedBy === "sixDigitPrefix"
                           ? "6 dígitos"
-                          : "exacto";
+                          : m.matchedBy === "fuzzy"
+                            ? `similitud ${m.fuzzySimilarity != null ? `${Math.round(m.fuzzySimilarity * 100)}%` : "≥85%"}`
+                            : "exacto";
                   return `${m.imageFilename} (${how})`;
                 })
                 .join(", ")
@@ -2498,16 +2704,20 @@ function AdminBulkTab({
         </td>
         <td style={{ fontSize: 12 }}>
           {ok ? (
-            <span style={{ color: r.hasExisting ? "#b00020" : "green" }}>
-              {r.hasExisting
-                ? existingPolicy === "replace"
-                  ? "↺ Reemplazar"
-                  : "⛔ Ya registrado"
-                : !r.hasImageMatch
-                  ? "⚠ Sin foto"
-                  : warnOnly
-                    ? "⚠ Aviso"
-                    : "✓ OK"}
+            <span style={{ color: r.readyForVariantGroup ? "#2e7d5a" : r.hasExisting ? "#b00020" : "green" }}>
+              {r.readyForVariantGroup
+                ? "📦 Listo para agrupar"
+                : r.hasExisting
+                  ? existingPolicy === "replace"
+                    ? "↺ Reemplazar"
+                    : r.barcodeRaw
+                      ? "⚠ Revisar fila"
+                      : "⛔ Sin código de barras"
+                  : !r.hasImageMatch
+                    ? "⚠ Sin foto"
+                    : warnOnly
+                      ? "⚠ Aviso"
+                      : "✓ OK"}
             </span>
           ) : (
             <span style={{ color: "var(--danger, #b00020)" }} title={r.errors.join(" · ")}>
@@ -2633,10 +2843,9 @@ function AdminBulkTab({
         <strong>Flujo:</strong> sube un <strong>CSV</strong> (encabezados en la primera fila) y un <strong>ZIP</strong> con fotos cuyo{" "}
         <strong>nombre de archivo</strong> (sin extensión) coincide con la <strong>columna de código</strong> del CSV. Si incluyes una columna de{" "}
         <strong>código de barras</strong> (p. ej. «Barras», «Código de barras»), las filas con el mismo valor se agrupan como{" "}
-        <strong>variantes del mismo producto</strong>. Al volver a subir un CSV, el sistema detecta códigos ya registrados y los muestra
-        organizados por grupo. Pulsa <strong>Analizar</strong> para ver el resumen y la tabla; luego <strong>Importar seleccionados</strong> crea
-        productos y sube imágenes a Bunny. Si el CSV incluye una columna de <strong>etiquetas</strong> (p. ej. &quot;Etiquetas&quot;, &quot;Tags&quot;),
-        puedes listar varias separadas por coma, punto y coma o |. Máx. 500 filas y 2&nbsp;MB CSV / 50&nbsp;MB ZIP.
+        <strong>variantes del mismo producto</strong>. Si los productos <strong>ya están registrados</strong>, usa{" "}
+        <strong>«Agrupar productos como variantes»</strong> (no hace falta volver a importarlos). Pulsa <strong>Analizar</strong> para ver el
+        resumen; <strong>Importar productos nuevos</strong> solo crea filas que aún no existen en tienda. Máx. 500 filas y 2&nbsp;MB CSV / 50&nbsp;MB ZIP.
       </div>
 
       <div
@@ -2686,11 +2895,102 @@ function AdminBulkTab({
             type="file"
             accept=".zip,application/zip"
             className="form-input"
-            disabled={saving || isAnalyzing}
-            onChange={(e) => setZipFile(e.target.files?.[0] ?? null)}
+            disabled={saving || isAnalyzing || zipOptimizing}
+            onChange={(e) => {
+              setZipFile(e.target.files?.[0] ?? null);
+              setZipOptimized(false);
+            }}
           />
           {zipFile && (
             <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>✓ {zipFile.name}</div>
+          )}
+          {zipFile && (
+            <div
+              className="admin-bulk-zip-stats"
+              style={{
+                marginTop: 10,
+                padding: 10,
+                borderRadius: "var(--radius-md)",
+                background: "var(--ivory)",
+                border: "1px solid var(--cream)",
+                fontSize: 12,
+                lineHeight: 1.5,
+              }}
+            >
+              {zipInspecting ? (
+                <span>Analizando imágenes del ZIP…</span>
+              ) : zipInspect ? (
+                <>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px", marginBottom: 8 }}>
+                    <span>
+                      <strong>ZIP:</strong> {formatZipBytes(zipInspect.zipBytes)}
+                    </span>
+                    <span>
+                      <strong>Imágenes:</strong> {zipInspect.imageCount}
+                    </span>
+                    <span>
+                      <strong>Peso imágenes:</strong> {formatZipBytes(zipInspect.totalImageBytes)}
+                    </span>
+                    {zipInspect.largest ? (
+                      <span>
+                        <strong>Mayor:</strong> {zipInspect.largest.fileName} ({formatZipBytes(zipInspect.largest.bytes)})
+                      </span>
+                    ) : null}
+                  </div>
+                  {zipOptimized ? (
+                    <div style={{ color: "var(--sage-dark, #4a6b4a)", marginBottom: 8 }}>
+                      ✓ ZIP optimizado a WebP. Puedes analizar el CSV con este archivo.
+                    </div>
+                  ) : (
+                    <p style={{ margin: "0 0 8px", color: "var(--text-muted)" }}>
+                      Convierte las fotos a WebP (máx. 1200px, calidad 82) para subir más rápido y ahorrar espacio.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    disabled={zipOptimizing || zipInspecting || saving || isAnalyzing || zipInspect.imageCount === 0}
+                    onClick={() => {
+                      if (!zipFile || zipOptimizing) return;
+                      void (async () => {
+                        setZipOptimizing(true);
+                        setMutation("bulk");
+                        setBulkProgressLabel("Optimizando imágenes a WebP…");
+                        bulkProgress.start("optimize");
+                        try {
+                          const result = await postBulkZipOptimize(zipFile);
+                          bulkProgress.finish();
+                          setZipFile(result.file);
+                          setZipOptimized(true);
+                          showToast(
+                            `Optimizado: ${formatZipBytes(result.beforeBytes)} → ${formatZipBytes(result.afterBytes)} (−${result.savedPercent}%)`,
+                            "success",
+                            "✨",
+                          );
+                        } catch (e) {
+                          bulkProgress.reset();
+                          showToast(e instanceof Error ? e.message : "Error al optimizar ZIP", "danger", "⚠️");
+                        } finally {
+                          setZipOptimizing(false);
+                          setMutation(null);
+                        }
+                      })();
+                    }}
+                  >
+                    {zipOptimizing ? (
+                      <>
+                        <span className="admin-inline-spinner" aria-hidden />
+                        Optimizando…
+                      </>
+                    ) : (
+                      "✨ Optimizar imágenes (WebP)"
+                    )}
+                  </button>
+                </>
+              ) : (
+                <span>No se detectaron imágenes en el ZIP.</span>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -2715,30 +3015,16 @@ function AdminBulkTab({
                 fd.append("zip", zipFile);
                 const res = await postBulkImportPreview(fd);
                 bulkProgress.finish();
-                setJobId(res.jobId);
-                setPreview(res.preview);
-                setExpiresAt(res.expiresAt);
-                setSelectedRowIds(
-                  res.preview.csvHasVariantGroupColumn
-                    ? (res.preview.rows ?? [])
-                        .filter((r) => r.mapped.variantGroupCode?.trim() && r.normalizedCode)
-                        .map(bulkImportStableRowId)
-                    : (res.preview.matchedRows ?? [])
-                        .filter((r) => !r.isExistingProduct)
-                        .map(bulkImportStableRowId)
-                );
-                const hintN = res.preview.taxonomyRehomeHints?.length ?? 0;
-                const newN = res.preview.newCategories?.length ?? 0;
-                if (hintN > 0) {
+                if (isBulkCsvZipMatchRateTooLow(res.preview.stats)) {
+                  setPendingAnalyzeResult(res);
+                  setShowLowMatchModal(true);
                   showToast(
-                    `Hay ${hintN} sugerencia(s) de reubicación de categoría/subcategoría. Revísalas en el modal.`,
+                    "Casi no hubo coincidencias entre el CSV y el ZIP. Confirma que subiste los archivos correctos.",
                     "default",
-                    "💡"
+                    "⚠️"
                   );
-                } else if (newN > 0) {
-                  showToast("Se detectaron categorías o subcategorías nuevas. Revísalas antes de importar.", "default", "🆕");
                 } else {
-                  showToast("Vista previa lista. Revisa columnas y filas.", "success", "🔍");
+                  applyAnalyzeResult(res);
                 }
               } catch (e) {
                 bulkProgress.reset();
@@ -2891,7 +3177,7 @@ function AdminBulkTab({
             </button>
             {preview?.csvHasVariantGroupColumn && (
               <button type="button" className="btn btn-outline btn-sm" onClick={selectAllForVariantGroups}>
-                Seleccionar todos los grupos de barras
+                Seleccionar productos registrados para agrupar
               </button>
             )}
             <button type="button" className="btn btn-outline btn-sm" onClick={clearSelection}>
@@ -2902,6 +3188,28 @@ function AdminBulkTab({
               {preview.csvHasVariantGroupColumn ? " en CSV" : " con match de imagen"}
             </span>
           </div>
+
+          {!preview.csvHasVariantGroupColumn && (preview.stats.existingProductRows ?? 0) > 0 && (
+            <div
+              style={{
+                marginBottom: 14,
+                padding: "12px 16px",
+                borderRadius: "var(--radius-md)",
+                background: "#fff8e6",
+                border: "1px solid #e6c84a",
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}
+            >
+              <strong>Productos ya registrados detectados</strong>
+              <p style={{ margin: "6px 0 0" }}>
+                {preview.stats.existingProductRows} fila(s) coinciden con códigos que ya están en tienda. Para agruparlos
+                como variantes, añade una columna <strong>Barras</strong> (o «Código de barras») en el CSV con el mismo
+                valor en las filas que deben unirse, vuelve a analizar y usa{" "}
+                <strong>«Agrupar productos como variantes»</strong>.
+              </p>
+            </div>
+          )}
 
           {preview.csvHasVariantGroupColumn && (preview.variantGroups?.length ?? 0) > 0 && (
             <div
@@ -2915,8 +3223,24 @@ function AdminBulkTab({
                 lineHeight: 1.5,
               }}
             >
-              <strong>Grupos de variantes (código de barras):</strong> {preview.stats.variantGroupCount ?? 0} grupo(s) ·{" "}
-              {preview.stats.existingInVariantGroups ?? 0} variante(s) del CSV ya registrada(s) en tienda.
+              <strong>Agrupación por variantes (columna Barras)</strong>
+              <p style={{ margin: "6px 0 0" }}>
+                {preview.stats.existingProductRows ?? 0} producto(s) del CSV <strong>ya están en tienda</strong> por su
+                código. Usa <strong>«Agrupar productos como variantes»</strong>: no se vuelven a crear, solo se asigna el
+                código de barras para unirlos en la tienda.
+              </p>
+              <p style={{ margin: "6px 0 0", color: "var(--text-muted)" }}>
+                {preview.stats.variantGroupCount ?? 0} grupo(s) detectado(s) ·{" "}
+                {preview.stats.existingInVariantGroups ?? 0} variante(s) ya registrada(s) en esos grupos.
+              </p>
+              {(preview.variantGroups ?? []).filter((g) => g.rowCount < 2).length > 0 && (
+                <p style={{ margin: "8px 0 0", color: "var(--dusty-rose)" }}>
+                  <strong>Atención:</strong>{" "}
+                  {(preview.variantGroups ?? []).filter((g) => g.rowCount < 2).length} fila(s) tienen un código
+                  Barras <strong>único</strong> en el CSV. Esas filas no se unirán con otras: varias filas deben
+                  compartir exactamente el mismo valor en la columna Barras.
+                </p>
+              )}
               {previewTableRows.some((r) => r.warnings.some((w) => w.includes("Código de barras distinto"))) && (
                 <span style={{ display: "block", marginTop: 6, color: "var(--dusty-rose)" }}>
                   Algunas filas tienen un código de barras distinto al guardado; con «Reemplazar» se actualizará al del CSV.
@@ -2927,7 +3251,7 @@ function AdminBulkTab({
 
           <div className="admin-bulk-policy-row">
             <label className="form-label" style={{ marginBottom: 6, display: "block" }}>
-              Producto ya registrado (mismo código en tienda)
+              Productos ya registrados en tienda
             </label>
             <select
               className="form-select"
@@ -2935,13 +3259,13 @@ function AdminBulkTab({
               value={existingPolicy}
               onChange={(e) => setExistingPolicy(e.target.value as "skip" | "replace")}
             >
-              <option value="skip">Omitir existentes y solo asignar grupo de barras / variantes</option>
+              <option value="skip">Solo agrupar como variantes (no modificar datos del producto)</option>
               <option value="replace">Reemplazar datos del producto ya registrado</option>
             </select>
             <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "10px 0 0", lineHeight: 1.45 }}>
-              Con «Omitir…», los productos que ya existen no cambian nombre, precio ni imágenes, pero sí se les asigna el
-              código de barras del CSV para agruparlos como variantes. Usa «Reemplazar» solo si quieres actualizar todo el
-              producto desde el CSV.
+              Para productos que <strong>ya existen</strong>, usa el botón <strong>«Agrupar productos como variantes»</strong>.
+              No se vuelven a crear ni se suben imágenes de nuevo: solo se asigna el código de barras del CSV para unirlos
+              en la tienda. «Reemplazar» actualiza nombre, precio e imágenes desde el CSV.
             </p>
           </div>
 
@@ -3112,9 +3436,11 @@ function AdminBulkTab({
                           ? "numericPrefix"
                           : m.matchedBy === "sixDigitPrefix"
                             ? "sixDigitPrefix"
-                            : m.matchedBy === "ambiguous"
-                              ? "ambiguous"
-                              : "none"}
+                            : m.matchedBy === "fuzzy"
+                              ? `fuzzy${m.fuzzySimilarity != null ? ` (${Math.round(m.fuzzySimilarity * 100)}%)` : ""}`
+                              : m.matchedBy === "ambiguous"
+                                ? "ambiguous"
+                                : "none"}
                     </td>
                   </tr>
                 ))}
@@ -3129,78 +3455,174 @@ function AdminBulkTab({
             </table>
           </div>
 
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={
-              saving ||
-              selectedRowIds.length === 0 ||
-              needsTintSelection ||
-              (pendingNewCategories.length > 0 && !newCategoriesModalAcknowledged) ||
-              taxonomyRehomeHints.length > 0
-            }
-            onClick={() => {
-              void (async () => {
-                setMutation("bulk");
-                setBulkProgressLabel("Importando productos y subiendo imágenes…");
-                bulkProgress.start("import");
-                try {
-                  const res = await postBulkImportCommit(jobId, [...selectedRowIds].sort(), existingPolicy);
-                  bulkProgress.finish();
-                  const grouped = res.variantGroupsAssigned ?? 0;
-                  if (grouped > 0) {
-                    showToast(
-                      `Grupos de variantes aplicados a ${grouped} producto(s). Revisa la columna «Variantes» en la lista.`,
-                      "success",
-                      "📦"
-                    );
-                  }
-                  const created = res.imported - grouped;
-                  if (created > 0) {
-                    showToast(`Importados ${created} producto(s) nuevo(s)`, "success", "🎉");
-                  }
-                  const skipped = res.skippedExistingDuplicates ?? 0;
-                  if (skipped > 0) {
-                    showToast(
-                      `${skipped} fila(s) omitida(s): ya registradas y sin código de barras en el CSV.`,
-                      "default",
-                      "⏭️"
-                    );
-                  }
-                  if (res.imported === 0 && grouped === 0 && skipped === 0 && res.failed === 0) {
-                    showToast(
-                      "No se aplicaron cambios. Selecciona filas (Sel.) con código de barras e importa de nuevo.",
-                      "default",
-                      "ℹ️"
-                    );
-                  }
-                  if (res.failed > 0) {
-                    showToast(`${res.failed} error(es). Revisa consola o mensajes.`, "danger", "⚠️");
-                  }
-                  await onImported();
-                  resetSession();
-                } catch (e) {
-                  bulkProgress.reset();
-                  showToast(e instanceof Error ? e.message : "Error al importar", "danger", "⚠️");
-                } finally {
-                  setMutation(null);
-                }
-              })();
-            }}
+          <div className="admin-bulk-actions-spacer" aria-hidden />
+
+          <div
+            className="admin-bulk-actions-bar"
+            role="toolbar"
+            aria-label="Acciones de importación masiva"
           >
-            {saving ? (
-              <>
-                <span className="admin-inline-spinner" aria-hidden />
-                Importando...
-              </>
-            ) : selectedRowIds.length === 0 ? (
-              "⬆️ Importar: elige una o más filas (columna «Sel.»)"
-            ) : selectedRowIds.length === 1 ? (
-              "⬆️ Importar 1 producto"
-            ) : (
-              `⬆️ Importar ${selectedRowIds.length} productos`
-            )}
-          </button>
+            <div className="admin-bulk-actions-bar__meta">
+              <strong>{selectedRowIds.length}</strong> fila(s) seleccionada(s)
+              {selectedVariantGroupRowIds.length > 0 ? (
+                <>
+                  {" "}
+                  · <strong>{selectedVariantGroupRowIds.length}</strong> para agrupar
+                </>
+              ) : null}
+              {selectedNewProductRowIds.length > 0 ? (
+                <>
+                  {" "}
+                  · <strong>{selectedNewProductRowIds.length}</strong> nuevas
+                </>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={
+                saving ||
+                selectedVariantGroupRowIds.length === 0 ||
+                taxonomyRehomeHints.length > 0
+              }
+              onClick={() => {
+                void (async () => {
+                  setMutation("bulk");
+                  setBulkProgressLabel("Agrupando productos como variantes…");
+                  bulkProgress.start("import");
+                  try {
+                    const res = await postBulkImportCommit(
+                      jobId,
+                      [...selectedVariantGroupRowIds].sort(),
+                      "skip"
+                    );
+                    bulkProgress.finish();
+                    const grouped = res.variantGroupsAssigned ?? 0;
+                    const merged = res.variantGroupsWithMultipleMembers ?? 0;
+                    if (grouped > 0 && merged > 0) {
+                      showToast(
+                        `${grouped} producto(s) agrupados en ${merged} grupo(s) con variantes. Revisa la columna «Variantes» en la lista.`,
+                        "success",
+                        "📦"
+                      );
+                    } else if (grouped > 0) {
+                      showToast(
+                        `Se asignó código Barras a ${grouped} producto(s), pero ninguno quedó unido con otro (cada uno tiene un código Barras distinto en el CSV). Repite el mismo valor en «Barras» para las filas que deben ser variantes del mismo producto.`,
+                        "default",
+                        "ℹ️"
+                      );
+                    } else {
+                      showToast(
+                        "No se aplicó ningún grupo. Verifica que las filas tengan columna Barras y código registrado.",
+                        "default",
+                        "ℹ️"
+                      );
+                    }
+                    if (res.failed > 0) {
+                      showToast(`${res.failed} error(es). Revisa consola o mensajes.`, "danger", "⚠️");
+                    }
+                    await onImported();
+                    resetSession();
+                  } catch (e) {
+                    bulkProgress.reset();
+                    showToast(e instanceof Error ? e.message : "Error al agrupar variantes", "danger", "⚠️");
+                  } finally {
+                    setMutation(null);
+                  }
+                })();
+              }}
+            >
+              {saving ? (
+                <>
+                  <span className="admin-inline-spinner" aria-hidden />
+                  Agrupando...
+                </>
+              ) : selectedVariantGroupRowIds.length === 0 ? (
+                "📦 Agrupar productos como variantes"
+              ) : selectedVariantGroupRowIds.length === 1 ? (
+                "📦 Agrupar 1 producto como variante"
+              ) : (
+                `📦 Agrupar ${selectedVariantGroupRowIds.length} productos como variantes`
+              )}
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-outline"
+              disabled={
+                saving ||
+                selectedNewProductRowIds.length === 0 ||
+                needsTintSelection ||
+                (pendingNewCategories.length > 0 && !newCategoriesModalAcknowledged) ||
+                taxonomyRehomeHints.length > 0
+              }
+              onClick={() => {
+                void (async () => {
+                  setMutation("bulk");
+                  setBulkProgressLabel("Importando productos nuevos y subiendo imágenes…");
+                  bulkProgress.start("import");
+                  try {
+                    const res = await postBulkImportCommit(
+                      jobId,
+                      [...selectedNewProductRowIds].sort(),
+                      existingPolicy
+                    );
+                    bulkProgress.finish();
+                    const grouped = res.variantGroupsAssigned ?? 0;
+                    if (grouped > 0) {
+                      showToast(
+                        `Grupos de variantes aplicados a ${grouped} producto(s).`,
+                        "success",
+                        "📦"
+                      );
+                    }
+                    const created = res.imported - grouped;
+                    if (created > 0) {
+                      showToast(`Importados ${created} producto(s) nuevo(s)`, "success", "🎉");
+                    }
+                    const skipped = res.skippedExistingDuplicates ?? 0;
+                    if (skipped > 0) {
+                      showToast(
+                        `${skipped} fila(s) omitida(s): ya registradas y sin código de barras en el CSV.`,
+                        "default",
+                        "⏭️"
+                      );
+                    }
+                    if (res.imported === 0 && grouped === 0 && skipped === 0 && res.failed === 0) {
+                      showToast(
+                        "No se aplicaron cambios. Selecciona filas nuevas con match de imagen.",
+                        "default",
+                        "ℹ️"
+                      );
+                    }
+                    if (res.failed > 0) {
+                      showToast(`${res.failed} error(es). Revisa consola o mensajes.`, "danger", "⚠️");
+                    }
+                    await onImported();
+                    resetSession();
+                  } catch (e) {
+                    bulkProgress.reset();
+                    showToast(e instanceof Error ? e.message : "Error al importar", "danger", "⚠️");
+                  } finally {
+                    setMutation(null);
+                  }
+                })();
+              }}
+            >
+              {saving ? (
+                <>
+                  <span className="admin-inline-spinner" aria-hidden />
+                  Importando...
+                </>
+              ) : selectedNewProductRowIds.length === 0 ? (
+                "⬆️ Importar productos nuevos"
+              ) : selectedNewProductRowIds.length === 1 ? (
+                "⬆️ Importar 1 producto nuevo"
+              ) : (
+                `⬆️ Importar ${selectedNewProductRowIds.length} productos nuevos`
+              )}
+            </button>
+          </div>
           {taxonomyRehomeHints.length > 0 && (
             <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
               Hay sugerencias de reubicación de categoría/subcategoría: revísalas en el modal. Si las rechazas, podrás
@@ -3214,12 +3636,34 @@ function AdminBulkTab({
             </p>
           )}
           {pendingNewCategories.length > 0 && (
-            <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
-              Debes resolver primero las categorías o subcategorías nuevas detectadas en el CSV.
+            <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45 }}>
+              Hay productos <strong>nuevos</strong> cuya categoría o subcategoría del CSV no existe en el sistema. Revisa el
+              modal o pulsa «Continuar sin crear» si solo quieres agrupar variantes de productos ya registrados.
             </p>
           )}
         </>
       )}
+      <AdminBulkLowMatchModal
+        open={showLowMatchModal && !!pendingAnalyzeResult && !!pendingLowMatchBreakdown}
+        breakdown={pendingLowMatchBreakdown}
+        onConfirm={() => {
+          if (!pendingAnalyzeResult) return;
+          applyAnalyzeResult(pendingAnalyzeResult);
+          setPendingAnalyzeResult(null);
+          setShowLowMatchModal(false);
+        }}
+        onCancel={() => {
+          const pendingJobId = pendingAnalyzeResult?.jobId ?? null;
+          setPendingAnalyzeResult(null);
+          setShowLowMatchModal(false);
+          if (pendingJobId) {
+            void deleteBulkImportJob(pendingJobId).catch(() => {
+              /* sesión descartada */
+            });
+          }
+          showToast("Revisa el Excel y el ZIP antes de volver a analizar.", "default", "ℹ️");
+        }}
+      />
       <AdminBulkTaxonomyHintsModal
         open={showTaxonomyHintsModal && taxonomyRehomeHints.length > 0}
         hints={taxonomyRehomeHints}
@@ -3301,6 +3745,7 @@ function AdminBulkTab({
           (needsTintSelection ||
             !!(preview?.hasTintesRows && (!preview?.activeTintTypeId || !preview?.activeTintFamilyId)))
         }
+        csvMissingTintType={preview?.csvMissingTintType === true}
         previewRows={preview?.rows ?? []}
         typeOptions={tintTypeOptions}
         existingTypes={preview?.existingTintTypes ?? []}
@@ -3313,7 +3758,18 @@ function AdminBulkTab({
           setTintModalDismissed(true);
           setShowTintTypeModal(false);
         }}
-        onConfirm={async ({ typeKey, typeId, familyKey, familyId, typeLinks, familyLinks }) => {
+        onConfirm={async ({
+          typeKey,
+          typeId,
+          familyKey,
+          familyId,
+          typeLinks,
+          familyLinks,
+          defaultTintTypeApplied,
+          defaultTintFamilyApplied,
+          tintTypeOverrides,
+          selectAllTintRows,
+        }) => {
           if (!jobId) return;
           setResolvingTintType(true);
           setMutation("bulk");
@@ -3325,10 +3781,23 @@ function AdminBulkTab({
               activeTintFamilyId: familyId,
               tintTypeLinks: typeLinks,
               tintFamilyLinks: familyLinks,
-              selectedRowIds: [],
+              defaultTintTypeApplied,
+              defaultTintFamilyApplied,
+              tintTypeOverrides,
+              selectedRowIds: selectAllTintRows
+                ? (preview?.rows ?? [])
+                    .filter((r) => bulkPreviewRowIsTintes(r))
+                    .map(bulkImportStableRowId)
+                : [],
             });
             setPreview(p);
-            setSelectedRowIds((p.matchedRows ?? []).map(bulkImportStableRowId));
+            setSelectedRowIds(
+              selectAllTintRows
+                ? (p.rows ?? [])
+                    .filter((r) => bulkPreviewRowIsTintes(r))
+                    .map(bulkImportStableRowId)
+                : (p.matchedRows ?? []).map(bulkImportStableRowId)
+            );
             setTintModalDismissed(false);
             setShowTintTypeModal(false);
             showToast(`Listo: ${typeKey} · ${familyKey}`, "success", "✅");
@@ -3388,7 +3857,9 @@ function AdminBulkTab({
                       (c) => norm(c.name) === norm(item.categoryName) || norm(c.slug) === norm(item.categoryName)
                     ) ?? null;
                   if (!parent) {
-                    const created = await createAdminCategory({ name: item.categoryName });
+                    const created = await createAdminCategory({
+                      name: normalizeTaxonomyNameForDb(item.categoryName),
+                    });
                     tree = await fetchAdminCategories();
                     parent =
                       tree.find((c) => c.id === created.id) ??
@@ -3552,8 +4023,13 @@ function AdminBulkTaxonomyHintsModal({
   );
 }
 
+type TintMissingTypeStep = "pickType" | "confirmBulk" | "manualType" | "pickFamily";
+
+const MANUAL_TINT_TYPE_NEW = "__new__";
+
 function AdminBulkTintSetupModal({
   open,
+  csvMissingTintType,
   previewRows,
   typeOptions,
   existingTypes,
@@ -3567,6 +4043,7 @@ function AdminBulkTintSetupModal({
   onCreateCatalog,
 }: {
   open: boolean;
+  csvMissingTintType: boolean;
   previewRows: BulkPreviewResult["rows"];
   typeOptions: CsvTintTypeOption[];
   existingTypes: { id: string; name: string }[];
@@ -3583,12 +4060,34 @@ function AdminBulkTintSetupModal({
     familyId: string;
     typeLinks: Record<string, string>;
     familyLinks: Record<string, string>;
+    defaultTintTypeApplied?: boolean;
+    defaultTintFamilyApplied?: boolean;
+    tintTypeOverrides?: Record<string, string>;
+    selectAllTintRows?: boolean;
   }) => void | Promise<void>;
   onCreateCatalog: (plan: {
     newFamilies: string[];
     newTypes: string[];
   }) => Promise<{ families: { id: string; name: string }[]; types: { id: string; name: string }[] }>;
 }) {
+  const tintRowCount = useMemo(() => countTintRowsInPreview(previewRows), [previewRows]);
+  const tintRows = useMemo(
+    () => previewRows.filter((r) => bulkPreviewRowIsTintes(r)),
+    [previewRows]
+  );
+
+  const [missingTypeStep, setMissingTypeStep] = useState<TintMissingTypeStep>("pickType");
+  const [typePickMode, setTypePickMode] = useState<"existing" | "custom">("existing");
+  const [existingTypePickId, setExistingTypePickId] = useState("");
+  const [customTypeName, setCustomTypeName] = useState("");
+  const [manualSearch, setManualSearch] = useState("");
+  const [manualTypeOverrides, setManualTypeOverrides] = useState<Record<string, string>>({});
+  const [manualCustomTypeNames, setManualCustomTypeNames] = useState<Record<string, string>>({});
+  const [bulkTypeConfirmed, setBulkTypeConfirmed] = useState(false);
+  const [manualFamilyMode, setManualFamilyMode] = useState<"existing" | "custom">("existing");
+  const [existingFamilyPickId, setExistingFamilyPickId] = useState("");
+  const [customFamilyName, setCustomFamilyName] = useState("");
+
   const [selectedTypeKey, setSelectedTypeKey] = useState<string | null>(pendingTypeKey);
   const [selectedFamilyKey, setSelectedFamilyKey] = useState<string | null>(pendingFamilyKey);
   const [resolvedTypeId, setResolvedTypeId] = useState<string | null>(null);
@@ -3601,6 +4100,17 @@ function AdminBulkTintSetupModal({
 
   useEffect(() => {
     if (!open) return;
+    setMissingTypeStep("pickType");
+    setTypePickMode("existing");
+    setExistingTypePickId("");
+    setCustomTypeName("");
+    setManualSearch("");
+    setManualTypeOverrides({});
+    setManualCustomTypeNames({});
+    setBulkTypeConfirmed(false);
+    setManualFamilyMode("existing");
+    setExistingFamilyPickId("");
+    setCustomFamilyName("");
     setSelectedTypeKey(pendingTypeKey);
     setSelectedFamilyKey(pendingFamilyKey);
     setResolvedTypeId(null);
@@ -3620,8 +4130,8 @@ function AdminBulkTintSetupModal({
     return buildCsvTintFamilyOptions(previewRows, selectedTypeKey, existingFamilies, {
       ...tintFamilyLinks,
       ...familyLinks,
-    });
-  }, [previewRows, selectedTypeKey, existingFamilies, tintFamilyLinks, familyLinks]);
+    }, { defaultTintTypeApplied: csvMissingTintType });
+  }, [previewRows, selectedTypeKey, existingFamilies, tintFamilyLinks, familyLinks, csvMissingTintType]);
 
   const selectedFamily = selectedFamilyKey
     ? familyOptions.find((o) => o.name === selectedFamilyKey) ?? null
@@ -3640,26 +4150,53 @@ function AdminBulkTintSetupModal({
   const canConfirm =
     !!selectedTypeKey && !!selectedFamilyKey && !!effectiveTypeId && !!effectiveFamilyId && !catalogBusy;
 
-  const handleCreateType = async () => {
-    if (!selectedTypeKey) return;
+  const typeSelectOptions = useMemo(() => {
+    const byId = new Map(existingTypes.map((t) => [t.id, t]));
+    if (effectiveTypeId && selectedTypeKey && !byId.has(effectiveTypeId)) {
+      byId.set(effectiveTypeId, { id: effectiveTypeId, name: selectedTypeKey });
+    }
+    return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [existingTypes, effectiveTypeId, selectedTypeKey]);
+
+  const filteredManualRows = useMemo(() => {
+    const q = manualSearch.trim().toLowerCase();
+    if (!q) return tintRows;
+    return tintRows.filter((r) => {
+      const title = effectiveProductTitle(r.mapped)?.toLowerCase() ?? "";
+      const code = (r.codeRaw ?? r.normalizedCode ?? "").toLowerCase();
+      const level = (r.mapped.tintLevel ?? "").toLowerCase();
+      return title.includes(q) || code.includes(q) || level.includes(q);
+    });
+  }, [tintRows, manualSearch]);
+
+  const applyPickedType = (name: string, id: string | null) => {
+    const key = normalizeTintCatalogName(name);
+    setSelectedTypeKey(key);
+    setResolvedTypeId(id);
+    setSelectedFamilyKey(null);
+    setResolvedFamilyId(null);
+    setFamilyLinkId("");
+  };
+
+  const handleCreateType = async (name: string) => {
+    const key = normalizeTintCatalogName(name);
     setCatalogBusy(true);
     try {
-      const res = await onCreateCatalog({ newFamilies: [], newTypes: [selectedTypeKey] });
-      const created = res.types.find(
-        (t) => normalizeTintCatalogName(t.name) === normalizeTintCatalogName(selectedTypeKey)
-      );
+      const res = await onCreateCatalog({ newFamilies: [], newTypes: [key] });
+      const created = res.types.find((t) => normalizeTintCatalogName(t.name) === key);
       if (!created) throw new Error("No se pudo crear el tipo");
+      setSelectedTypeKey(key);
       setResolvedTypeId(created.id);
     } finally {
       setCatalogBusy(false);
     }
   };
 
-  const handleLinkType = () => {
-    if (!selectedTypeKey || !typeLinkId) return;
-    const key = normalizeTintCatalogName(selectedTypeKey);
-    setTypeLinks((prev) => ({ ...prev, [key]: typeLinkId }));
-    setResolvedTypeId(typeLinkId);
+  const handleLinkType = (name: string, linkId: string) => {
+    const key = normalizeTintCatalogName(name);
+    setTypeLinks((prev) => ({ ...prev, [key]: linkId }));
+    setSelectedTypeKey(key);
+    setResolvedTypeId(linkId);
   };
 
   const handleCreateFamily = async () => {
@@ -3684,216 +4221,699 @@ function AdminBulkTintSetupModal({
     setResolvedFamilyId(familyLinkId);
   };
 
+  const continueFromPickType = async () => {
+    if (typePickMode === "existing") {
+      const picked = existingTypes.find((t) => t.id === existingTypePickId);
+      if (!picked) return;
+      applyPickedType(picked.name, picked.id);
+      setMissingTypeStep("confirmBulk");
+      return;
+    }
+    const raw = customTypeName.trim();
+    if (!raw) return;
+    const key = normalizeTintCatalogName(raw);
+    const existingId = existingTypes.find((t) => normalizeTintCatalogName(t.name) === key)?.id ?? null;
+    if (existingId) {
+      applyPickedType(raw, existingId);
+      setMissingTypeStep("confirmBulk");
+      return;
+    }
+    await handleCreateType(raw);
+    setMissingTypeStep("confirmBulk");
+  };
+
+  const applyManualFamilyPick = () => {
+    if (manualFamilyMode === "existing") {
+      const picked = existingFamilies.find((f) => f.id === existingFamilyPickId);
+      if (!picked) return false;
+      const key = normalizeTintCatalogName(picked.name);
+      setSelectedFamilyKey(key);
+      setResolvedFamilyId(picked.id);
+      return true;
+    }
+    const raw = customFamilyName.trim();
+    if (!raw) return false;
+    const key = normalizeTintCatalogName(raw);
+    const existingId = existingFamilies.find((f) => normalizeTintCatalogName(f.name) === key)?.id ?? null;
+    setSelectedFamilyKey(key);
+    setResolvedFamilyId(existingId);
+    return true;
+  };
+
+  const resolveManualTypeOverrides = async (): Promise<Record<string, string>> => {
+    const resolved: Record<string, string> = {};
+    const newNames = new Set<string>();
+
+    for (const [rowId, typeId] of Object.entries(manualTypeOverrides)) {
+      if (typeId === MANUAL_TINT_TYPE_NEW) {
+        const raw = manualCustomTypeNames[rowId]?.trim();
+        if (raw) newNames.add(normalizeTintCatalogName(raw));
+      } else if (typeId !== effectiveTypeId) {
+        resolved[rowId] = typeId;
+      }
+    }
+
+    const nameToId = new Map<string, string>();
+    for (const name of newNames) {
+      const hit = existingTypes.find((t) => normalizeTintCatalogName(t.name) === name);
+      if (hit) nameToId.set(name, hit.id);
+    }
+
+    const toCreate = [...newNames].filter((n) => !nameToId.has(n));
+    if (toCreate.length > 0) {
+      setCatalogBusy(true);
+      try {
+        const res = await onCreateCatalog({ newFamilies: [], newTypes: toCreate });
+        for (const t of res.types) {
+          nameToId.set(normalizeTintCatalogName(t.name), t.id);
+        }
+      } finally {
+        setCatalogBusy(false);
+      }
+    }
+
+    for (const [rowId, typeId] of Object.entries(manualTypeOverrides)) {
+      if (typeId === MANUAL_TINT_TYPE_NEW) {
+        const key = normalizeTintCatalogName(manualCustomTypeNames[rowId]?.trim() ?? "");
+        const id = key ? nameToId.get(key) : null;
+        if (id && id !== effectiveTypeId) resolved[rowId] = id;
+      }
+    }
+
+    return resolved;
+  };
+
+  const finishConfirm = (resolvedOverrides?: Record<string, string>) => {
+    if (!selectedTypeKey || !selectedFamilyKey || !effectiveTypeId || !effectiveFamilyId) return;
+    const overrides: Record<string, string> = resolvedOverrides ?? {};
+    if (!resolvedOverrides) {
+      for (const [rowId, typeId] of Object.entries(manualTypeOverrides)) {
+        if (typeId && typeId !== MANUAL_TINT_TYPE_NEW && typeId !== effectiveTypeId) {
+          overrides[rowId] = typeId;
+        }
+      }
+    }
+    void onConfirm({
+      typeKey: selectedTypeKey,
+      typeId: effectiveTypeId,
+      familyKey: selectedFamilyKey,
+      familyId: effectiveFamilyId,
+      typeLinks,
+      familyLinks,
+      defaultTintTypeApplied: csvMissingTintType,
+      defaultTintFamilyApplied: csvMissingTintType && familyOptions.length === 0,
+      tintTypeOverrides: overrides,
+      selectAllTintRows: csvMissingTintType && bulkTypeConfirmed,
+    });
+  };
+
+  const manualTypeContinueBlocked = Object.entries(manualTypeOverrides).some(
+    ([rowId, typeId]) => typeId === MANUAL_TINT_TYPE_NEW && !manualCustomTypeNames[rowId]?.trim()
+  );
+
+  const showStandardTypePicker = !csvMissingTintType || missingTypeStep === "pickFamily";
+  const showStandardFamilyPicker = !csvMissingTintType || missingTypeStep === "pickFamily";
+
   return (
     <div
       className={`admin-modal-overlay${open ? " open" : ""}`}
       onClick={(e) => e.target === e.currentTarget && !saving && !catalogBusy && onClose()}
       role="presentation"
     >
-      <div className="admin-modal" style={{ maxWidth: 680 }}>
+      <div className="admin-modal" style={{ maxWidth: 720 }}>
         <button type="button" className="modal-close" onClick={onClose} disabled={saving || catalogBusy}>
           ✕
         </button>
         <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>
           Importar Tintes — tipo y familia
         </div>
-        <p style={{ marginTop: 0, marginBottom: 16, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
-          Este archivo incluye tintes. Antes de emparejar imágenes, indica <strong>qué tipo y qué familia</strong> vas
-          a subir en esta carga (por ejemplo ABSOLUTES + IR). Los niveles como 4-22 se repiten entre familias; por eso
-          hay que acotar primero.
-        </p>
 
-        <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 13 }}>1. Tipo de tinte</div>
-        {typeOptions.length === 0 ? (
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>No se detectaron tipos en el CSV.</p>
-        ) : (
-          <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
-            {typeOptions.map((opt) => (
-              <button
-                key={opt.name}
-                type="button"
-                className={`btn ${selectedTypeKey === opt.name ? "btn-primary" : "btn-outline"}`}
-                style={{ justifyContent: "space-between", display: "flex", textAlign: "left" }}
-                disabled={saving || catalogBusy}
-                onClick={() => {
-                  setSelectedTypeKey(opt.name);
-                  setSelectedFamilyKey(null);
-                  setResolvedTypeId(opt.catalogId);
-                  setResolvedFamilyId(null);
-                  setTypeLinkId("");
-                  setFamilyLinkId("");
-                }}
-              >
-                <span>
-                  <strong>{opt.name}</strong>
-                  <span style={{ fontWeight: 400, marginLeft: 8, opacity: 0.85 }}>
-                    ({opt.rowCount} fila{opt.rowCount === 1 ? "" : "s"})
-                  </span>
-                </span>
-                <span style={{ fontSize: 11 }}>{opt.existsInCatalog ? "✓ En catálogo" : "Nuevo"}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {selectedType && typeNeedsCatalog && (
-          <div
-            style={{
-              border: "1px solid var(--dusty-rose)",
-              borderRadius: "var(--radius-md)",
-              padding: "12px 14px",
-              marginBottom: 16,
-              background: "#fff",
-            }}
-          >
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>Tipo «{selectedType.name}» no está en catálogo</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        {csvMissingTintType && missingTypeStep === "pickType" && (
+          <>
+            <p style={{ marginTop: 0, marginBottom: 14, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.55 }}>
+              Parece que ninguno de los productos tiene un <strong>Tipo</strong> en el Excel. Para registrar tintes,
+              deben tener un tipo asociado (por ejemplo familia <em>Royal</em> con tipo <em>Igora Royal</em>).
+            </p>
+            <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 13 }}>Elige el tipo para esta carga</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
               <button
                 type="button"
-                className="btn btn-primary btn-sm"
-                disabled={saving || catalogBusy}
-                onClick={() => void handleCreateType()}
+                className={`btn btn-sm ${typePickMode === "existing" ? "btn-primary" : "btn-outline"}`}
+                onClick={() => setTypePickMode("existing")}
               >
-                Crear tipo
+                Tipo registrado
               </button>
-              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>o vincular a:</span>
+              <button
+                type="button"
+                className={`btn btn-sm ${typePickMode === "custom" ? "btn-primary" : "btn-outline"}`}
+                onClick={() => setTypePickMode("custom")}
+              >
+                Escribir nuevo
+              </button>
+            </div>
+            {typePickMode === "existing" ? (
               <select
                 className="form-select"
-                style={{ minWidth: 180, minHeight: 36 }}
+                style={{ width: "100%", minHeight: 40, marginBottom: 16 }}
+                value={existingTypePickId}
+                onChange={(e) => setExistingTypePickId(e.target.value)}
                 disabled={saving || catalogBusy || existingTypes.length === 0}
-                value={typeLinkId}
-                onChange={(e) => setTypeLinkId(e.target.value)}
               >
-                <option value="">— Existente —</option>
+                <option value="">— Selecciona un tipo —</option>
                 {existingTypes.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
                   </option>
                 ))}
               </select>
+            ) : (
+              <input
+                className="form-input"
+                style={{ width: "100%", marginBottom: 16 }}
+                placeholder="Ej. IGORA ROYAL"
+                value={customTypeName}
+                onChange={(e) => setCustomTypeName(e.target.value)}
+                disabled={saving || catalogBusy}
+              />
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button type="button" className="btn btn-outline" disabled={saving || catalogBusy} onClick={onClose}>
+                Cerrar
+              </button>
               <button
                 type="button"
-                className="btn btn-outline btn-sm"
-                disabled={saving || catalogBusy || !typeLinkId}
-                onClick={handleLinkType}
+                className="btn btn-primary"
+                disabled={
+                  saving ||
+                  catalogBusy ||
+                  (typePickMode === "existing" ? !existingTypePickId : !customTypeName.trim())
+                }
+                onClick={() => void continueFromPickType()}
               >
-                Vincular
+                Continuar
               </button>
             </div>
-          </div>
+          </>
         )}
 
-        {selectedTypeKey && (
+        {csvMissingTintType && missingTypeStep === "confirmBulk" && selectedTypeKey && (
           <>
-            <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 13 }}>2. Familia (dentro de {selectedTypeKey})</div>
-            {familyOptions.length === 0 ? (
-              <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
-                No hay familias en el CSV para este tipo.
+            <p style={{ marginTop: 0, marginBottom: 14, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.55 }}>
+              ¿Confirmas ponerle el tipo <strong>{selectedTypeKey}</strong> a todos los tintes que intentas subir (
+              {tintRowCount} producto{tintRowCount === 1 ? "" : "s"})? O deseas editar alguno manualmente.
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => {
+                  setBulkTypeConfirmed(false);
+                  setMissingTypeStep("manualType");
+                }}
+              >
+                Editar manualmente
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setBulkTypeConfirmed(true);
+                  setMissingTypeStep("pickFamily");
+                }}
+              >
+                Confirmar para todos
+              </button>
+            </div>
+          </>
+        )}
+
+        {csvMissingTintType && missingTypeStep === "manualType" && selectedTypeKey && effectiveTypeId && (
+          <>
+            <p style={{ marginTop: 0, marginBottom: 10, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
+              Tipo por defecto: <strong>{selectedTypeKey}</strong>. Cambia solo los productos que necesiten otro tipo.
+              Puedes elegir un tipo registrado o escribir uno nuevo.
+            </p>
+            <input
+              className="form-input"
+              style={{ width: "100%", marginBottom: 12 }}
+              placeholder="Buscar por nombre, código o nivel…"
+              value={manualSearch}
+              onChange={(e) => setManualSearch(e.target.value)}
+            />
+            <div
+              style={{
+                border: "1px solid var(--line, #e7d9d4)",
+                borderRadius: "var(--radius-md)",
+                maxHeight: 280,
+                overflow: "auto",
+                marginBottom: 16,
+              }}
+            >
+              <table className="admin-table" style={{ minWidth: 560, margin: 0 }}>
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Código</th>
+                    <th>Nivel</th>
+                    <th>Tipo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredManualRows.map((r) => {
+                    const rowId = r.previewRowId;
+                    const isCustomRow = manualTypeOverrides[rowId] === MANUAL_TINT_TYPE_NEW;
+                    const currentTypeId = isCustomRow
+                      ? MANUAL_TINT_TYPE_NEW
+                      : (manualTypeOverrides[rowId] ?? effectiveTypeId);
+                    return (
+                      <tr key={rowId}>
+                        <td style={{ fontSize: 12 }}>{effectiveProductTitle(r.mapped) ?? "—"}</td>
+                        <td style={{ fontFamily: "monospace", fontSize: 11 }}>{r.codeRaw ?? "—"}</td>
+                        <td style={{ fontSize: 12 }}>{r.mapped.tintLevel ?? "—"}</td>
+                        <td>
+                          <select
+                            className="form-select"
+                            style={{ minWidth: 160, minHeight: 32, fontSize: 12 }}
+                            value={currentTypeId}
+                            disabled={saving || catalogBusy}
+                            onChange={(e) => {
+                              const next = e.target.value;
+                              if (next === MANUAL_TINT_TYPE_NEW) {
+                                setManualTypeOverrides((prev) => ({ ...prev, [rowId]: MANUAL_TINT_TYPE_NEW }));
+                                return;
+                              }
+                              setManualCustomTypeNames((prev) => {
+                                const copy = { ...prev };
+                                delete copy[rowId];
+                                return copy;
+                              });
+                              setManualTypeOverrides((prev) => {
+                                if (next === effectiveTypeId) {
+                                  const copy = { ...prev };
+                                  delete copy[rowId];
+                                  return copy;
+                                }
+                                return { ...prev, [rowId]: next };
+                              });
+                            }}
+                          >
+                            <option value={effectiveTypeId}>
+                              {selectedTypeKey} (por defecto)
+                            </option>
+                            {typeSelectOptions
+                              .filter((t) => t.id !== effectiveTypeId)
+                              .map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.name}
+                                </option>
+                              ))}
+                            <option value={MANUAL_TINT_TYPE_NEW}>✏️ Escribir nuevo…</option>
+                          </select>
+                          {isCustomRow && (
+                            <input
+                              className="form-input"
+                              style={{ marginTop: 6, minWidth: 160, fontSize: 12 }}
+                              placeholder="Ej. IGORA VIBRANCE"
+                              value={manualCustomTypeNames[rowId] ?? ""}
+                              disabled={saving || catalogBusy}
+                              onChange={(e) =>
+                                setManualCustomTypeNames((prev) => ({ ...prev, [rowId]: e.target.value }))
+                              }
+                            />
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button type="button" className="btn btn-outline" onClick={() => setMissingTypeStep("confirmBulk")}>
+                Volver
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={saving || catalogBusy || manualTypeContinueBlocked}
+                onClick={() => {
+                  if (manualTypeContinueBlocked) return;
+                  void (async () => {
+                    const resolved = await resolveManualTypeOverrides();
+                    setManualTypeOverrides(resolved);
+                    setManualCustomTypeNames({});
+                    setMissingTypeStep("pickFamily");
+                  })();
+                }}
+              >
+                Continuar con familia
+              </button>
+            </div>
+          </>
+        )}
+
+        {(!csvMissingTintType || missingTypeStep === "pickFamily") && (
+          <>
+            {!csvMissingTintType && (
+              <p style={{ marginTop: 0, marginBottom: 16, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
+                Este archivo incluye tintes. Antes de emparejar imágenes, indica <strong>qué tipo y qué familia</strong>{" "}
+                vas a subir en esta carga (por ejemplo ABSOLUTES + IR). Los niveles como 4-22 se repiten entre familias;
+                por eso hay que acotar primero.
               </p>
-            ) : (
-              <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
-                {familyOptions.map((opt) => (
+            )}
+
+            {csvMissingTintType && selectedTypeKey && (
+              <p style={{ marginTop: 0, marginBottom: 14, fontSize: 13, color: "var(--text-muted)" }}>
+                Tipo asignado: <strong>{selectedTypeKey}</strong>. Ahora elige la familia de esta carga.
+              </p>
+            )}
+
+            {showStandardTypePicker && !csvMissingTintType && (
+              <>
+                <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 13 }}>1. Tipo de tinte</div>
+                {typeOptions.length === 0 ? (
+                  <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>No se detectaron tipos en el CSV.</p>
+                ) : (
+                  <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+                    {typeOptions.map((opt) => (
+                      <button
+                        key={opt.name}
+                        type="button"
+                        className={`btn ${selectedTypeKey === opt.name ? "btn-primary" : "btn-outline"}`}
+                        style={{ justifyContent: "space-between", display: "flex", textAlign: "left" }}
+                        disabled={saving || catalogBusy}
+                        onClick={() => {
+                          setSelectedTypeKey(opt.name);
+                          setSelectedFamilyKey(null);
+                          setResolvedTypeId(opt.catalogId);
+                          setResolvedFamilyId(null);
+                          setTypeLinkId("");
+                          setFamilyLinkId("");
+                        }}
+                      >
+                        <span>
+                          <strong>{opt.name}</strong>
+                          <span style={{ fontWeight: 400, marginLeft: 8, opacity: 0.85 }}>
+                            ({opt.rowCount} fila{opt.rowCount === 1 ? "" : "s"})
+                          </span>
+                        </span>
+                        <span style={{ fontSize: 11 }}>{opt.existsInCatalog ? "✓ En catálogo" : "Nuevo"}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {selectedType && typeNeedsCatalog && !csvMissingTintType && (
+              <div
+                style={{
+                  border: "1px solid var(--dusty-rose)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "12px 14px",
+                  marginBottom: 16,
+                  background: "#fff",
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>Tipo «{selectedType.name}» no está en catálogo</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                   <button
-                    key={opt.name}
                     type="button"
-                    className={`btn ${selectedFamilyKey === opt.name ? "btn-primary" : "btn-outline"}`}
-                    style={{ justifyContent: "space-between", display: "flex", textAlign: "left" }}
+                    className="btn btn-primary btn-sm"
                     disabled={saving || catalogBusy}
-                    onClick={() => {
-                      setSelectedFamilyKey(opt.name);
-                      setResolvedFamilyId(opt.catalogId);
-                      setFamilyLinkId("");
-                    }}
+                    onClick={() => void handleCreateType(selectedType.name)}
                   >
-                    <span>
-                      <strong>{opt.name}</strong>
-                      <span style={{ fontWeight: 400, marginLeft: 8, opacity: 0.85 }}>
-                        ({opt.rowCount} producto{opt.rowCount === 1 ? "" : "s"})
-                      </span>
-                    </span>
-                    <span style={{ fontSize: 11 }}>{opt.existsInCatalog ? "✓ En catálogo" : "Nuevo"}</span>
+                    Crear tipo
                   </button>
-                ))}
+                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>o vincular a:</span>
+                  <select
+                    className="form-select"
+                    style={{ minWidth: 180, minHeight: 36 }}
+                    disabled={saving || catalogBusy || existingTypes.length === 0}
+                    value={typeLinkId}
+                    onChange={(e) => setTypeLinkId(e.target.value)}
+                  >
+                    <option value="">— Existente —</option>
+                    {existingTypes.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    disabled={saving || catalogBusy || !typeLinkId}
+                    onClick={() => handleLinkType(selectedType.name, typeLinkId)}
+                  >
+                    Vincular
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {selectedTypeKey && showStandardFamilyPicker && (
+              <>
+                <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 13 }}>
+                  {csvMissingTintType ? "Familia de esta carga" : `2. Familia (dentro de ${selectedTypeKey})`}
+                </div>
+                {familyOptions.length === 0 ? (
+                  <div style={{ marginBottom: 16 }}>
+                    <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 10 }}>
+                      No hay familias en el CSV. Elige una familia registrada o escribe una nueva.
+                    </p>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${manualFamilyMode === "existing" ? "btn-primary" : "btn-outline"}`}
+                        onClick={() => setManualFamilyMode("existing")}
+                      >
+                        Familia registrada
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${manualFamilyMode === "custom" ? "btn-primary" : "btn-outline"}`}
+                        onClick={() => setManualFamilyMode("custom")}
+                      >
+                        Escribir nueva
+                      </button>
+                    </div>
+                    {manualFamilyMode === "existing" ? (
+                      <select
+                        className="form-select"
+                        style={{ width: "100%", minHeight: 40 }}
+                        value={existingFamilyPickId}
+                        onChange={(e) => {
+                          setExistingFamilyPickId(e.target.value);
+                          const picked = existingFamilies.find((f) => f.id === e.target.value);
+                          if (picked) {
+                            setSelectedFamilyKey(normalizeTintCatalogName(picked.name));
+                            setResolvedFamilyId(picked.id);
+                          }
+                        }}
+                        disabled={saving || catalogBusy}
+                      >
+                        <option value="">— Selecciona una familia —</option>
+                        {existingFamilies.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className="form-input"
+                        style={{ width: "100%" }}
+                        placeholder="Ej. ROYAL"
+                        value={customFamilyName}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          setCustomFamilyName(raw);
+                          if (raw.trim()) {
+                            const key = normalizeTintCatalogName(raw);
+                            setSelectedFamilyKey(key);
+                            const existingId =
+                              existingFamilies.find((f) => normalizeTintCatalogName(f.name) === key)?.id ?? null;
+                            setResolvedFamilyId(existingId);
+                          }
+                        }}
+                        disabled={saving || catalogBusy}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+                    {familyOptions.map((opt) => (
+                      <button
+                        key={opt.name}
+                        type="button"
+                        className={`btn ${selectedFamilyKey === opt.name ? "btn-primary" : "btn-outline"}`}
+                        style={{ justifyContent: "space-between", display: "flex", textAlign: "left" }}
+                        disabled={saving || catalogBusy}
+                        onClick={() => {
+                          setSelectedFamilyKey(opt.name);
+                          setResolvedFamilyId(opt.catalogId);
+                          setFamilyLinkId("");
+                        }}
+                      >
+                        <span>
+                          <strong>{opt.name}</strong>
+                          <span style={{ fontWeight: 400, marginLeft: 8, opacity: 0.85 }}>
+                            ({opt.rowCount} producto{opt.rowCount === 1 ? "" : "s"})
+                          </span>
+                        </span>
+                        <span style={{ fontSize: 11 }}>{opt.existsInCatalog ? "✓ En catálogo" : "Nuevo"}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {(selectedFamily && familyNeedsCatalog) ||
+            (familyOptions.length === 0 && selectedFamilyKey && !effectiveFamilyId) ? (
+              <div
+                style={{
+                  border: "1px solid var(--dusty-rose)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "12px 14px",
+                  marginBottom: 16,
+                  background: "#fff",
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                  Familia «{selectedFamily?.name ?? selectedFamilyKey}» no está en catálogo
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={saving || catalogBusy}
+                    onClick={() => void handleCreateFamily()}
+                  >
+                    Crear familia
+                  </button>
+                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>o vincular a:</span>
+                  <select
+                    className="form-select"
+                    style={{ minWidth: 180, minHeight: 36 }}
+                    disabled={saving || catalogBusy || existingFamilies.length === 0}
+                    value={familyLinkId}
+                    onChange={(e) => setFamilyLinkId(e.target.value)}
+                  >
+                    <option value="">— Existente —</option>
+                    {existingFamilies.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    disabled={saving || catalogBusy || !familyLinkId}
+                    onClick={handleLinkFamily}
+                  >
+                    Vincular
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {(!csvMissingTintType || missingTypeStep === "pickFamily") && (
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                <button type="button" className="btn btn-outline" disabled={saving || catalogBusy} onClick={onClose}>
+                  Cerrar
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-primary${saving || catalogBusy ? " admin-btn--loading-pulse" : ""}`}
+                  disabled={saving || catalogBusy || !canConfirm}
+                  onClick={() => {
+                    if (familyOptions.length === 0 && !applyManualFamilyPick()) return;
+                    finishConfirm();
+                  }}
+                >
+                  {saving || catalogBusy ? (
+                    <>
+                      <span className="admin-inline-spinner" aria-hidden />
+                      Aplicando…
+                    </>
+                  ) : (
+                    "Continuar con este tipo y familia"
+                  )}
+                </button>
               </div>
             )}
           </>
         )}
+      </div>
+    </div>
+  );
+}
 
-        {selectedFamily && familyNeedsCatalog && (
-          <div
-            style={{
-              border: "1px solid var(--dusty-rose)",
-              borderRadius: "var(--radius-md)",
-              padding: "12px 14px",
-              marginBottom: 16,
-              background: "#fff",
-            }}
-          >
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>Familia «{selectedFamily.name}» no está en catálogo</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                disabled={saving || catalogBusy}
-                onClick={() => void handleCreateFamily()}
-              >
-                Crear familia
-              </button>
-              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>o vincular a:</span>
-              <select
-                className="form-select"
-                style={{ minWidth: 180, minHeight: 36 }}
-                disabled={saving || catalogBusy || existingFamilies.length === 0}
-                value={familyLinkId}
-                onChange={(e) => setFamilyLinkId(e.target.value)}
-              >
-                <option value="">— Existente —</option>
-                {existingFamilies.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                disabled={saving || catalogBusy || !familyLinkId}
-                onClick={handleLinkFamily}
-              >
-                Vincular
-              </button>
-            </div>
+function AdminBulkLowMatchModal({
+  open,
+  breakdown,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  breakdown: ReturnType<typeof computeBulkCsvZipMatchBreakdown> | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!breakdown) return null;
+
+  return (
+    <div
+      className={`admin-modal-overlay${open ? " open" : ""}`}
+      onClick={(e) => e.target === e.currentTarget && onCancel()}
+      role="presentation"
+    >
+      <div className="admin-modal" style={{ maxWidth: 560 }}>
+        <button type="button" className="modal-close" onClick={onCancel}>
+          ✕
+        </button>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>
+          ¿Archivos correctos?
+        </div>
+        <p style={{ marginTop: 0, marginBottom: 14, fontSize: 14, color: "var(--text-muted)", lineHeight: 1.55 }}>
+          ¿Estás seguro de que son las imágenes correctas y el Excel correcto? Parece que casi no hubo coincidencias
+          entre los dos.
+        </p>
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            marginBottom: 18,
+            padding: "12px 14px",
+            borderRadius: "var(--radius-md)",
+            background: "var(--lavender-light)",
+            border: "1px solid rgba(199, 165, 178, 0.45)",
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          <div>
+            <strong>Coincidencia general:</strong> {formatBulkMatchPercent(breakdown.overallMatchRate)} (mínimo
+            recomendado: 3%)
           </div>
-        )}
-
+          <div>
+            Filas CSV con imagen: {breakdown.matchedCsvRows} de {breakdown.totalCsvRows} (
+            {formatBulkMatchPercent(breakdown.csvMatchRate)})
+          </div>
+          <div>
+            Imágenes del ZIP emparejadas: {breakdown.matchedZipImages} de {breakdown.totalZipImages} (
+            {formatBulkMatchPercent(breakdown.zipMatchRate)})
+          </div>
+        </div>
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
-          <button type="button" className="btn btn-outline" disabled={saving || catalogBusy} onClick={onClose}>
-            Cerrar
+          <button type="button" className="btn btn-outline" onClick={onCancel}>
+            Cancelar, volveré a verificarlo
           </button>
-          <button
-            type="button"
-            className={`btn btn-primary${saving || catalogBusy ? " admin-btn--loading-pulse" : ""}`}
-            disabled={saving || catalogBusy || !canConfirm}
-            onClick={() => {
-              if (!selectedTypeKey || !selectedFamilyKey || !effectiveTypeId || !effectiveFamilyId) return;
-              void onConfirm({
-                typeKey: selectedTypeKey,
-                typeId: effectiveTypeId,
-                familyKey: selectedFamilyKey,
-                familyId: effectiveFamilyId,
-                typeLinks,
-                familyLinks,
-              });
-            }}
-          >
-            {saving || catalogBusy ? (
-              <>
-                <span className="admin-inline-spinner" aria-hidden />
-                Aplicando…
-              </>
-            ) : (
-              "Continuar con este tipo y familia"
-            )}
+          <button type="button" className="btn btn-primary" onClick={onConfirm}>
+            Confirmar
           </button>
         </div>
       </div>
@@ -3916,22 +4936,46 @@ function AdminBulkNewCategoriesModal({
   onSkip: () => void;
   onConfirm: () => void;
 }) {
+  const totalNewRows = items.reduce((sum, it) => sum + it.rowCount, 0);
+
   return (
     <div
       className={`admin-modal-overlay${open ? " open" : ""}`}
       onClick={(e) => e.target === e.currentTarget && onClose()}
       role="presentation"
     >
-      <div className="admin-modal" style={{ maxWidth: 760 }}>
+      <div className="admin-modal" style={{ maxWidth: 820 }}>
         <button type="button" className="modal-close" onClick={onClose}>
           ✕
         </button>
         <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>
-          Novedades en categorías / subcategorías
+          Categorías faltantes — solo productos nuevos
+        </div>
+        <div
+          style={{
+            marginBottom: 14,
+            padding: "12px 14px",
+            borderRadius: "var(--radius-md)",
+            background: "#f8f5f2",
+            border: "1px solid var(--line, #e7d9d4)",
+            fontSize: 13,
+            lineHeight: 1.55,
+            color: "var(--text-muted)",
+          }}
+        >
+          <p style={{ margin: "0 0 8px", color: "var(--dark)" }}>
+            <strong>¿Qué significa esto?</strong> El CSV trae nombres de categoría o subcategoría que el sistema aún no
+            tiene registrados, pero <strong>solo para productos que todavía no existen en tienda</strong>.
+          </p>
+          <p style={{ margin: 0 }}>
+            Los productos cuyo <strong>código ya está registrado no se vuelven a crear</strong> ni necesitan que recrees su
+            categoría. Si tu objetivo es solo <strong>agrupar variantes</strong> (columna Barras), elige «Continuar sin
+            crear», selecciona las filas existentes y usa la política «Omitir existentes…».
+          </p>
         </div>
         <p style={{ marginTop: 0, marginBottom: 14, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
-          El CSV incluye categorías que aún no existen, o subcategorías nuevas dentro de una categoría que sí está registrada.
-          ¿Deseas crearlas en el sistema para poder importar esas filas?
+          Si confirmas «Crear en el sistema», se añadirán estas entradas al menú para poder importar{" "}
+          <strong>{totalNewRows} producto(s) nuevo(s)</strong>. Los ya registrados no se tocan.
         </p>
         <div
           style={{
@@ -3942,13 +4986,13 @@ function AdminBulkNewCategoriesModal({
             marginBottom: 16,
           }}
         >
-          <table className="admin-table" style={{ minWidth: 580, margin: 0 }}>
+          <table className="admin-table" style={{ minWidth: 620, margin: 0 }}>
             <thead>
               <tr>
-                <th>Tipo</th>
-                <th>Detalle</th>
+                <th>Qué falta</th>
+                <th>Nombre en el CSV</th>
                 <th>Subcategorías a crear</th>
-                <th>Filas CSV</th>
+                <th>Productos nuevos</th>
               </tr>
             </thead>
             <tbody>
@@ -3961,22 +5005,26 @@ function AdminBulkNewCategoriesModal({
                   }
                 >
                   <td style={{ fontSize: 12, whiteSpace: "nowrap" }}>
-                    {it.kind === "newCategory" ? "Categoría nueva" : "Solo subcategorías"}
+                    {it.kind === "newCategory" ? (
+                      <span style={{ color: "var(--dusty-rose)", fontWeight: 600 }}>Categoría completa</span>
+                    ) : (
+                      <span style={{ color: "#5a7ab8", fontWeight: 600 }}>Subcategorías en categoría existente</span>
+                    )}
                   </td>
                   <td style={{ fontWeight: 700 }}>
                     {it.kind === "newCategory" ? (
                       it.categoryName
                     ) : (
                       <>
-                        En <span style={{ color: "var(--dusty-rose)" }}>{it.parentCategoryName}</span>
+                        {it.parentCategoryName}
                         <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-muted)", display: "block" }}>
-                          ({it.parentCategorySlug})
+                          La categoría «{it.parentCategoryName}» ya existe; faltan subcategorías del CSV.
                         </span>
                       </>
                     )}
                   </td>
                   <td style={{ fontSize: 12 }}>{it.subcategories.length ? it.subcategories.join(", ") : "—"}</td>
-                  <td>{it.rowCount}</td>
+                  <td style={{ fontWeight: 700 }}>{it.rowCount}</td>
                 </tr>
               ))}
             </tbody>
@@ -4313,6 +5361,65 @@ function AdminCategoriesTab({
 
   return (
     <>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 12,
+          marginBottom: 16,
+        }}
+      >
+        <p style={{ margin: 0, fontSize: 13, color: "var(--text-muted)", maxWidth: 520, lineHeight: 1.5 }}>
+          Los nombres en <strong>MAYÚSCULAS</strong> se guardan con solo mayúscula inicial (ej. «Cuidado facial»).
+        </p>
+        <button
+          type="button"
+          className="btn btn-outline"
+          disabled={busy || loading}
+          onClick={() => {
+            if (
+              !confirm(
+                "¿Normalizar textos en MAYÚSCULAS de todas las categorías y subcategorías? También actualizará la subcategoría en los productos afectados."
+              )
+            ) {
+              return;
+            }
+            void (async () => {
+              setBusy(true);
+              try {
+                const res = await normalizeAdminCategoryTexts();
+                const total = res.categoriesUpdated + res.subcategoriesUpdated;
+                if (total === 0) {
+                  showToast("No había textos en mayúsculas sostenidas por corregir.", "default", "ℹ️");
+                } else {
+                  showToast(
+                    `Normalizado: ${res.categoriesUpdated} categoría(s), ${res.subcategoriesUpdated} subcategoría(s)${res.productsUpdated > 0 ? `, ${res.productsUpdated} producto(s)` : ""}.`,
+                    "success",
+                    "✅"
+                  );
+                }
+                onReload();
+              } catch (e) {
+                showToast(e instanceof Error ? e.message : "Error al normalizar", "danger", "⚠️");
+              } finally {
+                setBusy(false);
+              }
+            })();
+          }}
+        >
+          {busy ? (
+            <>
+              <span className="admin-inline-spinner" aria-hidden />
+              Normalizando…
+            </>
+          ) : (
+            "Normalizar textos"
+          )}
+        </button>
+      </div>
+
       {error && (
         <div className="admin-card" style={{ marginBottom: 16, padding: 14, background: "var(--lavender-light)", border: "1px solid var(--dusty-rose)", fontSize: 13 }}>
           <strong>Error:</strong> {error}{" "}

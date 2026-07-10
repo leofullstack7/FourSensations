@@ -1,22 +1,66 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import { listVariantsInGroup } from "@/lib/admin/variant-groups";
 import { formatPrice } from "@/lib/format";
 import type { AdminProduct } from "@/lib/types/admin";
 import { isHttpImageUrl } from "@/lib/util/image-url";
+import { normalizeColorHex } from "@/lib/product-color";
 
-function VariantThumb({ imageUrl, emoji }: { imageUrl: string | null; emoji: string }) {
+function VariantThumb({
+  imageUrl,
+  emoji,
+  onExpand,
+}: {
+  imageUrl: string | null;
+  emoji: string;
+  onExpand?: () => void;
+}) {
+  const hasImage = isHttpImageUrl(imageUrl);
+  const inner = hasImage ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={imageUrl!} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+  ) : (
+    <span>{emoji || "📦"}</span>
+  );
+
+  if (!hasImage || !onExpand) {
+    return (
+      <div className="table-product-img" style={{ width: 72, height: 72, flexShrink: 0 }}>
+        {inner}
+      </div>
+    );
+  }
+
   return (
-    <div className="table-product-img" style={{ width: 72, height: 72, flexShrink: 0 }}>
-      {isHttpImageUrl(imageUrl) ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={imageUrl!} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-      ) : (
-        emoji || "📦"
-      )}
-    </div>
+    <button
+      type="button"
+      className="admin-variant-image-btn admin-variant-image-btn--main"
+      onClick={onExpand}
+      title="Ampliar imagen"
+      aria-label="Ampliar imagen del producto"
+    >
+      <div className="table-product-img" style={{ width: 72, height: 72, flexShrink: 0 }}>
+        {inner}
+      </div>
+    </button>
+  );
+}
+
+function VariantGalleryThumb({ src, onExpand }: { src: string; onExpand: () => void }) {
+  return (
+    <button
+      type="button"
+      className="admin-variant-image-btn admin-variant-image-btn--gallery"
+      onClick={onExpand}
+      title="Ampliar imagen"
+      aria-label="Ampliar imagen"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" />
+    </button>
   );
 }
 
@@ -29,6 +73,7 @@ type Props = {
   onClose: () => void;
   onDeleteVariant: (id: string) => void | Promise<void>;
   categoryDisplayName: (slug: string, tree: AdminCategoryTree[]) => string;
+  onEditVariantColor?: (variant: AdminProduct) => void;
 };
 
 export function AdminProductVariantsModal({
@@ -40,26 +85,37 @@ export function AdminProductVariantsModal({
   onClose,
   onDeleteVariant,
   categoryDisplayName,
+  onEditVariantColor,
 }: Props) {
+  const [mounted, setMounted] = useState(false);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!open) setExpandedImage(null);
+  }, [open]);
+
   const variants = useMemo(() => {
     if (!anchorProduct?.variantGroupCode?.trim()) return [];
     return listVariantsInGroup(allProducts, anchorProduct.variantGroupCode);
   }, [anchorProduct, allProducts]);
 
-  if (!open || !anchorProduct || variants.length < 2) return null;
+  if (!mounted || !open || !anchorProduct || variants.length < 2) return null;
 
   const groupLabel = anchorProduct.variantGroupCode?.trim() ?? "—";
 
-  return (
-    <div
-      className={`admin-modal-overlay${open ? " open" : ""}`}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-      role="presentation"
-    >
-      <div className="admin-modal" style={{ maxWidth: 920, maxHeight: "90vh", overflow: "auto" }}>
-        <button type="button" className="modal-close" onClick={onClose} aria-label="Cerrar">
-          ✕
-        </button>
+  return createPortal(
+    <>
+      <div
+        className={`admin-modal-overlay admin-variants-modal-overlay${open ? " open" : ""}`}
+        onClick={(e) => e.target === e.currentTarget && onClose()}
+        role="presentation"
+      >
+        <div className="admin-modal admin-variants-modal" style={{ maxWidth: 920, maxHeight: "90vh", overflow: "auto" }}>
+          <button type="button" className="modal-close admin-variants-modal-close" onClick={onClose} aria-label="Cerrar">
+            ✕
+          </button>
         <div
           style={{
             fontFamily: "var(--font-display)",
@@ -78,6 +134,7 @@ export function AdminProductVariantsModal({
           {variants.map((v) => {
             const isPrimary = (v.variantGroupOrder ?? 0) === 0;
             const gallery = v.images ?? [];
+            const variantColor = normalizeColorHex(v.colorHex);
             return (
               <div
                 key={v.id}
@@ -96,7 +153,13 @@ export function AdminProductVariantsModal({
                     alignItems: "start",
                   }}
                 >
-                  <VariantThumb imageUrl={v.imageUrl} emoji={v.emoji} />
+                  <VariantThumb
+                    imageUrl={v.imageUrl}
+                    emoji={v.emoji}
+                    onExpand={
+                      isHttpImageUrl(v.imageUrl) ? () => setExpandedImage(v.imageUrl!) : undefined
+                    }
+                  />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 6 }}>
                       <span style={{ fontWeight: 600, color: "var(--dark)", fontSize: 15 }}>{v.name}</span>
@@ -167,33 +230,14 @@ export function AdminProductVariantsModal({
                     {(v.imageUrl || gallery.length > 0) && (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
                         {v.imageUrl && isHttpImageUrl(v.imageUrl) && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={v.imageUrl}
-                            alt=""
-                            style={{
-                              width: 44,
-                              height: 44,
-                              objectFit: "cover",
-                              borderRadius: 8,
-                              border: "1px solid var(--line)",
-                            }}
-                          />
+                          <VariantGalleryThumb src={v.imageUrl} onExpand={() => setExpandedImage(v.imageUrl!)} />
                         )}
                         {gallery.map((img) =>
                           isHttpImageUrl(img.url) ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
+                            <VariantGalleryThumb
                               key={img.id}
                               src={img.url}
-                              alt=""
-                              style={{
-                                width: 44,
-                                height: 44,
-                                objectFit: "cover",
-                                borderRadius: 8,
-                                border: "1px solid var(--line)",
-                              }}
+                              onExpand={() => setExpandedImage(img.url)}
                             />
                           ) : null
                         )}
@@ -210,11 +254,66 @@ export function AdminProductVariantsModal({
                     {deletingId === v.id ? "…" : "🗑️"}
                   </button>
                 </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                  {variantColor ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                      <span
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: "50%",
+                          backgroundColor: variantColor,
+                          border: "2px solid white",
+                          boxShadow: "0 0 0 1px var(--line)",
+                        }}
+                      />
+                      <span>
+                        {variantColor}
+                        {v.colorName?.trim() ? ` · ${v.colorName.trim()}` : ""}
+                      </span>
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Sin color asignado</span>
+                  )}
+                  {onEditVariantColor ? (
+                    <button type="button" className="btn btn-outline btn-sm" onClick={() => onEditVariantColor(v)}>
+                      {variantColor ? "Editar color" : "Agregar color"}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             );
           })}
         </div>
+        </div>
       </div>
-    </div>
+
+      {expandedImage && (
+        <div
+          className="admin-variant-image-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Vista ampliada de imagen"
+          onClick={() => setExpandedImage(null)}
+        >
+          <button
+            type="button"
+            className="modal-close admin-variant-image-lightbox-close"
+            onClick={() => setExpandedImage(null)}
+            aria-label="Cerrar vista ampliada"
+          >
+            ✕
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={expandedImage}
+            alt=""
+            className="admin-variant-image-lightbox__img"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+    </>,
+    document.body
   );
 }

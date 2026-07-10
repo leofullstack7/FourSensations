@@ -6,6 +6,7 @@ import {
   orderCategoryProductsByFeatured,
 } from "@/lib/category-storefront-featured";
 import { categoryProductsCacheTag } from "@/lib/server/revalidate-category-storefront";
+import { STOREFRONT_PRODUCTS_CACHE_TAG } from "@/lib/server/revalidate-storefront-products";
 import type { StoreProduct } from "@/lib/types/product";
 import { prisma } from "@/lib/prisma";
 
@@ -36,6 +37,10 @@ type ProductRow = {
   tintGroup?: string | null;
   tintFamily?: { name: string } | null;
   tintType?: { name: string } | null;
+  variantGroupCode?: string | null;
+  variantGroupOrder?: number | null;
+  colorHex?: string | null;
+  colorName?: string | null;
 };
 
 function rowToStore(p: ProductRow, galleryRows: { url: string }[] = []): StoreProduct {
@@ -69,6 +74,10 @@ function rowToStore(p: ProductRow, galleryRows: { url: string }[] = []): StorePr
     ...(tintGroup ? { tintGroup } : {}),
     ...(tintFamily ? { tintFamily } : {}),
     ...(tintType ? { tintType } : {}),
+    variantGroupCode: p.variantGroupCode?.trim() || null,
+    variantGroupOrder: p.variantGroupOrder ?? null,
+    ...(p.colorHex?.trim() ? { colorHex: p.colorHex.trim() } : {}),
+    ...(p.colorName?.trim() ? { colorName: p.colorName.trim() } : {}),
   };
 }
 
@@ -84,7 +93,7 @@ const getCachedStorefrontProducts = unstable_cache(
     return rows.map((r) => rowToStore(r, r.images));
   },
   ["storefront-products-v2"],
-  { revalidate: 300 }
+  { revalidate: 300, tags: [STOREFRONT_PRODUCTS_CACHE_TAG] }
 );
 
 /** Fase D: usa Prisma si hay DB; si no, mock tipado. */

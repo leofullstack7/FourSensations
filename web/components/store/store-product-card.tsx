@@ -4,6 +4,7 @@ import Image from "next/image";
 import type { StoreProduct } from "@/lib/types/product";
 import { formatPrice } from "@/lib/format";
 import { isHttpImageUrl } from "@/lib/util/image-url";
+import { normalizeColorHex } from "@/lib/product-color";
 
 export function StoreProductCard({
   product,
@@ -12,6 +13,7 @@ export function StoreProductCard({
   onToggleFav,
   onAddCart,
   imagePriority = false,
+  compact = false,
 }: {
   product: StoreProduct;
   isFav: boolean;
@@ -19,16 +21,18 @@ export function StoreProductCard({
   onToggleFav: (id: string) => void;
   onAddCart: (id: string) => void;
   imagePriority?: boolean;
+  compact?: boolean;
 }) {
   const discount = product.originalPrice
     ? Math.round((1 - product.price / product.originalPrice) * 100)
     : null;
   const badgeMap = { new: "badge-new", sale: "badge-sale", hot: "badge-hot", best: "badge-best" } as const;
   const badgeLbl = { new: "Nuevo", sale: "Oferta", hot: "🔥 Hot", best: "⭐ Top" } as const;
+  const colorHex = normalizeColorHex(product.colorHex);
 
   return (
     <div
-      className="product-card product-card--tech"
+      className={`product-card product-card--tech${compact ? " product-card--compact" : ""}`}
       role="button"
       tabIndex={0}
       onClick={() => onOpen(product.id)}
@@ -51,6 +55,12 @@ export function StoreProductCard({
             product.emoji
           )}
         </div>
+        {product.variantCount != null && product.variantCount >= 2 && (
+          <div className="product-variant-count-badge" aria-label={`${product.variantCount} variaciones`}>
+            <span className="product-variant-count-badge__num">{product.variantCount}</span>
+            <span className="product-variant-count-badge__lbl">vars</span>
+          </div>
+        )}
         {product.badge && (
           <div className="product-badges">
             <span className={`badge-tag ${badgeMap[product.badge]}`}>{badgeLbl[product.badge]}</span>
@@ -85,6 +95,25 @@ export function StoreProductCard({
       <div className="product-info">
         <div className="product-brand">{product.brand}</div>
         <div className="product-name">{product.name}</div>
+        {colorHex ? (
+          <div className="product-card-color" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 4 }}>
+            <span
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: "50%",
+                backgroundColor: colorHex,
+                border: "2px solid white",
+                boxShadow: "0 0 0 1px var(--line)",
+                flexShrink: 0,
+              }}
+              aria-hidden
+            />
+            {product.colorName?.trim() ? (
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{product.colorName.trim()}</span>
+            ) : null}
+          </div>
+        ) : null}
         <div className="product-variant">{product.subcategory}</div>
         <div className="product-stars">
           <span className="stars">

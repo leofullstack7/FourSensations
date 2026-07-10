@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import type { ComponentProps, MouseEvent } from "react";
 import { useStoreNavigation } from "@/components/store/StoreNavigationProvider";
 
@@ -23,21 +24,29 @@ function hrefToString(href: ComponentProps<typeof Link>["href"]): string {
   return `${path}${search || query}`;
 }
 
-/** Enlace de tienda con loader inmediato al navegar (mega menú, categorías). */
+/** Enlace de tienda: misma ruta → filtros al instante; otra ruta → navegación nativa + prefetch. */
 export function StoreNavLink({ href, onClick, prefetch = true, ...rest }: StoreNavLinkProps) {
   const { navigateTo } = useStoreNavigation();
+  const pathname = usePathname();
+  const router = useRouter();
   const hrefStr = hrefToString(href);
+  const targetPath = hrefStr.split("?")[0] || hrefStr;
 
   return (
     <Link
       {...rest}
       href={href}
       prefetch={prefetch}
+      onMouseEnter={() => {
+        if (targetPath !== pathname) router.prefetch(hrefStr);
+      }}
       onClick={(e) => {
         onClick?.(e);
         if (e.defaultPrevented) return;
-        e.preventDefault();
-        navigateTo(hrefStr);
+        if (targetPath === pathname) {
+          e.preventDefault();
+          navigateTo(hrefStr);
+        }
       }}
     />
   );

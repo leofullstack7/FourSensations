@@ -1,7 +1,21 @@
 import "@/lib/load-env";
 import { PrismaClient } from "@prisma/client";
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
+/** Incrementar al cambiar `schema.prisma` para descartar clientes Prisma cacheados en dev. */
+const PRISMA_CLIENT_GENERATION = "2026-07-10-product-color";
+
+type PrismaGlobal = {
+  prisma?: PrismaClient;
+  prismaGeneration?: string;
+};
+
+const globalForPrisma = globalThis as unknown as PrismaGlobal;
+
+function createPrismaClient(): PrismaClient {
+  return new PrismaClient({
+    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+  });
+}
 
 /**
  * Singleton por proceso Node. En producción también debe vivir en `globalThis`:
@@ -10,9 +24,9 @@ const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefi
  * más conexiones de las necesarias y errores `Closed` cuando el PG/pooler cierra sockets idle.
  */
 export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
-  });
+  globalForPrisma.prismaGeneration === PRISMA_CLIENT_GENERATION && globalForPrisma.prisma
+    ? globalForPrisma.prisma
+    : createPrismaClient();
 
 globalForPrisma.prisma = prisma;
+globalForPrisma.prismaGeneration = PRISMA_CLIENT_GENERATION;

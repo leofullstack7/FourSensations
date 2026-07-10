@@ -20,6 +20,10 @@ export type AdminProduct = {
   variantGroupCode?: string | null;
   /** Orden dentro del grupo (0 = primera variante en CSV). */
   variantGroupOrder?: number | null;
+  /** Color en hexadecimal (#RRGGBB). */
+  colorHex?: string | null;
+  /** Nombre legible del color (opcional). */
+  colorName?: string | null;
   name: string;
   brand: string;
   category: string;

@@ -1,4 +1,5 @@
 import { normalizeKey } from "./normalize";
+import { parseColorFromCsvCell } from "@/lib/product-color";
 
 type SynonymGroup = { keys: string[]; field: keyof SemanticMapped };
 
@@ -116,6 +117,14 @@ const GROUPS: SynonymGroup[] = [
       "label",
     ],
   },
+  {
+    field: "colorHex",
+    keys: ["color hex", "hex color", "hexadecimal", "color hexadecimal", "hex"],
+  },
+  {
+    field: "colorName",
+    keys: ["nombre color", "nombre del color", "color nombre", "nombre de color", "shade name"],
+  },
 ];
 
 export type SemanticMapped = {
@@ -139,12 +148,17 @@ export type SemanticMapped = {
   tintGroup: string | null;
   /** Código de grupo de variantes (columna CSV «Barras»). */
   variantGroupCode: string | null;
+  /** Color hexadecimal (#RRGGBB) — columna CSV «Color». */
+  colorHex: string | null;
+  /** Nombre legible del color (opcional). */
+  colorName: string | null;
 };
 
 function headerToField(normalizedHeader: string): keyof SemanticMapped | null {
   const h = normalizeKey(normalizedHeader);
 
   if (h.includes("barras")) return "variantGroupCode";
+  if (h === "color" || h === "colour") return "colorHex";
 
   // 1) Match exacto primero para evitar que "subcategoria" caiga en "categoria".
   for (const g of GROUPS) {
@@ -310,6 +324,8 @@ export function mapRowValues(
     tintLevel: null,
     tintGroup: null,
     variantGroupCode: null,
+    colorHex: null,
+    colorName: null,
   };
   headerFieldMap.forEach((field, col) => {
     const raw = (values[col] ?? "").trim();
@@ -356,6 +372,15 @@ export function mapRowValues(
         break;
       case "variantGroupCode":
         if (!out.variantGroupCode) out.variantGroupCode = raw;
+        break;
+      case "colorHex": {
+        const parsed = parseColorFromCsvCell(raw);
+        if (parsed.hex && !out.colorHex) out.colorHex = parsed.hex;
+        if (parsed.name && !out.colorName) out.colorName = parsed.name;
+        break;
+      }
+      case "colorName":
+        if (!out.colorName) out.colorName = raw;
         break;
       default:
         break;

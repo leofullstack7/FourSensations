@@ -28,6 +28,16 @@ export type StoreProduct = {
   tintGroup?: string;
   tintFamily?: string;
   tintType?: string;
+  /** Código de grupo de variantes (misma columna Barras del CSV). */
+  variantGroupCode?: string | null;
+  /** Orden dentro del grupo (0 = variante principal en listados). */
+  variantGroupOrder?: number | null;
+  /** Solo en tarjetas colapsadas: cuántas variantes tiene el grupo. */
+  variantCount?: number;
+  /** Color en hexadecimal (#RRGGBB). */
+  colorHex?: string | null;
+  /** Nombre legible del color (opcional). */
+  colorName?: string | null;
 };
 
 export type CartLine = StoreProduct & { qty: number };

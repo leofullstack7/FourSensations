@@ -1,4 +1,4 @@
-import { normalizeKey } from "./normalize";
+import { canonicalExternalRef, canonicalVariantGroupCode } from "./variant-group-code";
 import type { BulkPreviewRow, BulkPreviewResult } from "./build-preview";
 
 export type BulkPreviewDbVariant = {
@@ -22,9 +22,7 @@ export type BulkPreviewVariantGroup = {
 };
 
 export function normalizedVariantGroupKey(raw: string | null | undefined): string | null {
-  const t = raw?.trim();
-  if (!t) return null;
-  return normalizeKey(t);
+  return canonicalVariantGroupCode(raw);
 }
 
 export function previewHasVariantGroupColumn(rows: BulkPreviewRow[]): boolean {
@@ -58,9 +56,10 @@ export function buildVariantGroupsForPreview(
     const groupLabel = groupRows[0]?.mapped.variantGroupCode?.trim() || groupKey;
     const csvCodes = csvCodesByGroup.get(groupKey) ?? new Set<string>();
     const dbVariants = dbByGroup.get(groupKey) ?? [];
-    const dbOnlyVariantCount = dbVariants.filter(
-      (p) => p.externalRef && !csvCodes.has(p.externalRef)
-    ).length;
+    const dbOnlyVariantCount = dbVariants.filter((p) => {
+      const ref = canonicalExternalRef(p.externalRef);
+      return ref && !csvCodes.has(ref);
+    }).length;
 
     groups.push({
       groupKey,
@@ -88,7 +87,7 @@ export function dbVariantsByGroupFromProducts(
 ): Map<string, BulkPreviewDbVariant[]> {
   const map = new Map<string, BulkPreviewDbVariant[]>();
   for (const p of products) {
-    const key = p.variantGroupCode?.trim();
+    const key = canonicalVariantGroupCode(p.variantGroupCode);
     if (!key) continue;
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push({
