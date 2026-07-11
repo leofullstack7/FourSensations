@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { createPendingOrderFromCheckout } from "@/lib/server/checkout/create-order";
 import { createCheckoutOrderSchema } from "@/lib/validation/checkout-order";
 
@@ -18,7 +19,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const result = await createPendingOrderFromCheckout(parsed.data);
+  const session = await auth();
+  const userId =
+    session?.user?.role === "CUSTOMER" && session.user.id ? session.user.id : null;
+
+  const result = await createPendingOrderFromCheckout(parsed.data, { userId });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }

@@ -39,6 +39,7 @@ import {
 import { computeAdminCatalogStats, type AdminCatalogStats } from "@/lib/admin/catalog-stats";
 import { compactChartAmount, computeSemesterSalesChart } from "@/lib/admin/sales-semester-chart";
 import { AdminCategoryStorefrontPanel } from "@/components/admin/AdminCategoryStorefrontPanel";
+import { AdminCustomersPanel } from "@/components/admin/AdminCustomersPanel";
 import {
   AdminAiBulkProgressModal,
   type AiBulkProgressItem,
@@ -114,7 +115,7 @@ import {
   resolveMenuTagFromEditor,
 } from "@/lib/admin/menu-utils";
 
-type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "sales" | "stock" | "categories" | "menu" | "reports";
+type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "sales" | "stock" | "customers" | "categories" | "menu" | "reports";
 
 type GoPageOptions = {
   productTab?: "list" | "add" | "bulk";
@@ -127,6 +128,7 @@ const ADMIN_PAGE_TITLES: Record<AdminPageId, string> = {
   combos: "Crear Combos",
   sales: "Ventas",
   stock: "Inventario",
+  customers: "Clientes CRM",
   categories: "Categorías y subcategorías",
   menu: "Gestión del Menú",
   reports: "Reportes",
@@ -143,6 +145,7 @@ const ADMIN_NAV_ITEMS: {
   { id: "category-products", icon: "✨", label: "Productos en Categorías" },
   { id: "combos", icon: "🧩", label: "Crear Combos" },
   { id: "sales", icon: "💰", label: "Ventas" },
+  { id: "customers", icon: "👥", label: "Clientes CRM" },
   { id: "stock", icon: "📋", label: "Inventario" },
   { id: "categories", icon: "🏷️", label: "Categorías", section: "config" },
   { id: "menu", icon: "🗂️", label: "Gestión de Menú", section: "config" },
@@ -1379,6 +1382,10 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
 
             <div className={`admin-page ${page === "sales" ? "active" : ""}`} style={{ display: page === "sales" ? "block" : "none" }}>
               <AdminSalesTab sales={sales} products={products} onReloadOnline={() => void loadPaidOrders()} />
+            </div>
+
+            <div className={`admin-page ${page === "customers" ? "active" : ""}`} style={{ display: page === "customers" ? "block" : "none" }}>
+              <AdminCustomersPanel active={page === "customers"} showToast={showToast} />
             </div>
 
             <div className={`admin-page ${page === "stock" ? "active" : ""}`} style={{ display: page === "stock" ? "block" : "none" }}>

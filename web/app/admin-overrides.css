@@ -2392,6 +2392,326 @@
   }
 }
 
+/* ── Admin CRM clientes ── */
+.admin-crm-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.admin-crm-hero-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  margin: 0 0 6px;
+  color: var(--dark);
+}
+
+.admin-crm-hero-sub {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 520px;
+  line-height: 1.55;
+}
+
+.admin-crm-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.admin-crm-stat-card {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  border: 1px solid var(--cream);
+  box-shadow: var(--shadow-sm);
+}
+
+.admin-crm-stat-card--accent {
+  background: linear-gradient(135deg, rgba(196, 84, 122, 0.08), rgba(232, 160, 180, 0.15));
+  border-color: rgba(196, 84, 122, 0.15);
+}
+
+.admin-crm-stat-num {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--dark);
+  line-height: 1.1;
+}
+
+.admin-crm-stat-label {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.admin-crm-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.admin-crm-search {
+  flex: 1 1 240px;
+  min-width: 200px;
+  margin: 0;
+}
+
+.admin-crm-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-crm-filter-btn {
+  border: 1px solid var(--cream);
+  background: #fff;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: var(--font-body);
+}
+
+.admin-crm-filter-btn.active,
+.admin-crm-filter-btn:hover {
+  border-color: var(--rose);
+  color: var(--rose);
+  background: rgba(196, 84, 122, 0.06);
+}
+
+.admin-crm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 18px;
+}
+
+.admin-crm-card {
+  background: #fff;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--cream);
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: box-shadow var(--transition);
+}
+
+.admin-crm-card.expanded {
+  box-shadow: var(--shadow-md);
+  border-color: rgba(196, 84, 122, 0.18);
+}
+
+.admin-crm-card-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px 14px;
+  align-items: start;
+}
+
+.admin-crm-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--blush), var(--lavender));
+  color: var(--dark);
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  grid-row: span 2;
+}
+
+.admin-crm-card-ident h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--dark);
+}
+
+.admin-crm-card-ident p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.admin-crm-badges {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-crm-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--cream);
+  color: var(--text-muted);
+}
+
+.admin-crm-badge.registered {
+  background: rgba(122, 158, 126, 0.15);
+  color: var(--sage-dark);
+}
+
+.admin-crm-badge.guest {
+  background: rgba(212, 168, 83, 0.15);
+  color: #9a7224;
+}
+
+.admin-crm-badge.wholesale {
+  background: rgba(196, 84, 122, 0.12);
+  color: var(--rose);
+}
+
+.admin-crm-card-meta {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 14px;
+  font-size: 13px;
+}
+
+.admin-crm-meta-label {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.admin-crm-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-crm-wa {
+  border-color: #25d366 !important;
+  color: #1a9e4a !important;
+}
+
+.admin-crm-orders {
+  border-top: 1px solid var(--cream);
+  padding-top: 14px;
+}
+
+.admin-crm-orders h4 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--dark);
+  font-family: var(--font-display);
+}
+
+.admin-crm-orders-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-crm-orders-table {
+  min-width: 480px;
+  font-size: 12px;
+}
+
+.admin-crm-email-modal {
+  max-width: 520px;
+  width: calc(100% - 32px);
+}
+
+.admin-crm-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.admin-crm-template-btn {
+  border: 1px dashed var(--cream);
+  background: var(--ivory);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+
+.admin-crm-template-btn:hover {
+  border-color: var(--rose);
+  color: var(--rose);
+}
+
+@media (max-width: 900px) {
+  .admin-crm-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-crm-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-crm-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-crm-filters {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-crm-filter-btn {
+    flex-shrink: 0;
+  }
+
+  .admin-crm-card-actions .btn {
+    flex: 1 1 calc(50% - 4px);
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .admin-crm-card-meta {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-crm-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-crm-card-actions .btn {
+    flex: 1 1 100%;
+  }
+}
+
 /* ─────────────────────────────────────────────────
    FIN RESPONSIVE MÓVIL
    ───────────────────────────────────────────────── */

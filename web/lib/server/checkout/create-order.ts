@@ -16,7 +16,10 @@ export type CreateOrderResult =
     }
   | { ok: false; error: string; status: number };
 
-export async function createPendingOrderFromCheckout(input: CreateCheckoutOrderInput): Promise<CreateOrderResult> {
+export async function createPendingOrderFromCheckout(
+  input: CreateCheckoutOrderInput,
+  options?: { userId?: string | null },
+): Promise<CreateOrderResult> {
   if (!process.env.DATABASE_URL) {
     return { ok: false, error: "Pedidos no disponibles (sin base de datos)", status: 503 };
   }
@@ -99,6 +102,7 @@ export async function createPendingOrderFromCheckout(input: CreateCheckoutOrderI
           customerPhone: input.customerPhone?.trim() || null,
           shippingAddress: shippingJson,
           customerNote: input.customerNote?.trim() || null,
+          userId: options?.userId ?? null,
           items: {
             create: lines.map((l) => ({
               productId: l.productId,

@@ -294,9 +294,9 @@ export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreH
                   Compra <em style={{ color: "var(--blush)" }}>mayorista</em> y ahorra hasta un 30%
                 </div>
               </div>
-              <button type="button" className="btn btn-outline btn-sm" style={{ color: "white", borderColor: "white" }} onClick={() => filterByCat("Mayorista")}>
-                Registrarme →
-              </button>
+              <Link href="/mayorista" className="btn btn-outline btn-sm" style={{ color: "white", borderColor: "white" }}>
+                Ver programa →
+              </Link>
               <div className="promo-deco" style={{ color: "white" }}>
                 🎁
               </div>
@@ -492,7 +492,7 @@ export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreH
               <div className="footer-links">
                 <a href="#">Sobre nosotros</a>
                 <a href="#">Blog de belleza</a>
-                <a href="#">Programa mayorista</a>
+                <Link href="/mayorista">Programa mayorista</Link>
                 <a href="#">Trabaja con nosotros</a>
               </div>
             </div>
