@@ -36,6 +36,7 @@ import {
   listVariantsInGroup,
   resolveAdminListRowsAfterFilter,
 } from "@/lib/admin/variant-groups";
+import { computeAdminCatalogStats, type AdminCatalogStats } from "@/lib/admin/catalog-stats";
 import { AdminCategoryStorefrontPanel } from "@/components/admin/AdminCategoryStorefrontPanel";
 import {
   AdminAiBulkProgressModal,
@@ -473,9 +474,9 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
     return out;
   }, [products, productFilterCategorySlug]);
 
-  const catalogListProducts = useMemo(() => collapseProductsForAdminList(products), [products]);
+  const catalogStats = useMemo(() => computeAdminCatalogStats(products, sales), [products, sales]);
 
-  const filteredProducts = useMemo(() => {
+  const { filteredProducts, filteredMatchCount } = useMemo(() => {
     let list = products;
     const q = productSearch.trim().toLowerCase();
     if (q) {
@@ -495,7 +496,9 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
         (x.tags ?? []).some((t) => t.trim().toLowerCase() === productFilterTag.toLowerCase())
       );
     }
-    return resolveAdminListRowsAfterFilter(list, products);
+    const filteredMatchCount = list.length;
+    const filteredProducts = resolveAdminListRowsAfterFilter(list, products);
+    return { filteredProducts, filteredMatchCount };
   }, [
     products,
     productSearch,
@@ -819,7 +822,6 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   }, [productFilterSubcategory, productFilterSubcategoryOptions]);
 
   const renderDashboard = () => {
-    const totalRevenue = sales.reduce((s, sale) => s + (Number(sale.total) || 0), 0);
     const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun"];
     const values = [320000, 480000, 390000, 520000, 610000, 580000];
     const max = Math.max(...values);
@@ -835,35 +837,43 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
             <p>Monitorea ventas, inventario y catálogo con datos en tiempo real.</p>
           </div>
           <div className="admin-dashboard-hero-meta">
-            <span className="admin-dashboard-pill">◈ {products.length} SKUs</span>
-            <span className="admin-dashboard-pill">⬡ {sales.length} ventas</span>
+            <span className="admin-dashboard-pill">◈ {catalogStats.totalProducts} SKUs</span>
+            <span className="admin-dashboard-pill">⬡ {catalogStats.salesCount} ventas</span>
             <span className="admin-dashboard-pill">✦ IA catálogo activa</span>
           </div>
         </div>
         <div className="stats-grid">
           <div className="stat-card stat-card--tech">
             <div className="stat-icon">💰</div>
-            <div className="stat-num">{formatPrice(totalRevenue)}</div>
-            <div className="stat-label">Ingresos este mes</div>
-            <div className="stat-trend up">↑ 12% vs mes anterior</div>
+            <div className="stat-num">{formatPrice(catalogStats.totalRevenue)}</div>
+            <div className="stat-label">Ingresos totales</div>
+            <div className="stat-trend up">↑ {catalogStats.salesCount} venta(s) registrada(s)</div>
           </div>
           <div className="stat-card stat-card--tech">
             <div className="stat-icon">🛒</div>
-            <div className="stat-num">{sales.length}</div>
+            <div className="stat-num">{catalogStats.salesCount}</div>
             <div className="stat-label">Ventas registradas</div>
-            <div className="stat-trend up">↑ 8 nuevas hoy</div>
+            <div className="stat-trend up">↑ Pedidos web + manuales</div>
           </div>
           <div className="stat-card stat-card--tech">
             <div className="stat-icon">📦</div>
-            <div className="stat-num">{products.filter((p) => p.active).length}</div>
+            <div className="stat-num">{catalogStats.activeProducts}</div>
             <div className="stat-label">Productos activos</div>
-            <div className="stat-trend down">↓ 3 con stock bajo</div>
+            <div className={`stat-trend ${catalogStats.stockLow > 0 ? "down" : "up"}`}>
+              {catalogStats.stockLow > 0
+                ? `↓ ${catalogStats.stockLow} con stock bajo`
+                : `✓ ${catalogStats.totalProducts} en catálogo`}
+            </div>
           </div>
           <div className="stat-card stat-card--tech">
-            <div className="stat-icon">⭐</div>
-            <div className="stat-num">4.8</div>
-            <div className="stat-label">Calificación promedio</div>
-            <div className="stat-trend up">↑ Excelente</div>
+            <div className="stat-icon">📋</div>
+            <div className="stat-num">{catalogStats.totalProducts}</div>
+            <div className="stat-label">Productos en el sistema</div>
+            <div className={`stat-trend ${catalogStats.stockOut > 0 ? "down" : "up"}`}>
+              {catalogStats.stockOut > 0
+                ? `↓ ${catalogStats.stockOut} sin stock`
+                : "✓ Inventario disponible"}
+            </div>
           </div>
         </div>
         <div className="charts-row">
@@ -1249,8 +1259,9 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                   tagOptions={productFilterTagOptions}
                   sortedCategories={productListSortedCategories}
                   filteredProducts={filteredProducts}
+                  filteredMatchCount={filteredMatchCount}
                   allProducts={products}
-                  totalProductCount={catalogListProducts.length}
+                  totalProductCount={catalogStats.totalProducts}
                   listLoading={productsLoading}
                   categoryTree={categoriesTree}
                   selectedIds={productListSelectedIds}
@@ -1364,6 +1375,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
             <div className={`admin-page ${page === "stock" ? "active" : ""}`} style={{ display: page === "stock" ? "block" : "none" }}>
               <AdminStockTab
                 products={products}
+                catalogStats={catalogStats}
                 categoryTree={categoriesTree}
                 stockSavingId={stockSavingId}
                 onPersistStock={async (id, stock) => {
@@ -1516,6 +1528,7 @@ function AdminProductListTab({
   tagOptions,
   sortedCategories,
   filteredProducts,
+  filteredMatchCount,
   allProducts,
   totalProductCount,
   listLoading,
@@ -1546,6 +1559,7 @@ function AdminProductListTab({
   tagOptions: string[];
   sortedCategories: AdminCategoryTree[];
   filteredProducts: AdminProduct[];
+  filteredMatchCount: number;
   allProducts: AdminProduct[];
   totalProductCount: number;
   listLoading: boolean;
@@ -1700,8 +1714,9 @@ function AdminProductListTab({
       </div>
       {!listLoading && totalProductCount > 0 && (
         <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: -12, marginBottom: 16 }}>
-          Mostrando {filteredProducts.length} de {totalProductCount} producto(s)
-          {hasActiveFilters ? " (filtros activos)" : ""}
+          {hasActiveFilters
+            ? `Mostrando ${filteredProducts.length} fila(s) · ${filteredMatchCount} de ${totalProductCount} producto(s)`
+            : `${totalProductCount} producto(s) en el sistema · ${filteredProducts.length} fila(s) en la lista`}
         </p>
       )}
       <div className="admin-card admin-table-wrap" style={{ padding: 0 }}>
@@ -5296,21 +5311,18 @@ function AdminSalesTab({
 
 function AdminStockTab({
   products,
+  catalogStats,
   categoryTree,
   onPersistStock,
   stockSavingId,
 }: {
   products: AdminProduct[];
+  catalogStats: AdminCatalogStats;
   categoryTree: AdminCategoryTree[];
   onPersistStock: (id: string, stock: number) => Promise<void>;
   stockSavingId: string | null;
 }) {
-  let ok = 0, low = 0, out = 0;
-  products.forEach((p) => {
-    if (p.stock === 0) out++;
-    else if (p.stock < 5) low++;
-    else ok++;
-  });
+  const { stockNormal: ok, stockLow: low, stockOut: out } = catalogStats;
   return (
     <>
       <div className="admin-stock-stats" style={{ marginBottom: 24, display: "flex", gap: 16 }}>
