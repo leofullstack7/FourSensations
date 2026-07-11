@@ -1,5 +1,12 @@
-/** Umbral mínimo de similitud (0–1) para emparejar código CSV ↔ nombre de imagen. */
-export const FUZZY_CODE_SIMILARITY_MIN = 0.85;
+/** Umbral mínimo de similitud (0–1) para emparejar código CSV ↔ nombre de imagen.
+ *
+ * Se usa 0.92 para evitar que imágenes con códigos secuenciales (p. ej. PF019481)
+ * se asignen erróneamente al producto del CSV más cercano (PF019480). Con códigos de
+ * 8 caracteres, 1 dígito distinto = 87.5 % de similitud, que queda por debajo del
+ * umbral y la imagen permanece "sin match". Solo se permiten matches fuzzy cuando los
+ * códigos son muy similares (errores tipográficos, ceros de relleno, etc.).
+ */
+export const FUZZY_CODE_SIMILARITY_MIN = 0.92;
 
 /** Normaliza códigos alfanuméricos para comparación difusa (sin separadores). */
 export function normalizeCodeForFuzzyMatch(input: string): string {

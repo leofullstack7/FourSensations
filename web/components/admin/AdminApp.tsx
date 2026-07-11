@@ -396,6 +396,17 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
     [page, loadProducts, loadCategories, loadPaidOrders]
   );
 
+  const MOBILE_BREAKPOINT = 768;
+
+  // En móvil: el sidebar empieza colapsado (drawer oculto).
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`);
+    if (mq.matches) setSidebarExpanded(false);
+    const onMqChange = (e: MediaQueryListEvent) => { if (e.matches) setSidebarExpanded(false); };
+    mq.addEventListener("change", onMqChange);
+    return () => mq.removeEventListener("change", onMqChange);
+  }, []);
+
   const toggleSidebar = useCallback(() => {
     setSidebarExpanded((v) => !v);
   }, []);
@@ -896,9 +907,10 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
             </div>
           </div>
         </div>
-        <div className="admin-card">
+        <div className="admin-card admin-recent-sales">
           <div className="admin-card-title">Ventas recientes</div>
-          <table className="admin-table">
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <table className="admin-table" style={{ minWidth: 560 }}>
             <thead>
               <tr>
                 <th>Producto</th>
@@ -940,6 +952,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </>
     );
@@ -978,7 +991,11 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
         className={`sidebar-link${isActive ? " active" : ""}`}
         title={item.label}
         aria-current={isActive ? "page" : undefined}
-        onClick={() => goPage(item.id)}
+        onClick={() => {
+          goPage(item.id);
+          // En móvil: cerrar drawer al navegar
+          if (window.matchMedia("(max-width: 768px)").matches) setSidebarExpanded(false);
+        }}
       >
         <span className="icon">{item.icon}</span>
         {navLinkLabel(item.label)}
@@ -988,6 +1005,14 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
 
   return (
     <div className={`admin-app-shell${sidebarExpanded ? "" : " admin-sidebar-collapsed"}`}>
+      {/* Backdrop móvil: cierra el sidebar al tocar fuera */}
+      {sidebarExpanded && (
+        <div
+          className="admin-sidebar-backdrop"
+          aria-hidden
+          onClick={() => setSidebarExpanded(false)}
+        />
+      )}
       <div className="admin-layout">
         <aside className="admin-sidebar" aria-label="Navegación del panel">
           <div className="admin-sidebar-header">
@@ -1679,7 +1704,7 @@ function AdminProductListTab({
           {hasActiveFilters ? " (filtros activos)" : ""}
         </p>
       )}
-      <div className="admin-card" style={{ padding: 0, overflow: "hidden" }}>
+      <div className="admin-card admin-table-wrap" style={{ padding: 0, overflow: "hidden" }}>
         <table className="admin-table">
           <thead style={{ padding: "0 16px" }}>
             <tr>
@@ -2203,6 +2228,7 @@ function AdminBulkTab({
   const [showTaxonomyHintsModal, setShowTaxonomyHintsModal] = useState(false);
   const [showTintTypeModal, setShowTintTypeModal] = useState(false);
   const [tintModalDismissed, setTintModalDismissed] = useState(false);
+  const [tintsExplicitlySkipped, setTintsExplicitlySkipped] = useState(false);
   const [resolvingTintType, setResolvingTintType] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showLowMatchModal, setShowLowMatchModal] = useState(false);
@@ -2211,6 +2237,8 @@ function AdminBulkTab({
   const [editingTaxonomyRowId, setEditingTaxonomyRowId] = useState<string | null>(null);
   const [manualCategorySlug, setManualCategorySlug] = useState("");
   const [manualSubcategoryName, setManualSubcategoryName] = useState("");
+  const [manualSubcategoryMode, setManualSubcategoryMode] = useState<"existing" | "new">("existing");
+  const [manualSubcategoryCustom, setManualSubcategoryCustom] = useState("");
   const bulkProgress = useBufferedProgress(93);
   const [bulkProgressLabel, setBulkProgressLabel] = useState("");
 
@@ -2253,6 +2281,7 @@ function AdminBulkTab({
     setShowTaxonomyHintsModal(false);
     setShowTintTypeModal(false);
     setTintModalDismissed(false);
+    setTintsExplicitlySkipped(false);
     setResolvingTintType(false);
     setIsAnalyzing(false);
     setShowLowMatchModal(false);
@@ -2417,6 +2446,11 @@ function AdminBulkTab({
       setShowTaxonomyHintsModal(false);
       return;
     }
+    // Esperar a que el modal de Tintes esté resuelto (configurado u omitido) antes de
+    // mostrar otros modales, para evitar que queden ocultos detrás del modal de Tintes.
+    const tintModalActive = needsTintSelection && !tintModalDismissed && !tintsExplicitlySkipped;
+    if (tintModalActive) return;
+
     const hints = preview.taxonomyRehomeHints?.length ?? 0;
     if (hints > 0) {
       setShowTaxonomyHintsModal(true);
@@ -2425,7 +2459,7 @@ function AdminBulkTab({
     }
     setShowTaxonomyHintsModal(false);
     setShowNewCategoriesModal((preview.newCategories?.length ?? 0) > 0);
-  }, [preview]);
+  }, [preview, needsTintSelection, tintModalDismissed, tintsExplicitlySkipped]);
 
   const toggleRow = useCallback((previewRowId: string) => {
     setSelectedRowIds((prev) => {
@@ -2454,6 +2488,25 @@ function AdminBulkTab({
   };
 
   const clearSelection = () => setSelectedRowIds([]);
+
+  /** Quita de la selección todas las filas de categoría Tintes. */
+  const skipTintRows = useCallback(() => {
+    if (!preview) return;
+    const tintIds = new Set(
+      (preview.rows ?? [])
+        .filter((r) => bulkPreviewRowIsTintes(r))
+        .map(bulkImportStableRowId)
+    );
+    setSelectedRowIds((prev) => prev.filter((id) => !tintIds.has(id)));
+  }, [preview]);
+
+  const selectedTintRowCount = useMemo(() => {
+    if (!preview) return 0;
+    const tintIds = new Set(
+      (preview.rows ?? []).filter((r) => bulkPreviewRowIsTintes(r)).map(bulkImportStableRowId)
+    );
+    return selectedRowIds.filter((id) => tintIds.has(id)).length;
+  }, [preview, selectedRowIds]);
 
   const selectedRowIdSet = useMemo(() => new Set(selectedRowIds), [selectedRowIds]);
   const manualSubcategoryOptions = useMemo(() => {
@@ -2588,6 +2641,8 @@ function AdminBulkTab({
       const fallbackCategory = r.categorySlug ?? sortedCats[0]?.slug ?? "";
       setEditingTaxonomyRowId(r.previewRowId);
       setManualCategorySlug(fallbackCategory);
+      setManualSubcategoryMode("existing");
+      setManualSubcategoryCustom("");
       if (r.subcategoryValue?.trim()) {
         setManualSubcategoryName(r.subcategoryValue);
         return;
@@ -2598,31 +2653,38 @@ function AdminBulkTab({
     [sortedCats]
   );
 
+  /** Formatea a título: primera letra de cada palabra en mayúscula. */
+  const toTitleCase = (str: string) =>
+    str.toLowerCase().replace(/(^|[\s\-/])(\S)/g, (_m, sep, ch) => sep + (ch as string).toUpperCase());
+
+  /** Nombre final de subcategoría según el modo activo (existente o nueva). */
+  const effectiveSubcategoryName =
+    manualSubcategoryMode === "new" ? toTitleCase(manualSubcategoryCustom) : manualSubcategoryName;
+
   const applyManualTaxonomyOverride = useCallback(
-    async (r: { categoryCsv: string | null; subcategoryCsv: string | null }) => {
-      if (!jobId || !manualCategorySlug || !manualSubcategoryName) return;
-      const pairKey = taxonomyPairKey(r.categoryCsv, r.subcategoryCsv);
+    async (r: { previewRowId: string }) => {
+      if (!jobId || !manualCategorySlug || !effectiveSubcategoryName) return;
       setMutation("bulk");
       try {
         const { preview: p } = await patchBulkImportJob(jobId, {
-          taxonomyOverrides: {
-            [pairKey]: {
+          rowTaxonomyOverrides: {
+            [r.previewRowId]: {
               categorySlug: manualCategorySlug,
-              subcategoryName: manualSubcategoryName,
+              subcategoryName: effectiveSubcategoryName,
             },
           },
           selectedRowIds,
         });
         setPreview(p);
         setEditingTaxonomyRowId(null);
-        showToast("Categoría/subcategoría ajustada para este par del CSV", "success", "✅");
+        showToast("Categoría/subcategoría ajustada solo para esta fila", "success", "✅");
       } catch (err) {
         showToast(err instanceof Error ? err.message : "No se pudo aplicar el ajuste", "danger", "⚠️");
       } finally {
         setMutation(null);
       }
     },
-    [jobId, manualCategorySlug, manualSubcategoryName, selectedRowIds, setMutation, showToast]
+    [jobId, manualCategorySlug, effectiveSubcategoryName, selectedRowIds, setMutation, showToast]
   );
 
   type BulkPreviewTableRow = (typeof previewTableRows)[number];
@@ -2747,23 +2809,81 @@ function AdminBulkTab({
                     </option>
                   ))}
                 </select>
-                <select
-                  className="form-select"
-                  value={manualSubcategoryName}
-                  onChange={(e) => setManualSubcategoryName(e.target.value)}
-                  disabled={saving || manualSubcategoryOptions.length === 0}
-                >
-                  {manualSubcategoryOptions.map((s) => (
-                    <option key={s.id} value={s.name}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                {/* Toggle: subcategoría existente vs. nueva */}
+                <div style={{ display: "flex", gap: 6, fontSize: 11.5 }}>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${manualSubcategoryMode === "existing" ? "btn-primary" : "btn-outline"}`}
+                    onClick={() => setManualSubcategoryMode("existing")}
+                    disabled={saving}
+                  >
+                    Existente
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${manualSubcategoryMode === "new" ? "btn-primary" : "btn-outline"}`}
+                    onClick={() => {
+                      setManualSubcategoryMode("new");
+                      setManualSubcategoryCustom("");
+                    }}
+                    disabled={saving}
+                  >
+                    + Nueva
+                  </button>
+                </div>
+
+                {manualSubcategoryMode === "existing" ? (
+                  <select
+                    className="form-select"
+                    value={manualSubcategoryName}
+                    onChange={(e) => setManualSubcategoryName(e.target.value)}
+                    disabled={saving || manualSubcategoryOptions.length === 0}
+                  >
+                    {manualSubcategoryOptions.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div>
+                    <input
+                      className="form-input"
+                      style={{ width: "100%" }}
+                      placeholder="Ej: Cuero Cabelludo"
+                      value={manualSubcategoryCustom}
+                      disabled={saving}
+                      onChange={(e) => setManualSubcategoryCustom(e.target.value)}
+                      onBlur={(e) => {
+                        // Aplicar title case al perder el foco
+                        const formatted = e.target.value
+                          .toLowerCase()
+                          .replace(/(^|[\s\-/])(\S)/g, (_m, sep, ch) => sep + (ch as string).toUpperCase());
+                        setManualSubcategoryCustom(formatted);
+                      }}
+                    />
+                    {manualSubcategoryCustom.trim() && (
+                      <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--text-muted)" }}>
+                        Se guardará como:{" "}
+                        <strong>
+                          {manualSubcategoryCustom
+                            .toLowerCase()
+                            .replace(/(^|[\s\-/])(\S)/g, (_m, sep, ch) => sep + (ch as string).toUpperCase())}
+                        </strong>
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div style={{ display: "flex", gap: 6 }}>
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
-                    disabled={saving || !manualCategorySlug || !manualSubcategoryName}
+                    disabled={
+                      saving ||
+                      !manualCategorySlug ||
+                      (manualSubcategoryMode === "existing" ? !manualSubcategoryName : !manualSubcategoryCustom.trim())
+                    }
                     onClick={() => {
                       void applyManualTaxonomyOverride(r);
                     }}
@@ -3183,6 +3303,22 @@ function AdminBulkTab({
             <button type="button" className="btn btn-outline btn-sm" onClick={clearSelection}>
               Quitar selección
             </button>
+            {hasTintesInBatch && selectedTintRowCount > 0 && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{
+                  background: "#fff3e0",
+                  border: "1px solid #e6a817",
+                  color: "#8a5c00",
+                  fontWeight: 600,
+                }}
+                onClick={skipTintRows}
+                title="Excluye todos los productos de categoría Tintes de la selección para que no se importen"
+              >
+                ⊘ Omitir Tintes ({selectedTintRowCount})
+              </button>
+            )}
             <span style={{ fontSize: 13, color: "var(--text-muted)", alignSelf: "center" }}>
               {selectedRowIds.length} fila(s) seleccionada(s) de {previewTableRows.length}
               {preview.csvHasVariantGroupColumn ? " en CSV" : " con match de imagen"}
@@ -3552,7 +3688,7 @@ function AdminBulkTab({
               disabled={
                 saving ||
                 selectedNewProductRowIds.length === 0 ||
-                needsTintSelection ||
+                (needsTintSelection && !tintsExplicitlySkipped) ||
                 (pendingNewCategories.length > 0 && !newCategoriesModalAcknowledged) ||
                 taxonomyRehomeHints.length > 0
               }
@@ -3629,10 +3765,11 @@ function AdminBulkTab({
               crear categorías nuevas como antes.
             </p>
           )}
-          {needsTintSelection && (
+          {needsTintSelection && !tintsExplicitlySkipped && (
             <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
               Este CSV incluye Tintes: elige primero el <strong>tipo</strong> y la <strong>familia</strong> que vas a
-              subir en esta carga.
+              subir en esta carga, o usa <strong>«⊘ Omitir todos los Tintes»</strong> en el modal de configuración para
+              importar solo los demás productos.
             </p>
           )}
           {pendingNewCategories.length > 0 && (
@@ -3757,6 +3894,16 @@ function AdminBulkTab({
         onClose={() => {
           setTintModalDismissed(true);
           setShowTintTypeModal(false);
+        }}
+        onSkipTints={() => {
+          // Quita todos los tintes de la selección y marca que el usuario eligió omitirlos
+          setTintsExplicitlySkipped(true);
+          setTintModalDismissed(true);
+          setShowTintTypeModal(false);
+          const tintIds = new Set(
+            (preview?.rows ?? []).filter((r) => bulkPreviewRowIsTintes(r)).map(bulkImportStableRowId)
+          );
+          setSelectedRowIds((prev) => prev.filter((id) => !tintIds.has(id)));
         }}
         onConfirm={async ({
           typeKey,
@@ -4039,6 +4186,7 @@ function AdminBulkTintSetupModal({
   pendingFamilyKey,
   saving,
   onClose,
+  onSkipTints,
   onConfirm,
   onCreateCatalog,
 }: {
@@ -4053,6 +4201,7 @@ function AdminBulkTintSetupModal({
   pendingFamilyKey: string | null;
   saving: boolean;
   onClose: () => void;
+  onSkipTints: () => void;
   onConfirm: (plan: {
     typeKey: string;
     typeId: string;
@@ -4396,7 +4545,17 @@ function AdminBulkTintSetupModal({
                 disabled={saving || catalogBusy}
               />
             )}
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{ marginRight: "auto", background: "#fff3e0", border: "1px solid #e6a817", color: "#8a5c00", fontWeight: 600 }}
+                disabled={saving || catalogBusy}
+                onClick={onSkipTints}
+                title="Excluye todos los productos Tintes de la importación y continúa con los demás"
+              >
+                ⊘ Omitir todos los Tintes
+              </button>
               <button type="button" className="btn btn-outline" disabled={saving || catalogBusy} onClick={onClose}>
                 Cerrar
               </button>
@@ -4821,7 +4980,17 @@ function AdminBulkTintSetupModal({
             ) : null}
 
             {(!csvMissingTintType || missingTypeStep === "pickFamily") && (
-              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  style={{ marginRight: "auto", background: "#fff3e0", border: "1px solid #e6a817", color: "#8a5c00", fontWeight: 600 }}
+                  disabled={saving || catalogBusy}
+                  onClick={onSkipTints}
+                  title="Excluye todos los productos Tintes de la importación y continúa con los demás"
+                >
+                  ⊘ Omitir todos los Tintes
+                </button>
                 <button type="button" className="btn btn-outline" disabled={saving || catalogBusy} onClick={onClose}>
                   Cerrar
                 </button>

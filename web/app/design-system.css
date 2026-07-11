@@ -2279,10 +2279,19 @@ footer {
   .products-grid { grid-template-columns: repeat(2, 1fr); }
   .testimonials-grid { grid-template-columns: 1fr; }
   .product-modal-layout { grid-template-columns: 1fr; }
+  .modal--product-tech {
+    max-height: 92vh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
   .modal--product-tech .product-modal-layout {
     grid-template-columns: 1fr;
     max-height: none;
     overflow: visible;
+  }
+  .modal-gallery--tech {
+    max-height: none;
   }
   .modal-gallery--tech .modal-gallery-placeholder {
     flex: none;
@@ -2292,12 +2301,21 @@ footer {
   .modal-details--tech {
     max-height: none;
     overflow-y: visible;
+    flex-shrink: 0;
   }
   .checkout-layout { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
   .container { padding: 0 16px; }
   .topbar { padding: 8px 12px; }
+  .modal-overlay {
+    padding: 12px;
+    align-items: flex-start;
+  }
+  .modal--product-tech {
+    max-height: calc(100vh - 24px);
+    margin-top: 4px;
+  }
   .products-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; }
   .product-info { padding: 14px; }
   .product-name { font-size: 13.5px; }

@@ -276,6 +276,8 @@ export type BulkPreviewResult = {
   newCategories: BulkPreviewNewTaxonomyItem[];
   /** Overrides desde la UI: reubicar (categoría CSV, sub CSV) → slug + sub del sistema. */
   taxonomyOverrides: Record<string, { categorySlug: string; subcategoryName: string }>;
+  /** Overrides por fila individual (previewRowId → slug + sub). Tienen prioridad sobre taxonomyOverrides. */
+  rowTaxonomyOverrides: Record<string, { categorySlug: string; subcategoryName: string }>;
   /** Pares CSV para los que el usuario rechazó la sugerencia (no volver a mostrar). */
   taxonomyRehomeDismissed: Record<string, boolean>;
   taxonomyRehomeHints: BulkTaxonomyRehomeHint[];
@@ -410,6 +412,7 @@ export function buildBulkPreview(params: {
   categoryTree: CategoryRow[];
   defaultCategorySlug: string | null;
   taxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
+  rowTaxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
   taxonomyRehomeDismissed?: Record<string, boolean>;
   /** Tintes: solo emparejar imágenes por nivel dentro de este tipo+familia. */
   tintMatchScope?: TintMatchScope | null;
@@ -422,6 +425,7 @@ export function buildBulkPreview(params: {
     categoryTree,
     defaultCategorySlug,
     taxonomyOverrides = {},
+    rowTaxonomyOverrides = {},
     taxonomyRehomeDismissed = {},
     tintMatchScope = null,
   } = params;
@@ -543,7 +547,9 @@ export function buildBulkPreview(params: {
       subcategoryName,
     };
 
-    const ov = taxonomyOverrides[pairKey];
+    // Override por fila tiene prioridad; si no existe, aplica el override por par CSV.
+    const rowPreviewId = `${rowIndex}:${normalizedCode ?? "nocode"}`;
+    const ov = rowTaxonomyOverrides[rowPreviewId] ?? taxonomyOverrides[pairKey];
     if (ov) {
       effectiveCat = ov.categorySlug;
       subcategoryName = ov.subcategoryName;
@@ -771,7 +777,9 @@ export function buildBulkPreview(params: {
         ambiguousRowIndexes.add(r.rowIndex);
       }
     }
-    if (ambiguousRowIndexes.has(r.rowIndex)) {
+    // Solo marcar como ambigua si la fila NO tiene ningún match válido ya asignado.
+    // Si tiene un match exacto/fuzzy propio, el conflicto de otra imagen no debe bloquearla.
+    if (ambiguousRowIndexes.has(r.rowIndex) && !r.imageMatches.some(isValidImageMatch)) {
       r.issues.push("Match ambiguo con imágenes");
     }
 
@@ -818,6 +826,7 @@ export function buildBulkPreview(params: {
     const pk = taxonomyPairKey(r.mapped.category, r.mapped.subcategory);
     if (taxonomyRehomeDismissed[pk]) continue;
     if (taxonomyOverrides[pk]) continue;
+    if (rowTaxonomyOverrides[r.previewRowId]) continue;
     const sug = computeTaxonomyRehomeSuggestion({
       csvCategory: r.mapped.category,
       csvSubcategory: r.mapped.subcategory,
@@ -863,6 +872,7 @@ export function buildBulkPreview(params: {
     unmatchedImages,
     newCategories,
     taxonomyOverrides: { ...taxonomyOverrides },
+    rowTaxonomyOverrides: { ...rowTaxonomyOverrides },
     taxonomyRehomeDismissed: { ...taxonomyRehomeDismissed },
     taxonomyRehomeHints,
     orphanFileNames,

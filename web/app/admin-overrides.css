@@ -1999,6 +1999,218 @@
   font-weight: 600;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   ADMIN — RESPONSIVE MÓVIL (≤768px)
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Backdrop que oscurece el contenido al abrir el drawer ── */
+.admin-sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* Backdrop */
+  .admin-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 89;
+    background: rgba(45, 31, 26, 0.48);
+    backdrop-filter: blur(2px);
+    animation: admin-backdrop-in 0.22s ease;
+  }
+  @keyframes admin-backdrop-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  /* Sidebar — drawer oculto por defecto; visible cuando .shell NO tiene collapsed */
+  .admin-app-shell .admin-sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), width 0.28s ease;
+    z-index: 92;
+    width: 260px !important; /* drawer siempre ancho completo en móvil */
+    box-shadow: 4px 0 32px rgba(0, 0, 0, 0.22);
+  }
+  /* Cuando el sidebar está expandido → mostrar */
+  .admin-app-shell:not(.admin-sidebar-collapsed) .admin-sidebar {
+    transform: translateX(0);
+  }
+  /* Colapsado en móvil → totalmente oculto */
+  .admin-app-shell.admin-sidebar-collapsed .admin-sidebar {
+    transform: translateX(-100%);
+  }
+
+  /* Main: siempre ancho completo en móvil */
+  .admin-main {
+    margin-left: 0 !important;
+  }
+
+  /* Topbar */
+  .admin-topbar {
+    padding: 12px 16px;
+    gap: 10px;
+    flex-wrap: nowrap;
+  }
+  .admin-page-title {
+    font-size: 16px;
+    max-width: calc(100vw - 200px);
+  }
+  .admin-topbar-actions {
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .admin-topbar-actions .btn {
+    font-size: 11.5px;
+    padding: 7px 10px;
+  }
+  /* "Salir" solo visible como icono en móvil muy pequeño */
+  @media (max-width: 400px) {
+    .admin-topbar-actions .btn:last-child {
+      display: none;
+    }
+    .admin-topbar-actions .btn {
+      padding: 7px 8px;
+    }
+  }
+
+  /* Contenido */
+  .admin-content {
+    padding: 16px;
+  }
+
+  /* Cards */
+  .admin-card {
+    padding: 16px;
+    border-radius: var(--radius-md);
+  }
+  .admin-card-title {
+    font-size: 15px;
+    margin-bottom: 14px;
+  }
+
+  /* Tabla — scroll horizontal */
+  .admin-card:has(.admin-table) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Fallback sin :has — usar clase directa */
+  .admin-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -16px;
+    padding: 0 16px;
+  }
+  .admin-table {
+    min-width: 680px;
+  }
+  .admin-table thead th,
+  .admin-table tbody td {
+    padding: 10px 10px;
+    font-size: 12px;
+  }
+
+  /* Ocultar columnas menos importantes en lista de productos */
+  .admin-table .col-hide-mobile {
+    display: none;
+  }
+
+  /* Filtros de lista de productos */
+  .admin-list-filters {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .admin-list-filters select,
+  .admin-list-filters input {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 1 1 140px;
+    font-size: 13px;
+  }
+
+  /* Formularios */
+  .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .form-grid.cols-3 {
+    grid-template-columns: 1fr !important;
+  }
+  .full-width {
+    grid-column: 1 !important;
+  }
+
+  /* Tabs */
+  .tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    gap: 0;
+    padding-bottom: 1px;
+  }
+  .tab-btn {
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding: 10px 14px;
+    font-size: 12.5px;
+  }
+
+  /* Categorías */
+  .admin-categories-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Modal / overlay genérico */
+  .admin-modal {
+    max-width: calc(100vw - 24px) !important;
+    max-height: calc(100vh - 48px) !important;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .admin-modal-overlay {
+    padding: 12px;
+    align-items: flex-start;
+    overflow-y: auto;
+  }
+  .admin-variants-modal {
+    padding: 16px !important;
+  }
+
+  /* Dashboard hero */
+  .admin-dashboard-hero {
+    padding: 16px;
+  }
+  .admin-dashboard-hero-copy h2 {
+    font-size: 22px;
+  }
+
+  /* Ventas recientes */
+  .admin-recent-sales-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ── Extra pequeño ≤ 480px ── */
+@media (max-width: 480px) {
+  .admin-topbar {
+    padding: 10px 12px;
+  }
+  .admin-content {
+    padding: 12px;
+  }
+  .admin-card {
+    padding: 12px;
+  }
+  .admin-topbar-actions .btn {
+    font-size: 11px;
+    padding: 6px 8px;
+  }
+}
+
+/* ─────────────────────────────────────────────────
+   FIN RESPONSIVE MÓVIL
+   ───────────────────────────────────────────────── */
+
 @media (max-width: 1100px) {
   .admin-combos-split {
     grid-template-columns: 1fr;

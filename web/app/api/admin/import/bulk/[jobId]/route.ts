@@ -32,6 +32,7 @@ const patchSchema = z.object({
   selection: z.array(z.boolean()).optional(),
   selectedRowIds: z.array(z.string().min(1)).optional(),
   taxonomyOverrides: z.record(z.string(), taxonomyOverrideEntry).optional(),
+  rowTaxonomyOverrides: z.record(z.string(), taxonomyOverrideEntry).optional(),
   taxonomyRehomeDismissed: z.record(z.string(), z.boolean()).optional(),
   /** Tipo Tintes activo para esta importación (un tipo por carga). */
   activeTintTypeCsvKey: z.string().min(1).nullable().optional(),
@@ -48,16 +49,21 @@ const patchSchema = z.object({
 
 function readTaxonomyStateFromJob(jobPreview: unknown): {
   overrides: Record<string, { categorySlug: string; subcategoryName: string }>;
+  rowOverrides: Record<string, { categorySlug: string; subcategoryName: string }>;
   dismissed: Record<string, boolean>;
 } {
   const p = jobPreview as BulkPreviewResult | null;
   if (!p || typeof p !== "object") {
-    return { overrides: {}, dismissed: {} };
+    return { overrides: {}, rowOverrides: {}, dismissed: {} };
   }
   return {
     overrides:
       p.taxonomyOverrides && typeof p.taxonomyOverrides === "object"
         ? p.taxonomyOverrides
+        : {},
+    rowOverrides:
+      p.rowTaxonomyOverrides && typeof p.rowTaxonomyOverrides === "object"
+        ? p.rowTaxonomyOverrides
         : {},
     dismissed:
       p.taxonomyRehomeDismissed && typeof p.taxonomyRehomeDismissed === "object"
@@ -125,6 +131,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     ...prevTax.overrides,
     ...(parsed.data.taxonomyOverrides ?? {}),
   };
+  const rowTaxonomyOverrides = {
+    ...prevTax.rowOverrides,
+    ...(parsed.data.rowTaxonomyOverrides ?? {}),
+  };
   const taxonomyRehomeDismissed = {
     ...prevTax.dismissed,
     ...(parsed.data.taxonomyRehomeDismissed ?? {}),
@@ -177,7 +187,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     defaultCategorySlug: null,
     categoryTree,
     taxonomyOverrides,
+    rowTaxonomyOverrides,
     taxonomyRehomeDismissed,
+    previousPreview: job.previewPayload as BulkPreviewResult | null,
     tintCatalog: {
       existingTintFamilies: tintCatalogDb.families,
       existingTintTypes: tintCatalogDb.types,

@@ -921,3 +921,129 @@
   0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.7; }
   50% { transform: translate(-12px, 8px) scale(1.08); opacity: 1; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   DASHBOARD — RESPONSIVE MÓVIL (≤768px)
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Stats: 2 columnas en móvil */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    padding: 16px;
+  }
+  .stat-num {
+    font-size: 26px;
+  }
+  .stat-icon {
+    font-size: 20px;
+    margin-bottom: 8px;
+  }
+  .stat-label {
+    font-size: 11.5px;
+  }
+
+  /* Charts: 1 columna */
+  .charts-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  /* Donut chart: más compacto */
+  .donut-chart {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .donut-visual {
+    width: 100px;
+    height: 100px;
+    flex-shrink: 0;
+  }
+  .donut-visual::before {
+    width: 54px;
+    height: 54px;
+  }
+  .donut-legend {
+    flex: 1;
+    min-width: 120px;
+    gap: 6px;
+  }
+  .legend-item {
+    font-size: 12px;
+  }
+
+  /* Bar chart: reducir altura */
+  .bar-chart {
+    height: 120px;
+    gap: 6px;
+  }
+  .bar-label,
+  .bar-value {
+    font-size: 10px;
+  }
+
+  /* Tabla ventas recientes: scroll */
+  .admin-recent-sales .admin-card {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .admin-recent-sales .admin-table {
+    min-width: 560px;
+  }
+
+  /* Hero dashboard */
+  .admin-dashboard-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 16px;
+    gap: 12px;
+  }
+  .admin-dashboard-hero-copy h2 {
+    font-size: 20px;
+  }
+  .admin-dashboard-hero-copy p {
+    font-size: 12px;
+    max-width: 100%;
+  }
+  .admin-dashboard-pill {
+    font-size: 10px;
+    padding: 6px 10px;
+  }
+
+  /* Sidebar tech overlay */
+  .admin-sidebar--tech {
+    border-right: none;
+    box-shadow: 4px 0 28px rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* ── Extra pequeño ≤ 480px ── */
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .stat-card {
+    padding: 12px;
+  }
+  .stat-num {
+    font-size: 22px;
+  }
+  .bar-chart {
+    height: 90px;
+  }
+  .donut-visual {
+    width: 80px;
+    height: 80px;
+  }
+  .donut-visual::before {
+    width: 44px;
+    height: 44px;
+  }
+}

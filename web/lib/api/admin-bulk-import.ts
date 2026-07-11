@@ -73,6 +73,7 @@ export async function patchBulkImportJob(
     selection?: boolean[];
     selectedRowIds?: string[];
     taxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
+    rowTaxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
     taxonomyRehomeDismissed?: Record<string, boolean>;
     activeTintTypeCsvKey?: string | null;
     activeTintTypeId?: string | null;

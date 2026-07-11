@@ -720,13 +720,106 @@
 }
 
 @media (max-width: 640px) {
+  .gb-ai-section {
+    overflow-x: clip;
+  }
+  .gb-ai-inner {
+    gap: 20px;
+    width: 100%;
+    min-width: 0;
+  }
+  .gb-ai-copy {
+    min-width: 0;
+    padding-inline: 2px;
+  }
+  .gb-ai-title {
+    font-size: clamp(33px, 8.5vw, 50px);
+    text-align: left;
+  }
+  .gb-ai-desc {
+    font-size: 15.52px;
+    line-height: 1.72;
+    max-width: 100%;
+    text-align: justify;
+    text-justify: inter-word;
+    hyphens: auto;
+  }
   .gb-ai-features li {
-    font-size: 11px;
+    font-size: 10.7px;
     padding: 7px 12px;
   }
+  .gb-ai-console {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 14px 12px 16px;
+    box-sizing: border-box;
+  }
+  .gb-ai-console--chat {
+    max-height: min(520px, 68vh);
+  }
+  .gb-ai-chat--thread {
+    max-height: 280px;
+    padding-inline: 2px;
+    margin-inline: 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .gb-ai-msg {
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .gb-ai-msg-body {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .gb-ai-msg-body p {
+    text-align: justify;
+    text-justify: inter-word;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .gb-ai-msg--bot .gb-ai-msg-body {
+    font-size: 13.58px;
+    line-height: 1.58;
+    padding: 11px 13px;
+  }
+  .gb-ai-msg--user .gb-ai-msg-body {
+    font-size: 13.58px;
+  }
+  .gb-ai-product-pick {
+    min-width: 0;
+    width: 100%;
+  }
+  .gb-ai-product-pick-name {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .gb-ai-chips {
+    gap: 8px;
+    margin-inline: 0;
+  }
   .gb-ai-chip {
-    font-size: 11px;
-    padding: 7px 12px;
+    font-size: 10.7px;
+    padding: 7px 11px;
+    max-width: 100%;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.35;
+  }
+  .gb-ai-composer {
+    gap: 8px;
+    min-width: 0;
+    width: 100%;
+  }
+  .gb-ai-input {
+    min-width: 0;
+    font-size: 13.58px;
+    padding: 11px 13px;
+  }
+  .gb-ai-send {
+    flex-shrink: 0;
   }
   .hero-orb {
     opacity: 0.32;

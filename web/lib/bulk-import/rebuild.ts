@@ -16,6 +16,7 @@ export function rebuildBulkPreview(params: {
   defaultCategorySlug: string | null;
   categoryTree: CategoryRow[];
   taxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
+  rowTaxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
   taxonomyRehomeDismissed?: Record<string, boolean>;
   tintCatalog?: TintCatalogState;
   previousPreview?: BulkPreviewResult | null;
@@ -32,6 +33,8 @@ export function rebuildBulkPreview(params: {
     categoryTree: params.categoryTree,
     defaultCategorySlug: params.defaultCategorySlug,
     taxonomyOverrides: params.taxonomyOverrides,
+    rowTaxonomyOverrides:
+      params.rowTaxonomyOverrides ?? params.previousPreview?.rowTaxonomyOverrides ?? {},
     taxonomyRehomeDismissed: params.taxonomyRehomeDismissed,
     tintMatchScope,
   });

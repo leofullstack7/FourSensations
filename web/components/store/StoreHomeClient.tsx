@@ -25,8 +25,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 const HERO_BANNERS_DESKTOP = [banner2Image.src, "/banner.webp"] as const;
 const HERO_BANNERS_MOBILE = [banner2MovilImage.src, "/banner-movil.webp"] as const;
-const INITIAL_VISIBLE_PRODUCTS = 32;
-const LOAD_MORE_PRODUCTS = 20;
+const DESKTOP_INITIAL_VISIBLE_PRODUCTS = 32;
+const MOBILE_INITIAL_VISIBLE_PRODUCTS = 10;
+const DESKTOP_LOAD_MORE_PRODUCTS = 20;
+const MOBILE_LOAD_MORE_PRODUCTS = 10;
+const MOBILE_FEATURED_BREAKPOINT = 768;
 
 type StoreHomeClientProps = {
   tintItems?: TintBubbleItem[];
@@ -52,7 +55,8 @@ export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreH
   const [manualSub, setManualSub] = useState<string | null>(null);
   const [sortValue, setSortValue] = useState<string>("default");
   const [heroBannerIndex, setHeroBannerIndex] = useState(0);
-  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_PRODUCTS);
+  const [visibleCount, setVisibleCount] = useState(DESKTOP_INITIAL_VISIBLE_PRODUCTS);
+  const [loadMoreStep, setLoadMoreStep] = useState(DESKTOP_LOAD_MORE_PRODUCTS);
   const isPrimaryOnScreen = heroBannerIndex === 1;
   const isSecondaryBanner = heroBannerIndex === 0;
 
@@ -92,7 +96,20 @@ export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreH
   }, [products, activeCategory, manualSub, sortValue]);
 
   useEffect(() => {
-    setVisibleCount(INITIAL_VISIBLE_PRODUCTS);
+    const mq = window.matchMedia(`(max-width: ${MOBILE_FEATURED_BREAKPOINT}px)`);
+    const applyLimits = () => {
+      const mobile = mq.matches;
+      setLoadMoreStep(mobile ? MOBILE_LOAD_MORE_PRODUCTS : DESKTOP_LOAD_MORE_PRODUCTS);
+      setVisibleCount(mobile ? MOBILE_INITIAL_VISIBLE_PRODUCTS : DESKTOP_INITIAL_VISIBLE_PRODUCTS);
+    };
+    applyLimits();
+    mq.addEventListener("change", applyLimits);
+    return () => mq.removeEventListener("change", applyLimits);
+  }, []);
+
+  useEffect(() => {
+    const mobile = window.matchMedia(`(max-width: ${MOBILE_FEATURED_BREAKPOINT}px)`).matches;
+    setVisibleCount(mobile ? MOBILE_INITIAL_VISIBLE_PRODUCTS : DESKTOP_INITIAL_VISIBLE_PRODUCTS);
   }, [activeCategory, manualSub, sortValue]);
 
   const filterByCat = useCallback((cat: string) => {
@@ -350,7 +367,7 @@ export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreH
               <button
                 type="button"
                 className="btn btn-outline btn-lg"
-                onClick={() => setVisibleCount((c) => c + LOAD_MORE_PRODUCTS)}
+                onClick={() => setVisibleCount((c) => c + loadMoreStep)}
               >
                 Ver más
               </button>
