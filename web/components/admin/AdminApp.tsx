@@ -26,7 +26,7 @@ import {
   updateAdminProduct,
 } from "@/lib/api/admin-products";
 import { runAdminProductsAiCompleteParallel } from "@/lib/api/admin-products-ai-runner";
-import { productNeedsAiComplete, productNeedsDescription, type AiCompleteFieldOptions } from "@/lib/product-ai-fields";
+import { productNeedsAiComplete, productNeedsDescription, countAiEligibleAmongSelected, formatAiActionCount, type AiCompleteFieldOptions } from "@/lib/product-ai-fields";
 import { normalizeColorHex } from "@/lib/product-color";
 import {
   buildPrimaryVariantByGroup,
@@ -480,6 +480,16 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
 
   const catalogStats = useMemo(() => computeAdminCatalogStats(products, sales), [products, sales]);
 
+  const aiSelectionCounts = useMemo(
+    () => ({
+      all: countAiEligibleAmongSelected(products, productListSelectedIds, "all"),
+      descriptions: countAiEligibleAmongSelected(products, productListSelectedIds, "descriptions"),
+      rewrite: countAiEligibleAmongSelected(products, productListSelectedIds, "descriptions-rewrite"),
+      clear: countAiEligibleAmongSelected(products, productListSelectedIds, "clear"),
+    }),
+    [products, productListSelectedIds],
+  );
+
   const semesterSalesChart = useMemo(() => computeSemesterSalesChart(sales), [sales]);
 
   const { filteredProducts, filteredMatchCount } = useMemo(() => {
@@ -581,6 +591,11 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
         filled: [],
       };
     });
+    const pending = items.filter((i) => i.status === "pending").length;
+    if (pending === 0) {
+      showToast("Los productos seleccionados ya tienen todos los datos completos", "default", "ℹ️");
+      return;
+    }
     setAiBulkItems(items);
     setAiBulkPhase("intro");
     setAiBulkMode("all");
@@ -728,9 +743,15 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
       showToast("Selecciona al menos un producto", "danger", "⚠️");
       return;
     }
+    const { eligible } = countAiEligibleAmongSelected(products, productListSelectedIds, "clear");
+    if (eligible === 0) {
+      showToast("Ningún producto seleccionado tiene datos marcados como IA", "default", "ℹ️");
+      setProductBulkMenuOpen(false);
+      return;
+    }
     if (
       !confirm(
-        `¿Quitar los valores generados por IA en ${ids.length} producto(s)? Los campos quedarán vacíos o por defecto.`,
+        `¿Quitar los valores generados por IA en ${eligible} producto(s)? (${ids.length} seleccionado(s), ${ids.length - eligible} sin datos IA). Los campos quedarán vacíos o por defecto.`,
       )
     ) {
       return;
@@ -753,7 +774,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
     } finally {
       setProductAiBusy(false);
     }
-  }, [productListSelectedIds, showToast, loadProducts, clearProductListSelection]);
+  }, [productListSelectedIds, products, showToast, loadProducts, clearProductListSelection]);
 
   const selectIncompleteVisibleProducts = useCallback(
     (visible: AdminProduct[]) => {
@@ -1162,31 +1183,31 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                         type="button"
                         role="menuitem"
                         className="btn btn-primary btn-sm"
-                        disabled={productAiBusy || productListSelectedIds.size === 0}
+                        disabled={productAiBusy || aiSelectionCounts.all.eligible === 0}
                         style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
                         onClick={() => void handleBulkAiComplete()}
                       >
-                        ✦ Completar datos con IA ({productListSelectedIds.size})
+                        ✦ Completar datos con IA ({formatAiActionCount(aiSelectionCounts.all.eligible, aiSelectionCounts.all.selected)})
                       </button>
                       <button
                         type="button"
                         role="menuitem"
                         className="btn btn-outline btn-sm"
-                        disabled={productAiBusy || productListSelectedIds.size === 0}
+                        disabled={productAiBusy || aiSelectionCounts.descriptions.eligible === 0}
                         style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
                         onClick={() => void handleBulkAiDescriptions()}
                       >
-                        📝 Generar descripciones (solo vacías) ({productListSelectedIds.size})
+                        📝 Generar descripciones (solo vacías) ({formatAiActionCount(aiSelectionCounts.descriptions.eligible, aiSelectionCounts.descriptions.selected)})
                       </button>
                       <button
                         type="button"
                         role="menuitem"
                         className="btn btn-outline btn-sm"
-                        disabled={productAiBusy || productListSelectedIds.size === 0}
+                        disabled={productAiBusy || aiSelectionCounts.rewrite.selected === 0}
                         style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
                         onClick={() => void handleBulkAiRewriteDescriptions()}
                       >
-                        ✨ Reescribir descripciones comerciales (IA) ({productListSelectedIds.size})
+                        ✨ Reescribir descripciones comerciales (IA) ({aiSelectionCounts.rewrite.selected})
                       </button>
                       <button
                         type="button"
@@ -1212,7 +1233,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                         type="button"
                         role="menuitem"
                         className="btn btn-outline btn-sm"
-                        disabled={productAiBusy || productListSelectedIds.size === 0}
+                        disabled={productAiBusy || aiSelectionCounts.clear.eligible === 0}
                         style={{
                           width: "100%",
                           justifyContent: "flex-start",
@@ -1222,7 +1243,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                         }}
                         onClick={() => void handleBulkAiClear()}
                       >
-                        Quitar datos generados por IA ({productListSelectedIds.size})
+                        Quitar datos generados por IA ({formatAiActionCount(aiSelectionCounts.clear.eligible, aiSelectionCounts.clear.selected)})
                       </button>
                       <button
                         type="button"

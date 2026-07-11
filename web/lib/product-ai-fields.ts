@@ -51,6 +51,50 @@ export function productNeedsDescription(product: Pick<AdminProduct, AiCompletabl
   return isFieldEmptyForAi(product, "description");
 }
 
+export function productHasAiGeneratedContent(product: Pick<AdminProduct, "aiGeneratedFields">): boolean {
+  const flags = parseAiGeneratedFields(product.aiGeneratedFields);
+  return AI_COMPLETABLE_FIELDS.some((f) => flags[f] === true);
+}
+
+export type AiBulkEligibilityMode = "all" | "descriptions" | "descriptions-rewrite" | "clear";
+
+/** Cuenta cuántos seleccionados realmente necesitan cada acción de IA. */
+export function countAiEligibleAmongSelected(
+  products: AdminProduct[],
+  selectedIds: ReadonlySet<string>,
+  mode: AiBulkEligibilityMode,
+): { selected: number; eligible: number } {
+  const selected = products.filter((p) => selectedIds.has(p.id));
+  const selectedCount = selectedIds.size;
+
+  switch (mode) {
+    case "descriptions":
+      return {
+        selected: selectedCount,
+        eligible: selected.filter(productNeedsDescription).length,
+      };
+    case "descriptions-rewrite":
+      return { selected: selectedCount, eligible: selected.length };
+    case "clear":
+      return {
+        selected: selectedCount,
+        eligible: selected.filter(productHasAiGeneratedContent).length,
+      };
+    case "all":
+    default:
+      return {
+        selected: selectedCount,
+        eligible: selected.filter(productNeedsAiComplete).length,
+      };
+  }
+}
+
+export function formatAiActionCount(eligible: number, selected: number): string {
+  if (selected <= 0) return "0";
+  if (eligible === selected) return String(eligible);
+  return `${eligible} de ${selected}`;
+}
+
 export type AiCompleteFieldOptions = {
   /** Si se define, solo intenta completar estos campos. */
   fields?: AiCompletableField[];

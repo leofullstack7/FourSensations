@@ -41,14 +41,19 @@ function modeTitle(mode: AiBulkProgressMode, phase: "intro" | "running" | "done"
   return "Proceso finalizado";
 }
 
-function modeIntroSubtitle(mode: AiBulkProgressMode, toProcess: number, total: number): string {
+function modeIntroSubtitle(
+  mode: AiBulkProgressMode,
+  pending: number,
+  skipped: number,
+  total: number,
+): string {
   if (mode === "descriptions-rewrite") {
-    return `${toProcess} producto(s) por reescribir con copy comercial e-commerce`;
+    return `${pending} producto(s) seleccionado(s) para reescribir con copy comercial e-commerce`;
   }
   if (mode === "descriptions") {
-    return `${toProcess} producto(s) sin descripción · ${total - toProcess} ya tienen texto`;
+    return `${pending} sin descripción · ${skipped} ya tienen texto (${total} seleccionados)`;
   }
-  return `${toProcess} producto(s) por enriquecer · ${total - toProcess} ya completos`;
+  return `${pending} con campos pendientes · ${skipped} ya completos (${total} seleccionados)`;
 }
 
 function modeIntroBody(mode: AiBulkProgressMode): string {
@@ -138,15 +143,17 @@ export function AdminAiBulkProgressModal({
   const stats = useMemo(() => {
     const total = items.length;
     const pending = items.filter((i) => i.status === "pending" || i.status === "running").length;
+    const queued = items.filter((i) => i.status === "pending").length;
     const done = items.filter((i) => i.status === "done").length;
     const skipped = items.filter((i) => i.status === "skipped").length;
     const errors = items.filter((i) => i.status === "error").length;
     const finished = total - pending;
     const pct = total > 0 ? Math.round((finished / total) * 100) : 0;
-    return { total, pending, done, skipped, errors, finished, pct };
+    return { total, pending, queued, done, skipped, errors, finished, pct };
   }, [items]);
 
-  const toProcess = items.filter((i) => i.status !== "skipped").length;
+  const introPending = items.filter((i) => i.status === "pending").length;
+  const introSkipped = items.filter((i) => i.status === "skipped").length;
 
   if (!open) return null;
 
@@ -172,10 +179,10 @@ export function AdminAiBulkProgressModal({
               {modeTitle(mode, phase)}
             </h2>
             <p className="admin-ai-progress-subtitle">
-              {phase === "intro" && modeIntroSubtitle(mode, toProcess, items.length)}
+              {phase === "intro" && modeIntroSubtitle(mode, introPending, introSkipped, items.length)}
               {phase === "running" && `${stats.finished} de ${stats.total} · ${stats.pct}%`}
               {phase === "done" &&
-                `${stats.done} enriquecidos · ${stats.skipped} omitidos · ${stats.errors} con error`}
+                `${stats.done} actualizados · ${stats.skipped} omitidos · ${stats.errors} con error`}
             </p>
           </div>
         </header>
@@ -191,12 +198,22 @@ export function AdminAiBulkProgressModal({
         {phase === "intro" && (
           <div className="admin-ai-progress-intro">
             <p>{modeIntroBody(mode)}</p>
+            {introSkipped > 0 && mode !== "descriptions-rewrite" && (
+              <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 16px" }}>
+                Se omitirán automáticamente {introSkipped} producto(s) que ya tienen esos datos.
+              </p>
+            )}
             <div className="admin-ai-progress-intro-actions">
               <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
                 Cancelar
               </button>
-              <button type="button" className="btn btn-primary btn-sm admin-ai-progress-start-btn" onClick={onStart}>
-                Comenzar ahora
+              <button
+                type="button"
+                className="btn btn-primary btn-sm admin-ai-progress-start-btn"
+                disabled={introPending === 0}
+                onClick={onStart}
+              >
+                {introPending === 0 ? "Nada pendiente" : `Comenzar (${introPending})`}
               </button>
             </div>
           </div>
