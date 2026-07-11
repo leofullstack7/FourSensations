@@ -917,7 +917,7 @@ export function StorefrontShell({
                       <span>{selectedProduct.name}</span>
                     </div>
                     <div className="product-brand">{selectedProduct.brand}</div>
-                    <h2 style={{ fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 600, color: "var(--dark)", marginBottom: 12, lineHeight: 1.2 }}>
+                    <h2 className="product-modal-title" style={{ fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 600, color: "var(--dark)", marginBottom: 12, lineHeight: 1.2 }}>
                       {selectedProduct.name}
                     </h2>
                     <div className="product-stars" style={{ marginBottom: 16 }}>
@@ -929,7 +929,7 @@ export function StorefrontShell({
                         {selectedProduct.rating} · {selectedProduct.reviews} reseñas
                       </span>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+                    <div className="product-modal-price-row" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
                       <span className="price-current" style={{ fontSize: 32 }}>
                         {formatPrice(selectedProduct.price)}
                       </span>
@@ -975,7 +975,7 @@ export function StorefrontShell({
                         />
                       </div>
                     ) : null}
-                    <p style={{ fontSize: 14, color: "var(--text-light)", lineHeight: 1.75, marginBottom: 24 }}>{selectedProduct.description}</p>
+                    <p className="product-modal-desc" style={{ fontSize: 14, color: "var(--text-light)", lineHeight: 1.75, marginBottom: 24 }}>{selectedProduct.description}</p>
                   </div>
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                     <button

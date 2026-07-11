@@ -1704,8 +1704,8 @@ function AdminProductListTab({
           {hasActiveFilters ? " (filtros activos)" : ""}
         </p>
       )}
-      <div className="admin-card admin-table-wrap" style={{ padding: 0, overflow: "hidden" }}>
-        <table className="admin-table">
+      <div className="admin-card admin-table-wrap" style={{ padding: 0 }}>
+        <table className="admin-table admin-table--product-list">
           <thead style={{ padding: "0 16px" }}>
             <tr>
               <th style={{ width: 44, padding: "16px 8px 16px 16px", textAlign: "center" }} title="Seleccionar para eliminación en lote">

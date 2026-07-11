@@ -2110,6 +2110,48 @@
     font-size: 12px;
   }
 
+  /* Lista de productos: nombre fijo al hacer scroll horizontal */
+  .admin-table--product-list {
+    min-width: 720px;
+  }
+  .admin-table--product-list thead th:nth-child(1),
+  .admin-table--product-list tbody td:nth-child(1) {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    background: #fff;
+    width: 44px;
+    min-width: 44px;
+    box-shadow: 2px 0 6px rgba(45, 31, 26, 0.06);
+  }
+  .admin-table--product-list thead th:nth-child(2),
+  .admin-table--product-list tbody td:nth-child(2) {
+    position: sticky;
+    left: 44px;
+    z-index: 2;
+    background: #fff;
+    min-width: 172px;
+    max-width: 220px;
+    box-shadow: 6px 0 14px rgba(45, 31, 26, 0.1);
+  }
+  .admin-table--product-list thead th:nth-child(1),
+  .admin-table--product-list thead th:nth-child(2) {
+    z-index: 4;
+    background: #fff;
+  }
+  .admin-table--product-list tbody tr:hover td:nth-child(1),
+  .admin-table--product-list tbody tr:hover td:nth-child(2) {
+    background: var(--ivory);
+  }
+  .admin-table--product-list .table-product-cell {
+    min-width: 0;
+  }
+  .admin-table--product-list .table-product-name {
+    white-space: normal;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
   /* Ocultar columnas menos importantes en lista de productos */
   .admin-table .col-hide-mobile {
     display: none;
