@@ -2152,6 +2152,140 @@
     word-break: break-word;
   }
 
+  /* Ventas / Inventario: columna producto fija al scroll horizontal */
+  .admin-table--sticky-product {
+    min-width: 640px;
+  }
+  .admin-table--sticky-product thead th:nth-child(1),
+  .admin-table--sticky-product tbody td:nth-child(1) {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: #fff;
+    min-width: 168px;
+    max-width: 240px;
+    box-shadow: 6px 0 14px rgba(45, 31, 26, 0.1);
+  }
+  .admin-table--sticky-product thead th:nth-child(1) {
+    z-index: 3;
+  }
+  .admin-table--sticky-product tbody tr:hover td:nth-child(1) {
+    background: var(--ivory);
+  }
+  .admin-table--sticky-product .table-product-cell {
+    min-width: 0;
+  }
+  .admin-table--sticky-product .table-product-name {
+    white-space: normal;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
+  /* Ventas — estadísticas */
+  .admin-sales-header {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .admin-sales-stats {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    width: 100%;
+  }
+  .admin-sales-stats .admin-card {
+    min-width: 0 !important;
+    padding: 14px 16px !important;
+  }
+  .admin-sales-stats .stat-num {
+    font-size: 22px !important;
+  }
+
+  /* Inventario — tarjetas de estadísticas */
+  .admin-stock-stats {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .admin-stock-stats .admin-stock-stat-card {
+    flex-direction: row;
+    align-items: center !important;
+    padding: 14px 16px !important;
+    gap: 10px !important;
+  }
+
+  /* Reportes */
+  .admin-reports-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+  .admin-reports-grid .admin-card {
+    padding: 24px 20px !important;
+  }
+  .admin-reports-top-row {
+    flex-wrap: wrap;
+    gap: 8px !important;
+  }
+  .admin-reports-top-row > span:last-child {
+    margin-left: auto;
+  }
+
+  /* Modal Detalle del producto */
+  .admin-product-detail-modal {
+    max-width: calc(100vw - 16px) !important;
+    width: 100%;
+    padding: 14px 16px 16px !important;
+    max-height: calc(100dvh - 20px) !important;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .admin-product-detail-title {
+    font-size: 18px !important;
+    margin-bottom: 12px !important;
+    padding-right: 36px;
+  }
+  .admin-product-detail-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+  .admin-product-detail-media {
+    order: 0;
+  }
+  .admin-product-detail-image {
+    max-width: min(220px, 72vw);
+    margin: 0 auto;
+    aspect-ratio: 1 / 1 !important;
+  }
+  .admin-product-detail-body {
+    min-width: 0;
+  }
+  .admin-product-detail-meta {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    margin-bottom: 10px !important;
+  }
+  .admin-product-detail-meta .admin-card {
+    padding: 10px 12px !important;
+    font-size: 12.5px;
+  }
+  .admin-product-detail-meta .admin-card[style*="grid-column"] {
+    grid-column: 1 !important;
+  }
+  .admin-product-detail-actions {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .admin-product-detail-actions > div {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .admin-product-detail-actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
   /* Ocultar columnas menos importantes en lista de productos */
   .admin-table .col-hide-mobile {
     display: none;
@@ -2246,6 +2380,15 @@
   .admin-topbar-actions .btn {
     font-size: 11px;
     padding: 6px 8px;
+  }
+  .admin-stock-stats {
+    grid-template-columns: 1fr !important;
+  }
+  .admin-sales-stats {
+    grid-template-columns: 1fr !important;
+  }
+  .admin-product-detail-image {
+    max-width: min(200px, 80vw);
   }
 }
 

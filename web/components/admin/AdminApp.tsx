@@ -5224,8 +5224,8 @@ function AdminSalesTab({
   const total = sales.reduce((s, v) => s + Number(v.total), 0);
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+      <div className="admin-sales-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+        <div className="admin-sales-stats" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           <div className="admin-card" style={{ padding: "16px 24px", minWidth: 160, textAlign: "center" }}>
             <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Total ventas</div>
             <div className="stat-num" style={{ fontSize: 28 }}>{formatPrice(total)}</div>
@@ -5244,8 +5244,8 @@ function AdminSalesTab({
       <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "-12px 0 20px" }}>
         Se listan las compras aprobadas del checkout (base de datos) y las ventas que registres manualmente en esta sesión.
       </p>
-      <div className="admin-card" style={{ padding: 0, overflow: "hidden" }}>
-        <table className="admin-table">
+      <div className="admin-card admin-table-wrap" style={{ padding: 0 }}>
+        <table className="admin-table admin-table--sticky-product">
           <thead>
             <tr>
               <th style={{ padding: 16 }}>Producto</th>
@@ -5313,22 +5313,22 @@ function AdminStockTab({
   });
   return (
     <>
-      <div style={{ marginBottom: 24, display: "flex", gap: 16 }}>
-        <div className="admin-card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+      <div className="admin-stock-stats" style={{ marginBottom: 24, display: "flex", gap: 16 }}>
+        <div className="admin-card admin-stock-stat-card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 24 }}>✅</span>
           <div>
             <div style={{ fontSize: 22, fontWeight: 700, color: "var(--dark)" }}>{ok}</div>
             <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Stock normal</div>
           </div>
         </div>
-        <div className="admin-card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+        <div className="admin-card admin-stock-stat-card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 24 }}>⚠️</span>
           <div>
             <div style={{ fontSize: 22, fontWeight: 700, color: "var(--gold)" }}>{low}</div>
             <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Stock bajo (&lt;5)</div>
           </div>
         </div>
-        <div className="admin-card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+        <div className="admin-card admin-stock-stat-card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 24 }}>❌</span>
           <div>
             <div style={{ fontSize: 22, fontWeight: 700, color: "var(--dusty-rose)" }}>{out}</div>
@@ -5336,8 +5336,8 @@ function AdminStockTab({
           </div>
         </div>
       </div>
-      <div className="admin-card" style={{ padding: 0, overflow: "hidden" }}>
-        <table className="admin-table">
+      <div className="admin-card admin-table-wrap" style={{ padding: 0 }}>
+        <table className="admin-table admin-table--sticky-product">
           <thead>
             <tr>
               <th style={{ padding: 16 }}>Producto</th>
@@ -5418,7 +5418,7 @@ function AdminReportsTab({ sales, showToast }: { sales: AdminSale[]; showToast: 
   const max = sorted[0]?.[1] ?? 1;
   return (
     <>
-      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
+      <div className="stats-grid admin-reports-grid" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
         <div className="admin-card" style={{ textAlign: "center", padding: 32 }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>📊</div>
           <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>Reporte Mensual</div>
@@ -5439,13 +5439,13 @@ function AdminReportsTab({ sales, showToast }: { sales: AdminSale[]; showToast: 
         </div>
       </div>
       {showTop && (
-        <div className="admin-card" style={{ marginTop: 0 }}>
+        <div className="admin-card admin-reports-top" style={{ marginTop: 0 }}>
           <div className="admin-card-title">🏆 Productos más vendidos</div>
           {sorted.length === 0 ? (
             <p style={{ color: "var(--text-muted)", fontSize: 14, textAlign: "center", padding: 24 }}>Sin datos de ventas aún</p>
           ) : (
             sorted.map(([name, count], idx) => (
-              <div key={name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--cream)" }}>
+              <div key={name} className="admin-reports-top-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--cream)" }}>
                 <span style={{ fontSize: 16, width: 24, fontWeight: 700, color: "var(--text-muted)" }}>{idx + 1}</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--dark)", marginBottom: 4 }}>{name}</div>
@@ -6272,16 +6272,16 @@ function AdminProductDetailModal({
 
   return (
     <div className={`admin-modal-overlay${open ? " open" : ""}`} onClick={(e) => e.target === e.currentTarget && onClose()} role="presentation">
-      <div className="admin-modal" style={{ maxWidth: 980 }}>
+      <div className="admin-modal admin-product-detail-modal" style={{ maxWidth: 980 }}>
         <button type="button" className="modal-close" onClick={onClose}>
           ✕
         </button>
-        <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 18 }}>
+        <div className="admin-product-detail-title" style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 18 }}>
           Detalle del producto
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(300px, 1fr) minmax(380px, 1.2fr)", gap: 20 }}>
-          <div>
-            <div style={{ border: "1px solid var(--line)", borderRadius: 12, overflow: "hidden", background: "var(--ivory)", aspectRatio: "1 / 1" }}>
+        <div className="admin-product-detail-grid" style={{ display: "grid", gridTemplateColumns: "minmax(300px, 1fr) minmax(380px, 1.2fr)", gap: 20 }}>
+          <div className="admin-product-detail-media">
+            <div className="admin-product-detail-image" style={{ border: "1px solid var(--line)", borderRadius: 12, overflow: "hidden", background: "var(--ivory)", aspectRatio: "1 / 1" }}>
               {isHttpImageUrl(product.imageUrl) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={product.imageUrl!} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -6322,10 +6322,10 @@ function AdminProductDetailModal({
             )}
           </div>
 
-          <div>
+          <div className="admin-product-detail-body">
             {!editingMode ? (
               <>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+                <div className="admin-product-detail-meta" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
                   <div className="admin-card" style={{ padding: 12 }}>
                     <strong>Marca:</strong> {product.brand || "—"}
                   </div>
@@ -6672,8 +6672,7 @@ function AdminProductDetailModal({
             )}
           </div>
         </div>
-        <div
-          style={{
+        <div className="admin-product-detail-actions" style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -6682,8 +6681,7 @@ function AdminProductDetailModal({
             marginTop: 20,
             paddingTop: 16,
             borderTop: "1px solid var(--line)",
-          }}
-        >
+          }}>
           <div>
             {!editingMode ? (
               <button
