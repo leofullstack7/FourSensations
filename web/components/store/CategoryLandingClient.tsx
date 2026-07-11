@@ -9,7 +9,7 @@ import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreProductCard } from "@/components/store/store-product-card";
 import type { StoreProduct } from "@/lib/types/product";
 import { getCategoryLandingCopy } from "@/lib/category-landing-theme";
-import { getCategoryLandingBanner } from "@/lib/category-banners";
+import { getCategoryLandingBanner, getCategoryLandingBannerTone } from "@/lib/category-banners";
 import {
   enrichStorefrontDisplayProducts,
   resolveStorefrontDisplayAfterFilter,
@@ -251,56 +251,66 @@ export function CategoryLandingClient({
 
   const showInitialSkeleton = catalogLoading && products.length === 0;
   const bannerSrc = getCategoryLandingBanner(categorySlug);
+  const bannerTone = getCategoryLandingBannerTone(categorySlug);
+
+  const heroCopy = (
+    <div className="category-landing-hero-copy">
+      <div className="gb-tech-chip">
+        <span className="gb-tech-live-dot" style={{ width: 6, height: 6 }} aria-hidden />
+        Catálogo inteligente
+      </div>
+      <div className="category-landing-eyebrow">Colección {categoryLabel}</div>
+      <h1 className="category-landing-title">{copy.headline}</h1>
+      <p className="category-landing-subtitle">{copy.subtitle}</p>
+      <div className="category-landing-stats">
+        <span className="category-landing-stat">
+          ◈ {catalogLoading && totalProductCount === 0 ? "…" : totalProductCount} productos
+        </span>
+        <span className="category-landing-stat">⬡ {subcategoriesFromDb.length} subcategorías</span>
+        <span className="category-landing-stat">✦ Filtros en vivo</span>
+      </div>
+      <div className="category-landing-cta-row">
+        <Link href="/" className="btn btn-outline btn-sm category-landing-cta-back">
+          {copy.ctaBack}
+        </Link>
+        <button
+          type="button"
+          className="btn btn-primary btn-sm category-landing-cta-primary"
+          onClick={() => {
+            setSelectedGrupo("");
+            setSelectedSub("");
+          }}
+        >
+          {copy.ctaExplore}
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <main className="category-landing-page">
       <section
-        className={`category-landing-hero section-pad${bannerSrc ? " category-landing-hero--has-banner" : ""}`}
+        className={`category-landing-hero${bannerSrc ? ` category-landing-hero--has-banner category-landing-hero--banner-${bannerTone ?? "dark"}` : " section-pad"}`}
         data-landing-slug={categorySlug}
-        style={bannerSrc ? { backgroundImage: `url(${bannerSrc})` } : undefined}
         aria-label={`Categoría ${categoryLabel}`}
       >
-        <TechAmbient variant="page" />
-        <div className="category-landing-hero-glow" aria-hidden />
-        <div className="category-landing-hero-overlay" aria-hidden />
-        <div className="container category-landing-hero-inner">
-          {!bannerSrc ? (
-            <div className="category-landing-hero-visual" aria-hidden>
-              <span className="category-landing-icon">{categoryIcon}</span>
-            </div>
-          ) : null}
-          <div className="category-landing-hero-copy">
-            <div className="gb-tech-chip">
-              <span className="gb-tech-live-dot" style={{ width: 6, height: 6 }} aria-hidden />
-              Catálogo inteligente
-            </div>
-            <div className="category-landing-eyebrow">Colección {categoryLabel}</div>
-            <h1 className="category-landing-title">{copy.headline}</h1>
-            <p className="category-landing-subtitle">{copy.subtitle}</p>
-            <div className="category-landing-stats">
-              <span className="category-landing-stat">
-                ◈ {catalogLoading && totalProductCount === 0 ? "…" : totalProductCount} productos
-              </span>
-              <span className="category-landing-stat">⬡ {subcategoriesFromDb.length} subcategorías</span>
-              <span className="category-landing-stat">✦ Filtros en vivo</span>
-            </div>
-            <div className="category-landing-cta-row">
-              <Link href="/" className="btn btn-outline btn-sm category-landing-cta-back">
-                {copy.ctaBack}
-              </Link>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm category-landing-cta-primary"
-                onClick={() => {
-                  setSelectedGrupo("");
-                  setSelectedSub("");
-                }}
-              >
-                {copy.ctaExplore}
-              </button>
-            </div>
+        {bannerSrc ? (
+          <div className="category-landing-hero-stage">
+            <img src={bannerSrc} alt="" className="category-landing-hero-banner" decoding="async" />
+            <div className="category-landing-hero-inner category-landing-hero-inner--banner">{heroCopy}</div>
           </div>
-        </div>
+        ) : (
+          <>
+            <TechAmbient variant="page" />
+            <div className="category-landing-hero-glow" aria-hidden />
+            <div className="container category-landing-hero-inner">
+              <div className="category-landing-hero-visual" aria-hidden>
+                <span className="category-landing-icon">{categoryIcon}</span>
+              </div>
+              {heroCopy}
+            </div>
+          </>
+        )}
       </section>
 
       <section className="section-pad reveal" style={{ paddingTop: 24 }}>

@@ -11,6 +11,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 
 export type CategoryNavFilters = {
   grupo: string;
@@ -67,12 +68,24 @@ function isCategoryHref(href: string): boolean {
   return pathname.startsWith("/categoria/");
 }
 
+function categoryNavLabel(href: string): string {
+  const { pathname } = parseHref(normalizeHref(href));
+  const slug = pathname.replace(/^\/categoria\//, "").trim();
+  if (!slug) return "tu categoría";
+  return slug
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 export function StoreNavigationProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [categoryNavFilters, setCategoryNavFilters] = useState<CategoryNavFilters | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [navOverlayLabel, setNavOverlayLabel] = useState("Cargando categoría");
+  const [portalReady, setPortalReady] = useState(false);
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingHrefRef = useRef<string | null>(null);
 
@@ -97,6 +110,7 @@ export function StoreNavigationProvider({ children }: { children: ReactNode }) {
 
       clearNavTimer();
       pendingHrefRef.current = target;
+      setNavOverlayLabel(categoryNavLabel(target));
       setIsNavigating(true);
 
       navTimerRef.current = setTimeout(() => {
@@ -135,19 +149,26 @@ export function StoreNavigationProvider({ children }: { children: ReactNode }) {
     return () => document.body.classList.remove("gb-store-navigating");
   }, [isNavigating]);
 
+  useEffect(() => setPortalReady(true), []);
+
   useEffect(() => () => clearNavTimer(), [clearNavTimer]);
+
+  const navOverlay =
+    isNavigating && portalReady ? (
+      <div className="gb-nav-overlay" role="status" aria-live="polite" aria-label="Cargando categoría">
+        <div className="gb-nav-overlay__panel">
+          <div className="gb-nav-overlay__spinner" aria-hidden />
+          <BrandLogo variant="store" className="gb-nav-overlay__logo" />
+          <p className="gb-nav-overlay__eyebrow">Un momento</p>
+          <p className="gb-nav-overlay__text gb-nav-overlay__text--loading">{navOverlayLabel}</p>
+        </div>
+      </div>
+    ) : null;
 
   return (
     <StoreNavigationContext.Provider value={{ isNavigating, navigateTo, categoryNavFilters }}>
       {children}
-      {isNavigating ? (
-        <div className="gb-nav-overlay" role="status" aria-live="polite" aria-label="Cargando categoría">
-          <div className="gb-nav-overlay__panel">
-            <BrandLogo variant="store" className="gb-nav-overlay__logo" />
-            <p className="gb-nav-overlay__text gb-nav-overlay__text--loading">Cargando</p>
-          </div>
-        </div>
-      ) : null}
+      {navOverlay && typeof document !== "undefined" ? createPortal(navOverlay, document.body) : null}
     </StoreNavigationContext.Provider>
   );
 }

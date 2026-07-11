@@ -612,87 +612,188 @@
 }
 
 .category-landing-hero--has-banner {
-  background-color: #1a1216;
-  background-size: cover;
-  background-position: center right;
-  background-repeat: no-repeat;
-  min-height: clamp(300px, 42vw, 440px);
-  border-bottom-color: rgba(0, 0, 0, 0.2);
+  position: relative;
+  padding: 0;
+  background: none;
+  border-bottom-color: rgba(200, 168, 162, 0.22);
 }
 
-.category-landing-hero-overlay {
-  display: none;
+.category-landing-hero-stage {
+  position: relative;
+  width: 100%;
+  line-height: 0;
 }
 
-.category-landing-hero--has-banner .category-landing-hero-overlay {
+.category-landing-hero-banner {
   display: block;
+  width: 100%;
+  height: auto;
+}
+
+.category-landing-hero-stage .category-landing-hero-inner--banner {
   position: absolute;
   inset: 0;
-  z-index: 0;
-  background: linear-gradient(
-    105deg,
-    rgba(18, 10, 14, 0.82) 0%,
-    rgba(18, 10, 14, 0.58) 42%,
-    rgba(18, 10, 14, 0.28) 72%,
-    rgba(18, 10, 14, 0.18) 100%
-  );
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0 clamp(16px, 4vw, 40px) 0 clamp(28px, 5.5vw, 72px);
+  grid-template-columns: unset;
+  gap: 0;
+  line-height: normal;
   pointer-events: none;
 }
 
-.category-landing-hero--has-banner .category-landing-hero-glow {
-  display: none;
+.category-landing-hero-stage .category-landing-hero-inner--banner .category-landing-hero-copy {
+  pointer-events: auto;
+  text-align: left;
+  max-width: min(540px, 52vw);
 }
 
-.category-landing-hero--has-banner .category-landing-hero-inner {
-  grid-template-columns: 1fr;
-  max-width: 720px;
+.category-landing-hero--has-banner .category-landing-cta-row {
+  justify-content: flex-start;
 }
 
-.category-landing-hero--has-banner .category-landing-eyebrow,
-.category-landing-hero--has-banner .category-landing-title,
-.category-landing-hero--has-banner .category-landing-subtitle,
-.category-landing-hero--has-banner .category-landing-stat {
+/* Banners oscuros: texto blanco con sombra legible */
+.category-landing-hero--banner-dark .category-landing-eyebrow,
+.category-landing-hero--banner-dark .category-landing-title,
+.category-landing-hero--banner-dark .category-landing-subtitle,
+.category-landing-hero--banner-dark .category-landing-stat {
   color: #fff;
   text-shadow:
-    0 2px 16px rgba(0, 0, 0, 0.55),
-    0 1px 4px rgba(0, 0, 0, 0.4);
+    0 1px 3px rgba(0, 0, 0, 0.55),
+    0 2px 12px rgba(0, 0, 0, 0.4),
+    0 0 24px rgba(0, 0, 0, 0.25);
 }
 
-.category-landing-hero--has-banner .category-landing-eyebrow {
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.category-landing-hero--has-banner .category-landing-subtitle {
+.category-landing-hero--banner-dark .category-landing-eyebrow {
   color: rgba(255, 255, 255, 0.92);
 }
 
-.category-landing-hero--has-banner .gb-tech-chip {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.28);
-  color: #fff;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+.category-landing-hero--banner-dark .category-landing-subtitle {
+  color: rgba(255, 255, 255, 0.94);
+  max-width: none;
 }
 
-.category-landing-hero--has-banner .category-landing-cta-back {
+.category-landing-hero--banner-dark .gb-tech-chip {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.32);
   color: #fff;
-  border-color: rgba(255, 255, 255, 0.72);
-  background: rgba(255, 255, 255, 0.08);
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
-.category-landing-hero--has-banner .category-landing-cta-back:hover {
-  background: rgba(255, 255, 255, 0.16);
+.category-landing-hero--banner-dark .category-landing-cta-back {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.1);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.category-landing-hero--banner-dark .category-landing-cta-back:hover {
+  background: rgba(255, 255, 255, 0.2);
   border-color: #fff;
   color: #fff;
 }
 
-.category-landing-hero--has-banner .category-landing-cta-primary {
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+.category-landing-hero--banner-dark .category-landing-stat {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.26);
 }
 
-.category-landing-hero--has-banner .category-landing-stat {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.22);
+/* Banners claros/rosados: panel vidrio + tipografía oscura */
+.category-landing-hero--banner-light .category-landing-hero-copy {
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.72) 0%,
+    rgba(255, 252, 250, 0.58) 55%,
+    rgba(255, 248, 250, 0.42) 100%
+  );
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 22px;
+  padding: clamp(18px, 3vw, 28px) clamp(20px, 3.5vw, 32px);
+  box-shadow:
+    0 16px 48px rgba(90, 45, 55, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.category-landing-hero--banner-light .category-landing-hero-copy::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: 28px;
+  height: 28px;
+  border-top: 2px solid rgba(180, 95, 110, 0.45);
+  border-left: 2px solid rgba(180, 95, 110, 0.45);
+  border-radius: 6px 0 0 0;
+  pointer-events: none;
+}
+
+.category-landing-hero--banner-light .category-landing-eyebrow {
+  color: #9a4a5c;
+  font-weight: 700;
+  text-shadow: none;
+}
+
+.category-landing-hero--banner-light .category-landing-title {
+  color: #2a1520;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.category-landing-hero--banner-light .category-landing-title::after {
+  content: "";
+  display: block;
+  width: 56px;
+  height: 3px;
+  margin-top: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #c87884 0%, rgba(200, 120, 132, 0.15) 100%);
+}
+
+.category-landing-hero--banner-light .category-landing-subtitle {
+  color: #4a2f38;
+  max-width: none;
+  text-shadow: none;
+}
+
+.category-landing-hero--banner-light .gb-tech-chip {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(180, 110, 120, 0.28);
+  color: #5c3540;
+  text-shadow: none;
+  box-shadow: 0 4px 14px rgba(90, 45, 55, 0.06);
+}
+
+.category-landing-hero--banner-light .category-landing-stat {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(180, 110, 120, 0.22);
+  color: #3d2830;
+  text-shadow: none;
+  box-shadow: 0 4px 12px rgba(90, 45, 55, 0.05);
+}
+
+.category-landing-hero--banner-light .category-landing-cta-back {
+  color: #3d2830;
+  border-color: rgba(60, 35, 42, 0.28);
+  background: rgba(255, 255, 255, 0.82);
+  text-shadow: none;
+  box-shadow: 0 4px 14px rgba(90, 45, 55, 0.06);
+}
+
+.category-landing-hero--banner-light .category-landing-cta-back:hover {
+  background: #fff;
+  border-color: rgba(60, 35, 42, 0.4);
+  color: #2a1520;
+}
+
+.category-landing-hero--banner-light .category-landing-cta-primary {
+  box-shadow: 0 10px 28px rgba(120, 60, 75, 0.28);
 }
 
 .category-landing-hero-glow {
@@ -968,6 +1069,18 @@
     grid-template-columns: 1fr;
     text-align: center;
     justify-items: center;
+  }
+  .category-landing-hero-stage .category-landing-hero-inner--banner {
+    align-items: center;
+    justify-content: flex-start;
+    padding-left: clamp(20px, 5vw, 32px);
+  }
+  .category-landing-hero-stage .category-landing-hero-inner--banner .category-landing-hero-copy {
+    text-align: left;
+    max-width: min(420px, 72vw);
+  }
+  .category-landing-hero--has-banner .category-landing-cta-row {
+    justify-content: flex-start;
   }
   .category-landing-hero-copy {
     text-align: center;
