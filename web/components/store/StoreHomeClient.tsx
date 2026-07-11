@@ -514,7 +514,6 @@ export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreH
             <span>© 2025 GinnaBeauty. Todos los derechos reservados.</span>
             <div className="footer-payments">
               <span className="payment-chip">ePayco</span>
-              <span className="payment-chip">Bold</span>
               <span className="payment-chip">PSE</span>
               <span className="payment-chip">Visa</span>
               <span className="payment-chip">Mastercard</span>

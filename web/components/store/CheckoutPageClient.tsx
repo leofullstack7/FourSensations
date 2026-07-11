@@ -25,6 +25,9 @@ type PayPhase = "idle" | "order" | "session" | "widget" | "integrity" | "error";
 
 type PaymentMethod = "epayco" | "bold";
 
+/** Bold deshabilitado temporalmente en checkout. */
+const BOLD_CHECKOUT_ENABLED = false;
+
 const listParent = {
   hidden: { opacity: 0 },
   show: {
@@ -117,9 +120,15 @@ export function CheckoutPageClient() {
   useEffect(() => {
     setErrorMsg(null);
     setPhase((p) => (p === "error" ? "idle" : p));
-    if (paymentMethod !== "bold") {
+    if (!BOLD_CHECKOUT_ENABLED || paymentMethod !== "bold") {
       if (boldMountRef.current) boldMountRef.current.innerHTML = "";
       document.querySelectorAll("script[data-gb-bold-checkout='1']").forEach((n) => n.remove());
+    }
+  }, [paymentMethod]);
+
+  useEffect(() => {
+    if (!BOLD_CHECKOUT_ENABLED && paymentMethod === "bold") {
+      setPaymentMethod("epayco");
     }
   }, [paymentMethod]);
 
@@ -176,7 +185,7 @@ export function CheckoutPageClient() {
       if (line1.trim().length < 3) return "Escribe una dirección completa (mínimo 3 caracteres).";
     }
     if (city.trim().length < 2) return "Indica la ciudad.";
-    if (!paymentMethod) return "Elige cómo quieres pagar (ePayco o Bold).";
+    if (!paymentMethod) return "Elige ePayco como método de pago.";
     return null;
   }, [city, line1, paymentMethod, shippingZoneId]);
 
@@ -373,7 +382,7 @@ export function CheckoutPageClient() {
   }, [buildOrderPayload, email, name, phone, validateForm]);
 
   const handlePay = () => {
-    if (paymentMethod === "bold") void runBoldPayment();
+    if (paymentMethod === "bold" && BOLD_CHECKOUT_ENABLED) void runBoldPayment();
     else if (paymentMethod === "epayco") void runEpaycoPayment("onpage");
   };
 
@@ -449,7 +458,7 @@ export function CheckoutPageClient() {
             <div className="gb-co-hero-badge">Checkout seguro</div>
             <h1>Finalizar compra</h1>
             <p>
-              Elige envío y método de pago. Procesamos pagos con <strong>ePayco</strong> o <strong>Bold</strong>, sin
+              Elige envío y método de pago. Procesamos pagos con <strong>ePayco</strong> de forma segura, sin
               almacenar datos de tarjeta.
             </p>
           </motion.div>
@@ -754,22 +763,24 @@ export function CheckoutPageClient() {
                 <span className="gb-co-method-name">ePayco</span>
                 <span className="gb-co-method-desc">Smart Checkout y pasarela clásica</span>
               </motion.button>
-              <motion.button
-                type="button"
-                role="radio"
-                aria-checked={paymentMethod === "bold"}
-                className={`gb-co-method-card${paymentMethod === "bold" ? " gb-co-method-card--active" : ""}`}
-                onClick={() => setPaymentMethod("bold")}
-                whileHover={reduceMotion ? undefined : { y: -3 }}
-                whileTap={reduceMotion ? undefined : { scale: 0.99 }}
-              >
-                <span className="gb-co-method-icon">⚡</span>
-                <span className="gb-co-method-name">Bold</span>
-                <span className="gb-co-method-desc">Pago embebido Bold</span>
-              </motion.button>
+              {BOLD_CHECKOUT_ENABLED ? (
+                <motion.button
+                  type="button"
+                  role="radio"
+                  aria-checked={paymentMethod === "bold"}
+                  className={`gb-co-method-card${paymentMethod === "bold" ? " gb-co-method-card--active" : ""}`}
+                  onClick={() => setPaymentMethod("bold")}
+                  whileHover={reduceMotion ? undefined : { y: -3 }}
+                  whileTap={reduceMotion ? undefined : { scale: 0.99 }}
+                >
+                  <span className="gb-co-method-icon">⚡</span>
+                  <span className="gb-co-method-name">Bold</span>
+                  <span className="gb-co-method-desc">Pago embebido Bold</span>
+                </motion.button>
+              ) : null}
             </div>
 
-            <div ref={boldMountRef} className="gb-co-bold-mount" id="gb-bold-embed" />
+            {BOLD_CHECKOUT_ENABLED ? <div ref={boldMountRef} className="gb-co-bold-mount" id="gb-bold-embed" /> : null}
 
             <div className="gb-co-trust">
               🔒 Pagos seguros. No almacenamos datos de tarjeta. La confirmación definitiva la envía la pasarela a nuestro

@@ -143,7 +143,7 @@ export function StorefrontShell({
   const [cartOpen, setCartOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const router = useRouter();
-  const { navigateTo } = useStoreNavigation();
+  const { navigateTo, isNavigating } = useStoreNavigation();
   const [topbarIndex, setTopbarIndex] = useState(0);
   const [authMode, setAuthMode] = useState<"login" | "fav-warning">("login");
   const [customerAuthTab, setCustomerAuthTab] = useState<"login" | "register">("login");
@@ -424,6 +424,10 @@ export function StorefrontShell({
     setMobileMenuOpen(false);
     setMobileExpandedCat(null);
   }, []);
+
+  useEffect(() => {
+    if (isNavigating) closeMobileMenu();
+  }, [isNavigating, closeMobileMenu]);
 
   const closeWishlist = useCallback(() => {
     setWishlistOpen(false);

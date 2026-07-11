@@ -1,11 +1,13 @@
 "use client";
 
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -24,6 +26,8 @@ type StoreNavigationContextValue = {
 };
 
 const StoreNavigationContext = createContext<StoreNavigationContextValue | null>(null);
+
+const CATEGORY_NAV_DELAY_MS = 2000;
 
 export function useStoreNavigation(): StoreNavigationContextValue {
   const ctx = useContext(StoreNavigationContext);
@@ -58,11 +62,26 @@ function filtersFromSearch(search: string): CategoryNavFilters {
   };
 }
 
+function isCategoryHref(href: string): boolean {
+  const { pathname } = parseHref(normalizeHref(href));
+  return pathname.startsWith("/categoria/");
+}
+
 export function StoreNavigationProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [categoryNavFilters, setCategoryNavFilters] = useState<CategoryNavFilters | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
+  const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingHrefRef = useRef<string | null>(null);
+
+  const clearNavTimer = useCallback(() => {
+    if (navTimerRef.current) {
+      clearTimeout(navTimerRef.current);
+      navTimerRef.current = null;
+    }
+  }, []);
 
   const navigateTo = useCallback(
     (href: string) => {
@@ -71,26 +90,64 @@ export function StoreNavigationProvider({ children }: { children: ReactNode }) {
 
       if (target === current) return;
 
-      const { pathname: targetPath, search: targetSearch } = parseHref(target);
-
-      if (targetPath === pathname) {
-        setCategoryNavFilters(filtersFromSearch(targetSearch));
-        window.history.replaceState(null, "", target);
+      if (!isCategoryHref(target)) {
+        router.push(target);
         return;
       }
 
-      router.push(target);
+      clearNavTimer();
+      pendingHrefRef.current = target;
+      setIsNavigating(true);
+
+      navTimerRef.current = setTimeout(() => {
+        navTimerRef.current = null;
+        const pending = pendingHrefRef.current;
+        pendingHrefRef.current = null;
+        if (!pending) {
+          setIsNavigating(false);
+          return;
+        }
+
+        const { pathname: targetPath, search: targetSearch } = parseHref(pending);
+
+        if (targetPath === pathname) {
+          setCategoryNavFilters(filtersFromSearch(targetSearch));
+          window.history.replaceState(null, "", pending);
+        } else {
+          router.push(pending);
+        }
+
+        setIsNavigating(false);
+      }, CATEGORY_NAV_DELAY_MS);
     },
-    [pathname, searchParams, router],
+    [pathname, searchParams, router, clearNavTimer],
   );
 
   useEffect(() => {
     setCategoryNavFilters(null);
-  }, [pathname]);
+    clearNavTimer();
+    pendingHrefRef.current = null;
+    setIsNavigating(false);
+  }, [pathname, clearNavTimer]);
+
+  useEffect(() => {
+    document.body.classList.toggle("gb-store-navigating", isNavigating);
+    return () => document.body.classList.remove("gb-store-navigating");
+  }, [isNavigating]);
+
+  useEffect(() => () => clearNavTimer(), [clearNavTimer]);
 
   return (
-    <StoreNavigationContext.Provider value={{ isNavigating: false, navigateTo, categoryNavFilters }}>
+    <StoreNavigationContext.Provider value={{ isNavigating, navigateTo, categoryNavFilters }}>
       {children}
+      {isNavigating ? (
+        <div className="gb-nav-overlay" role="status" aria-live="polite" aria-label="Cargando categoría">
+          <div className="gb-nav-overlay__panel">
+            <BrandLogo variant="store" className="gb-nav-overlay__logo" />
+            <p className="gb-nav-overlay__text gb-nav-overlay__text--loading">Cargando</p>
+          </div>
+        </div>
+      ) : null}
     </StoreNavigationContext.Provider>
   );
 }

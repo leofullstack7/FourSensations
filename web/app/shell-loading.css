@@ -158,10 +158,18 @@
 
 .gb-nav-overlay__text {
   margin: 0;
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-muted, #8a7a76);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--rose, #c4547a);
+}
+
+.gb-nav-overlay__text--loading {
+  font-family: var(--font-display, Georgia, serif);
+  font-size: 1.25rem;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  color: var(--dark, #2d1f1a);
 }
 
 .gb-loading-page--route {
@@ -188,4 +196,18 @@
   to {
     opacity: 1;
   }
+}
+
+/* Oculta mega menú mientras navega a categoría */
+body.gb-store-navigating .mega-menu,
+body.gb-store-navigating .mobile-mega-menu {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transform: translateY(-8px) !important;
+}
+
+body.gb-store-navigating .mobile-mega-menu.open {
+  max-height: 0 !important;
+  overflow: hidden !important;
 }
