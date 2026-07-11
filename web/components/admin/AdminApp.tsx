@@ -37,6 +37,7 @@ import {
   resolveAdminListRowsAfterFilter,
 } from "@/lib/admin/variant-groups";
 import { computeAdminCatalogStats, type AdminCatalogStats } from "@/lib/admin/catalog-stats";
+import { compactChartAmount, computeSemesterSalesChart } from "@/lib/admin/sales-semester-chart";
 import { AdminCategoryStorefrontPanel } from "@/components/admin/AdminCategoryStorefrontPanel";
 import {
   AdminAiBulkProgressModal,
@@ -476,6 +477,8 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
 
   const catalogStats = useMemo(() => computeAdminCatalogStats(products, sales), [products, sales]);
 
+  const semesterSalesChart = useMemo(() => computeSemesterSalesChart(sales), [sales]);
+
   const { filteredProducts, filteredMatchCount } = useMemo(() => {
     let list = products;
     const q = productSearch.trim().toLowerCase();
@@ -822,9 +825,8 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   }, [productFilterSubcategory, productFilterSubcategoryOptions]);
 
   const renderDashboard = () => {
-    const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun"];
-    const values = [320000, 480000, 390000, 520000, 610000, 580000];
-    const max = Math.max(...values);
+    const chartValues = semesterSalesChart.months.map((m) => m.total);
+    const chartMax = Math.max(...chartValues, 1);
     return (
       <>
         <div className="admin-dashboard-hero reveal">
@@ -878,15 +880,22 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
         </div>
         <div className="charts-row">
           <div className="admin-card admin-card--tech">
-            <div className="admin-card-title">Ventas últimos 6 meses</div>
+            <div className="admin-card-title">{semesterSalesChart.title}</div>
             <div className="bar-chart" id="bar-chart">
-              {months.map((m, i) => {
-                const h = Math.round((values[i] / max) * 140);
+              {semesterSalesChart.months.map((month) => {
+                const h = Math.round((month.total / chartMax) * 140);
                 return (
-                  <div key={m} className="bar-group">
-                    <span className="bar-value">{Math.round(values[i] / 1000)}K</span>
-                    <div className="bar" style={{ height: h, background: "linear-gradient(180deg,var(--rose),var(--blush))" }} title={formatPrice(values[i])} />
-                    <span className="bar-label">{m}</span>
+                  <div key={month.monthIndex} className="bar-group">
+                    <span className="bar-value">{compactChartAmount(month.total)}</span>
+                    <div
+                      className="bar"
+                      style={{
+                        height: Math.max(h, month.total > 0 ? 4 : 0),
+                        background: "linear-gradient(180deg,var(--rose),var(--blush))",
+                      }}
+                      title={formatPrice(month.total)}
+                    />
+                    <span className="bar-label">{month.label}</span>
                   </div>
                 );
               })}
