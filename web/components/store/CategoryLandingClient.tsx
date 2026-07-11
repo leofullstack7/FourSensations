@@ -9,6 +9,7 @@ import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreProductCard } from "@/components/store/store-product-card";
 import type { StoreProduct } from "@/lib/types/product";
 import { getCategoryLandingCopy } from "@/lib/category-landing-theme";
+import { getCategoryLandingBanner } from "@/lib/category-banners";
 import {
   enrichStorefrontDisplayProducts,
   resolveStorefrontDisplayAfterFilter,
@@ -249,20 +250,25 @@ export function CategoryLandingClient({
   useReveal();
 
   const showInitialSkeleton = catalogLoading && products.length === 0;
+  const bannerSrc = getCategoryLandingBanner(categorySlug);
 
   return (
     <main className="category-landing-page">
       <section
-        className="category-landing-hero section-pad"
+        className={`category-landing-hero section-pad${bannerSrc ? " category-landing-hero--has-banner" : ""}`}
         data-landing-slug={categorySlug}
+        style={bannerSrc ? { backgroundImage: `url(${bannerSrc})` } : undefined}
         aria-label={`Categoría ${categoryLabel}`}
       >
         <TechAmbient variant="page" />
         <div className="category-landing-hero-glow" aria-hidden />
+        <div className="category-landing-hero-overlay" aria-hidden />
         <div className="container category-landing-hero-inner">
-          <div className="category-landing-hero-visual" aria-hidden>
-            <span className="category-landing-icon">{categoryIcon}</span>
-          </div>
+          {!bannerSrc ? (
+            <div className="category-landing-hero-visual" aria-hidden>
+              <span className="category-landing-icon">{categoryIcon}</span>
+            </div>
+          ) : null}
           <div className="category-landing-hero-copy">
             <div className="gb-tech-chip">
               <span className="gb-tech-live-dot" style={{ width: 6, height: 6 }} aria-hidden />
