@@ -76,6 +76,7 @@ import {
   inspectZipFileClient,
   type ZipInspectResult,
 } from "@/lib/bulk-import/zip-client-inspect";
+import { optimizeZipFileClient } from "@/lib/bulk-import/zip-client-optimize";
 import { normalizeKey } from "@/lib/bulk-import/normalize";
 import type {
   BulkPreviewNewTaxonomyItem,
@@ -3128,7 +3129,8 @@ function AdminBulkTab({
                     </div>
                   ) : (
                     <p style={{ margin: "0 0 8px", color: "var(--text-muted)" }}>
-                      Convierte las fotos a WebP (máx. 1200px, calidad 82) para subir más rápido y ahorrar espacio.
+                      Convierte las fotos a WebP en tu navegador (máx. 1200px) para subir más rápido. No hace falta
+                      el servidor y evita errores 502 con ZIPs grandes.
                     </p>
                   )}
                   <button
@@ -3140,21 +3142,54 @@ function AdminBulkTab({
                       void (async () => {
                         setZipOptimizing(true);
                         setMutation("bulk");
-                        setBulkProgressLabel("Optimizando imágenes a WebP…");
+                        setBulkProgressLabel("Optimizando imágenes a WebP en tu navegador…");
                         bulkProgress.start("optimize");
                         try {
-                          const result = await postBulkZipOptimize(zipFile);
+                          // En el navegador: evita 502 del endpoint serverless con ZIPs grandes.
+                          const result = await optimizeZipFileClient(zipFile, (done, total) => {
+                            if (total > 0) {
+                              setBulkProgressLabel(`Optimizando WebP… ${done}/${total}`);
+                            }
+                          });
                           bulkProgress.finish();
                           setZipFile(result.file);
                           setZipOptimized(true);
                           showToast(
-                            `Optimizado: ${formatZipBytes(result.beforeBytes)} → ${formatZipBytes(result.afterBytes)} (−${result.savedPercent}%)`,
+                            `Optimizado: ${formatZipBytes(result.stats.beforeBytes)} → ${formatZipBytes(result.stats.afterBytes)} (−${result.stats.savedPercent}%)`,
                             "success",
                             "✨",
                           );
                         } catch (e) {
                           bulkProgress.reset();
-                          showToast(e instanceof Error ? e.message : "Error al optimizar ZIP", "danger", "⚠️");
+                          // Fallback al servidor solo si el cliente falla (p. ej. WebP no soportado).
+                          try {
+                            setBulkProgressLabel("Reintentando optimización en el servidor…");
+                            bulkProgress.start("optimize");
+                            const serverResult = await postBulkZipOptimize(zipFile);
+                            bulkProgress.finish();
+                            setZipFile(serverResult.file);
+                            setZipOptimized(true);
+                            showToast(
+                              `Optimizado: ${formatZipBytes(serverResult.beforeBytes)} → ${formatZipBytes(serverResult.afterBytes)} (−${serverResult.savedPercent}%)`,
+                              "success",
+                              "✨",
+                            );
+                          } catch (serverErr) {
+                            bulkProgress.reset();
+                            const msg =
+                              serverErr instanceof Error
+                                ? serverErr.message
+                                : e instanceof Error
+                                  ? e.message
+                                  : "Error al optimizar ZIP";
+                            showToast(
+                              msg.includes("502") || msg.includes("servidor")
+                                ? "No se pudo optimizar el ZIP. Puedes continuar con Analizar sin optimizar."
+                                : msg,
+                              "danger",
+                              "⚠️",
+                            );
+                          }
                         } finally {
                           setZipOptimizing(false);
                           setMutation(null);

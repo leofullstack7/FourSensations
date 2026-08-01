@@ -49,7 +49,14 @@ export async function postBulkZipOptimize(zip: File): Promise<BulkZipOptimizeRes
     body: fd,
     credentials: "include",
   });
-  if (!res.ok) throw new Error(await parseError(res));
+  if (!res.ok) {
+    if (res.status === 502 || res.status === 504 || res.status === 413) {
+      throw new Error(
+        "El servidor no pudo optimizar este ZIP (límite de tiempo o tamaño). Usa la optimización en el navegador.",
+      );
+    }
+    throw new Error(await parseError(res));
+  }
 
   const blob = await res.blob();
   const beforeBytes = Number(res.headers.get("X-Zip-Before-Bytes") ?? 0);
