@@ -8,6 +8,12 @@ import { prisma } from "@/lib/prisma";
 import { noStoreJson } from "@/lib/server/no-store-json";
 import { revalidateCategoryStorefrontProducts } from "@/lib/server/revalidate-category-storefront";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
+import {
+  CatalogActions,
+  CatalogEntities,
+  snapshotCategory,
+} from "@/lib/server/catalog-versioning";
+import { recordCatalogVersionSafe } from "@/lib/server/record-catalog-version";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -113,9 +119,9 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
   try {
     const category = await prisma.category.findUnique({
       where: { id: params.id },
-      select: { id: true, slug: true },
     });
     if (!category) return noStoreJson({ error: "Categoría no encontrada" }, { status: 404 });
+    const beforeSnap = snapshotCategory(category);
 
     let json: unknown;
     try {
@@ -140,12 +146,27 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
     const validIds = new Set(rows.map((r) => r.id));
     const productIds = normalizeFeaturedProductIds(parsed.data.productIds, validIds);
 
-    await prisma.category.update({
+    const updated = await prisma.category.update({
       where: { id: category.id },
       data: { storefrontFeaturedProductIds: productIds },
     });
 
     revalidateCategoryStorefrontProducts(category.slug);
+
+    await recordCatalogVersionSafe({
+      label: `Vitrina actualizada: ${category.name}`,
+      summary: `Se actualizó el orden destacado de la categoría «${category.name}».`,
+      changes: [
+        {
+          entityType: CatalogEntities.CATEGORY,
+          entityId: category.id,
+          action: CatalogActions.UPDATE,
+          label: `Categoría: ${category.name}`,
+          beforeData: beforeSnap,
+          afterData: snapshotCategory(updated),
+        },
+      ],
+    });
 
     return noStoreJson({ ok: true, featuredIds: productIds });
   } catch (e) {

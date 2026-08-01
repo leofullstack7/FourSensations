@@ -8,6 +8,13 @@ import { slugify } from "@/lib/slugify";
 import { normalizeTaxonomyNameForDb } from "@/lib/taxonomy-display-name";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import {
+  CatalogActions,
+  CatalogEntities,
+  snapshotCategory,
+  snapshotSubcategory,
+} from "@/lib/server/catalog-versioning";
+import { recordCatalogVersionSafe } from "@/lib/server/record-catalog-version";
+import {
   adminCategoryUpdateSchema,
   formatZodError,
 } from "@/lib/validation/admin-category";
@@ -71,6 +78,7 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
     if (!existing) {
       return noStoreJson({ error: "Categoría no encontrada" }, { status: 404 });
     }
+    const beforeSnap = snapshotCategory(existing);
 
     let json: unknown;
     try {
@@ -126,6 +134,20 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
     });
 
     revalidateStorefrontMenu();
+    await recordCatalogVersionSafe({
+      label: `Categoría actualizada: ${row.name}`,
+      summary: `Se modificó la categoría «${row.name}».`,
+      changes: [
+        {
+          entityType: CatalogEntities.CATEGORY,
+          entityId: row.id,
+          action: CatalogActions.UPDATE,
+          label: `Categoría: ${row.name}`,
+          beforeData: beforeSnap,
+          afterData: snapshotCategory(row),
+        },
+      ],
+    });
     return noStoreJson({ category: mapCategory(row) });
   } catch (e) {
     console.error("[PUT /api/admin/categories/[id]]", e);
@@ -138,7 +160,10 @@ export async function DELETE(_req: NextRequest, { params }: RouteCtx) {
   if (denied) return denied;
   const { id } = params;
   try {
-    const existing = await prisma.category.findUnique({ where: { id } });
+    const existing = await prisma.category.findUnique({
+      where: { id },
+      include: { subcategories: true },
+    });
     if (!existing) {
       return noStoreJson({ error: "Categoría no encontrada" }, { status: 404 });
     }
@@ -153,8 +178,32 @@ export async function DELETE(_req: NextRequest, { params }: RouteCtx) {
         { status: 409 }
       );
     }
+    const beforeSnap = snapshotCategory(existing);
+    const subChanges = existing.subcategories.map((s) => ({
+      entityType: CatalogEntities.SUBCATEGORY,
+      entityId: s.id,
+      action: CatalogActions.DELETE,
+      label: `Subcategoría: ${s.name}`,
+      beforeData: snapshotSubcategory(s),
+      afterData: null,
+    }));
     await prisma.category.delete({ where: { id } });
     revalidateStorefrontMenu();
+    await recordCatalogVersionSafe({
+      label: `Categoría eliminada: ${existing.name}`,
+      summary: `Se eliminó la categoría «${existing.name}».`,
+      changes: [
+        ...subChanges,
+        {
+          entityType: CatalogEntities.CATEGORY,
+          entityId: id,
+          action: CatalogActions.DELETE,
+          label: `Categoría: ${existing.name}`,
+          beforeData: beforeSnap,
+          afterData: null,
+        },
+      ],
+    });
     return new Response(null, { status: 204 });
   } catch (e: unknown) {
     const code = (e as { code?: string })?.code;

@@ -17,6 +17,7 @@ import {
   GINNA_ADVISOR_PERSONA,
   isLikelyOffTopicMessage,
 } from "@/lib/ai-advisor-persona";
+import { WHATSAPP_BUSINESS_DISPLAY } from "@/lib/storefront-contact";
 import type { StoreProduct } from "@/lib/types/product";
 import { isOpenAiConfigured } from "@/lib/server/product-ai-openai";
 
@@ -67,6 +68,7 @@ Cuando recomiendes productos, invita naturalmente a agregarlos al carrito o favo
 1-3 frases, español Colombia, tono de empleada de tienda.
 
 Envío gratis desde $150.000 COP · Pagos ePayco/Bold · Calidad profesional GinnaBeauty.
+WhatsApp de atención: ${WHATSAPP_BUSINESS_DISPLAY}.
 
 CONVERSACIÓN:
 ${conversation}

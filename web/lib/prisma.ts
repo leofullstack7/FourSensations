@@ -2,7 +2,7 @@ import "@/lib/load-env";
 import { PrismaClient } from "@prisma/client";
 
 /** Incrementar al cambiar `schema.prisma` para descartar clientes Prisma cacheados en dev. */
-const PRISMA_CLIENT_GENERATION = "2026-07-10-product-color";
+const PRISMA_CLIENT_GENERATION = "2026-07-28-catalog-versions";
 
 type PrismaGlobal = {
   prisma?: PrismaClient;

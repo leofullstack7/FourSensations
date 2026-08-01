@@ -9,6 +9,13 @@ import { stripAiFlagsForManualEdit } from "@/lib/product-ai-fields";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { revalidateStorefrontProducts } from "@/lib/server/revalidate-storefront-products";
 import {
+  CatalogActions,
+  CatalogEntities,
+  loadProductSnapshot,
+  snapshotProduct,
+} from "@/lib/server/catalog-versioning";
+import { recordCatalogVersionSafe } from "@/lib/server/record-catalog-version";
+import {
   adminProductUpdateSchema,
   formatZodError,
 } from "@/lib/validation/admin-product";
@@ -39,10 +46,14 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
   if (denied) return denied;
   const { id } = params;
   try {
-    const existing = await prisma.product.findUnique({ where: { id } });
+    const existing = await prisma.product.findUnique({
+      where: { id },
+      include: { images: true },
+    });
     if (!existing) {
       return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
     }
+    const beforeSnap = snapshotProduct(existing);
 
     let json: unknown;
     try {
@@ -147,6 +158,21 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
       revalidateStorefrontProducts();
     }
 
+    await recordCatalogVersionSafe({
+      label: `Producto actualizado: ${row.name}`,
+      summary: `Se modificó el producto «${row.name}».`,
+      changes: [
+        {
+          entityType: CatalogEntities.PRODUCT,
+          entityId: row.id,
+          action: CatalogActions.UPDATE,
+          label: `Producto: ${row.name}`,
+          beforeData: beforeSnap,
+          afterData: snapshotProduct(row),
+        },
+      ],
+    });
+
     return NextResponse.json({ product: prismaProductToAdmin(row) });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error desconocido";
@@ -170,7 +196,25 @@ export async function DELETE(_req: NextRequest, { params }: RouteCtx) {
   if (denied) return denied;
   const { id } = params;
   try {
+    const before = await loadProductSnapshot(id);
+    if (!before) {
+      return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
+    }
     await prisma.product.delete({ where: { id } });
+    await recordCatalogVersionSafe({
+      label: `Producto eliminado: ${before.name}`,
+      summary: `Se eliminó el producto «${before.name}» del catálogo.`,
+      changes: [
+        {
+          entityType: CatalogEntities.PRODUCT,
+          entityId: id,
+          action: CatalogActions.DELETE,
+          label: `Producto: ${before.name}`,
+          beforeData: before,
+          afterData: null,
+        },
+      ],
+    });
     return new NextResponse(null, { status: 204 });
   } catch (e: unknown) {
     const code = (e as { code?: string })?.code;

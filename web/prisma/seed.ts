@@ -101,7 +101,7 @@ const siteSettingsData: Prisma.InputJsonValue = {
   },
   footer: {
     tagline: "GinnaBeauty — cosmética con alma femenina y estándar premium.",
-    contactHint: "Escríbenos por WhatsApp o Instagram para pedidos y asesoría.",
+    contactHint: "Escríbenos por WhatsApp al +57 319 328 0616 o Instagram para pedidos y asesoría.",
   },
   seo: {
     defaultTitle: "GinnaBeauty | Cosmética y cuidado premium",

@@ -322,3 +322,57 @@ model SiteSettings {
   data      Json
   updatedAt DateTime @updatedAt
 }
+
+/// Tipo de entidad versionada del catálogo admin.
+enum CatalogEntityType {
+  PRODUCT
+  CATEGORY
+  SUBCATEGORY
+  PRODUCT_COMBO
+  SITE_MENU
+}
+
+enum CatalogChangeAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+/// Puntero singleton: versión activa y cabeza del historial.
+model CatalogVersionMeta {
+  id                   Int @id @default(1)
+  currentVersionNumber Int @default(1)
+  headVersionNumber    Int @default(1)
+}
+
+/// Versión del catálogo. La v1 es baseline (estado actual al activar el sistema).
+/// Cada versión posterior guarda solo los cambios nuevos (diff).
+model CatalogVersion {
+  id         String                 @id @default(cuid())
+  number     Int                    @unique
+  label      String
+  summary    String?
+  isBaseline Boolean                @default(false)
+  createdAt  DateTime               @default(now())
+  createdBy  String?
+  changes    CatalogVersionChange[]
+
+  @@index([createdAt])
+}
+
+model CatalogVersionChange {
+  id         String              @id @default(cuid())
+  versionId  String
+  version    CatalogVersion      @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  entityType CatalogEntityType
+  entityId   String
+  action     CatalogChangeAction
+  /// Etiqueta corta para UI (ej. "Producto: Labial Rose").
+  label      String?
+  beforeData Json?
+  afterData  Json?
+  sortOrder  Int                 @default(0)
+
+  @@index([versionId])
+  @@index([entityType, entityId])
+}

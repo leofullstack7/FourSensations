@@ -22,11 +22,17 @@ export type ZipImageEntry = {
 };
 
 function toRawImageCode(baseName: string): string {
-  const upper = baseName.trim().toUpperCase();
+  let upper = baseName.trim().toUpperCase();
   if (!upper) return "";
 
-  // Referencias con segmentos unidos por guión (p. ej. C1-ROJ-SHA).
-  if (/^[A-Z0-9]+(?:-[A-Z0-9]+)+$/.test(upper)) {
+  // Sufijos de variante de imagen (tintes / galería): 5-0_COLOR, 5-0_1 → código base 5-0.
+  upper = upper.replace(/[-_]COLOR$/i, "");
+  upper = upper.replace(/_\d+$/i, "");
+  upper = upper.replace(/[-_]COLOR$/i, "");
+  upper = upper.replace(/_\d+$/i, "");
+
+  // Referencias con segmentos unidos por guión (p. ej. C1-ROJ-SHA, 5-0, 9,5-1).
+  if (/^[A-Z0-9]+(?:-[A-Z0-9]+)+$/.test(upper) || /^\d+[.,]\d+(?:-[A-Z0-9]+)?$/.test(upper)) {
     return upper;
   }
 

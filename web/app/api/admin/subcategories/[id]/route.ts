@@ -8,6 +8,12 @@ import { slugify } from "@/lib/slugify";
 import { normalizeTaxonomyNameForDb } from "@/lib/taxonomy-display-name";
 import type { AdminSubcategoryRow } from "@/lib/types/admin-category";
 import {
+  CatalogActions,
+  CatalogEntities,
+  snapshotSubcategory,
+} from "@/lib/server/catalog-versioning";
+import { recordCatalogVersionSafe } from "@/lib/server/record-catalog-version";
+import {
   adminSubcategoryUpdateSchema,
   formatZodError,
 } from "@/lib/validation/admin-category";
@@ -47,6 +53,7 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
     if (!existing) {
       return noStoreJson({ error: "Subcategoría no encontrada" }, { status: 404 });
     }
+    const beforeSnap = snapshotSubcategory(existing);
 
     let json: unknown;
     try {
@@ -140,6 +147,20 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
     });
 
     revalidateStorefrontMenu();
+    await recordCatalogVersionSafe({
+      label: `Subcategoría actualizada: ${row.name}`,
+      summary: `Se modificó la subcategoría «${row.name}».`,
+      changes: [
+        {
+          entityType: CatalogEntities.SUBCATEGORY,
+          entityId: row.id,
+          action: CatalogActions.UPDATE,
+          label: `Subcategoría: ${row.name}`,
+          beforeData: beforeSnap,
+          afterData: snapshotSubcategory(row),
+        },
+      ],
+    });
     return noStoreJson({ subcategory: mapSub(row) });
   } catch (e) {
     console.error("[PUT /api/admin/subcategories/[id]]", e);
@@ -173,8 +194,23 @@ export async function DELETE(_req: NextRequest, { params }: RouteCtx) {
         { status: 409 }
       );
     }
+    const beforeSnap = snapshotSubcategory(existing);
     await prisma.subcategory.delete({ where: { id } });
     revalidateStorefrontMenu();
+    await recordCatalogVersionSafe({
+      label: `Subcategoría eliminada: ${existing.name}`,
+      summary: `Se eliminó la subcategoría «${existing.name}».`,
+      changes: [
+        {
+          entityType: CatalogEntities.SUBCATEGORY,
+          entityId: id,
+          action: CatalogActions.DELETE,
+          label: `Subcategoría: ${existing.name}`,
+          beforeData: beforeSnap,
+          afterData: null,
+        },
+      ],
+    });
     return new Response(null, { status: 204 });
   } catch (e: unknown) {
     const code = (e as { code?: string })?.code;

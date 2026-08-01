@@ -8,6 +8,12 @@ import { slugify } from "@/lib/slugify";
 import { normalizeTaxonomyNameForDb } from "@/lib/taxonomy-display-name";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import {
+  CatalogActions,
+  CatalogEntities,
+  snapshotCategory,
+} from "@/lib/server/catalog-versioning";
+import { recordCatalogVersionSafe } from "@/lib/server/record-catalog-version";
+import {
   adminCategoryCreateSchema,
   formatZodError,
 } from "@/lib/validation/admin-category";
@@ -107,6 +113,20 @@ export async function POST(req: NextRequest) {
       include: { subcategories: { orderBy: { sortOrder: "asc" } } },
     });
     revalidateStorefrontMenu();
+    await recordCatalogVersionSafe({
+      label: `Categoría creada: ${row.name}`,
+      summary: `Se agregó la categoría «${row.name}».`,
+      changes: [
+        {
+          entityType: CatalogEntities.CATEGORY,
+          entityId: row.id,
+          action: CatalogActions.CREATE,
+          label: `Categoría: ${row.name}`,
+          beforeData: null,
+          afterData: snapshotCategory(row),
+        },
+      ],
+    });
     return noStoreJson({ category: mapCategory(row) }, { status: 201 });
   } catch (e) {
     console.error("[POST /api/admin/categories]", e);

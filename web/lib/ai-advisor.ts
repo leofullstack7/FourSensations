@@ -12,6 +12,7 @@ import {
 } from "@/lib/ai-advisor-context";
 import { getCategoryLabel } from "@/lib/category-labels";
 import { TINTES_CATEGORY_SLUG } from "@/lib/bulk-import/tintes";
+import { WHATSAPP_BUSINESS_DISPLAY } from "@/lib/storefront-contact";
 import type { StoreProduct } from "@/lib/types/product";
 
 export type AiChatRole = "bot" | "user";
@@ -62,8 +63,8 @@ export const STORE_ADVISOR_KNOWLEDGE = {
     "Enviamos a toda Colombia. Compras desde $150.000 COP tienen envío gratis. El tiempo de entrega depende de tu ciudad; lo confirmas en checkout.",
   payments:
     "Aceptamos pagos seguros en línea (ePayco, Bold y tarjetas). El total final y opciones disponibles aparecen al finalizar la compra.",
-  returns:
-    "Para cambios o garantías escríbenos por WhatsApp con tu número de pedido; el equipo te orienta según el producto.",
+  returns: `Para cambios o garantías escríbenos por WhatsApp al ${WHATSAPP_BUSINESS_DISPLAY} con tu número de pedido; el equipo te orienta según el producto.`,
+  whatsapp: `Nuestro WhatsApp de atención es ${WHATSAPP_BUSINESS_DISPLAY}. Escríbenos para pedidos, asesoría personalizada, cambios o garantías.`,
   scope:
     "Soy Ginna AI, asesora de GinnaBeauty: te ayudo con tu cuidado personal y te recomiendo productos de calidad para llevar al carrito o favoritos.",
 } as const;
@@ -533,7 +534,7 @@ export function buildAdvisorReply(
       messages: [
         {
           role: "bot",
-          text: "Para algo muy personalizado, nuestro equipo humano te atiende mejor por WhatsApp 💬",
+          text: `${STORE_ADVISOR_KNOWLEDGE.whatsapp} 💬`,
           action: { label: "Escríbenos por WhatsApp", kind: "whatsapp" },
         },
       ],
@@ -614,7 +615,7 @@ export function buildAdvisorReply(
       },
       {
         role: "bot",
-        text: "Si prefieres, una asesora humana te orienta por WhatsApp con gusto.",
+        text: `Si prefieres, una asesora humana te orienta por WhatsApp al ${WHATSAPP_BUSINESS_DISPLAY}.`,
         action: { label: "Escríbenos por WhatsApp", kind: "whatsapp" },
       },
     ],

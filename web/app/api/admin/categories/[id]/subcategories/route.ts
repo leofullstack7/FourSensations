@@ -8,6 +8,12 @@ import { slugify } from "@/lib/slugify";
 import { normalizeTaxonomyNameForDb } from "@/lib/taxonomy-display-name";
 import type { AdminSubcategoryRow } from "@/lib/types/admin-category";
 import {
+  CatalogActions,
+  CatalogEntities,
+  snapshotSubcategory,
+} from "@/lib/server/catalog-versioning";
+import { recordCatalogVersionSafe } from "@/lib/server/record-catalog-version";
+import {
   adminSubcategoryCreateSchema,
   formatZodError,
 } from "@/lib/validation/admin-category";
@@ -97,6 +103,20 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
       },
     });
     revalidateStorefrontMenu();
+    await recordCatalogVersionSafe({
+      label: `Subcategoría creada: ${row.name}`,
+      summary: `Se agregó la subcategoría «${row.name}».`,
+      changes: [
+        {
+          entityType: CatalogEntities.SUBCATEGORY,
+          entityId: row.id,
+          action: CatalogActions.CREATE,
+          label: `Subcategoría: ${row.name}`,
+          beforeData: null,
+          afterData: snapshotSubcategory(row),
+        },
+      ],
+    });
     return noStoreJson({ subcategory: mapSub(row) }, { status: 201 });
   } catch (e) {
     console.error("[POST .../subcategories]", e);

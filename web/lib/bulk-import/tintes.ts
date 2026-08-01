@@ -54,7 +54,7 @@ export function bulkPreviewRowIsTintes(row: {
 /**
  * Clave normalizada para emparejar columna «Nivel» del CSV con el nombre del archivo en el ZIP.
  * Conserva guiones; unifica coma/punto decimal para tolerar variantes (9,5-1 ↔ 9.5-1).
- * Sufijos de variante en imágenes (p. ej. 1-0_color.webp) se ignoran → misma clave que 1-0.
+ * Sufijos de variante en imágenes (p. ej. 1-0_color.webp, 5-0_1.webp) se ignoran → misma clave que 1-0 / 5-0.
  */
 export function normalizeTintLevelKey(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null;
@@ -65,8 +65,14 @@ export function normalizeTintLevelKey(raw: string | null | undefined): string | 
     .replace(/[\u0300-\u036f]/g, "");
   // Variante muestra de color: 1-0_color, 5-6-color → mismo nivel que 1-0, 5-6.
   s = s.replace(/[-_]color$/i, "");
+  // Segunda/tercera foto del mismo nivel: 5-0_1, 7-12_2 (solo guion bajo + dígitos; no tocar 5-12).
+  s = s.replace(/_\d+$/i, "");
+  // Por si venía 5-0_1_color (color ya quitado arriba) u otro orden raro.
+  s = s.replace(/[-_]color$/i, "");
+  s = s.replace(/_\d+$/i, "");
   s = s.replace(/\s+/g, "");
-  s = s.replace(/[._]/g, "");
+  s = s.replace(/_/g, "");
+  // Unificar decimal europeo: 9,5-1 y 9.5-1 → 9.5-1
   s = s.replace(/,/g, ".");
   return s || null;
 }

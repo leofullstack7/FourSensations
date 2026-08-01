@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import type { Prisma } from "@prisma/client";
 import { orderPayloadForEmail } from "@/lib/server/email/order-notification";
+import { getWhatsAppDisplayNumber } from "@/lib/storefront-contact";
 
 function escapeHtml(s: string): string {
   return s
@@ -23,9 +24,7 @@ function extractShippingZoneId(shippingAddress: Prisma.JsonValue): string {
 }
 
 function whatsappDisplayNumber(): string {
-  const raw = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER?.trim();
-  if (!raw) return "3000000000";
-  return raw.replace(/^\+?57\s*/, "").replace(/\D/g, "") || "3000000000";
+  return getWhatsAppDisplayNumber();
 }
 
 export type CustomerOrderConfirmationInput = {

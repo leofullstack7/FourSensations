@@ -15,3 +15,18 @@ export async function requireAdminApi() {
   }
   return null;
 }
+
+/** Igual que requireAdminApi, pero también entrega email del admin para auditoría. */
+export async function requireAdminApiWithActor(): Promise<
+  | { denied: Response; actor: null }
+  | { denied: null; actor: string | null }
+> {
+  const session = await auth();
+  if (!session?.user) {
+    return { denied: noStoreJson({ error: "No autorizado" }, { status: 401 }), actor: null };
+  }
+  if (session.user.role !== "ADMIN") {
+    return { denied: noStoreJson({ error: "Prohibido" }, { status: 403 }), actor: null };
+  }
+  return { denied: null, actor: session.user.email ?? session.user.name ?? null };
+}

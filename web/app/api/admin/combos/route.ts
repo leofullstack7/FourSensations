@@ -4,6 +4,12 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { allocateUniqueComboSlug } from "@/lib/server/combo-slug";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
+import {
+  CatalogActions,
+  CatalogEntities,
+  loadComboSnapshot,
+} from "@/lib/server/catalog-versioning";
+import { recordCatalogVersionSafe } from "@/lib/server/record-catalog-version";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -235,6 +241,23 @@ export async function POST(req: NextRequest) {
     const combo = combos[0];
     if (!combo) {
       return noStoreJson({ error: "Combo creado pero no se pudo leer de la base" }, { status: 500 });
+    }
+    const snap = await loadComboSnapshot(comboId);
+    if (snap) {
+      await recordCatalogVersionSafe({
+        label: `Combo creado: ${combo.name}`,
+        summary: `Se creó el combo «${combo.name}».`,
+        changes: [
+          {
+            entityType: CatalogEntities.PRODUCT_COMBO,
+            entityId: comboId,
+            action: CatalogActions.CREATE,
+            label: `Combo: ${combo.name}`,
+            beforeData: null,
+            afterData: snap,
+          },
+        ],
+      });
     }
     return noStoreJson({ combo });
   } catch (e) {

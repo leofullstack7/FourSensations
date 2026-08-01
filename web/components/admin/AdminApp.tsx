@@ -40,6 +40,7 @@ import { computeAdminCatalogStats, type AdminCatalogStats } from "@/lib/admin/ca
 import { compactChartAmount, computeSemesterSalesChart } from "@/lib/admin/sales-semester-chart";
 import { AdminCategoryStorefrontPanel } from "@/components/admin/AdminCategoryStorefrontPanel";
 import { AdminCustomersPanel } from "@/components/admin/AdminCustomersPanel";
+import { AdminVersionsPanel } from "@/components/admin/AdminVersionsPanel";
 import {
   AdminAiBulkProgressModal,
   type AiBulkProgressItem,
@@ -115,7 +116,7 @@ import {
   resolveMenuTagFromEditor,
 } from "@/lib/admin/menu-utils";
 
-type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "sales" | "stock" | "customers" | "categories" | "menu" | "reports";
+type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "sales" | "stock" | "customers" | "categories" | "menu" | "versions" | "reports";
 
 type GoPageOptions = {
   productTab?: "list" | "add" | "bulk";
@@ -131,6 +132,7 @@ const ADMIN_PAGE_TITLES: Record<AdminPageId, string> = {
   customers: "Clientes CRM",
   categories: "Categorías y subcategorías",
   menu: "Gestión del Menú",
+  versions: "Versiones",
   reports: "Reportes",
 };
 
@@ -149,6 +151,7 @@ const ADMIN_NAV_ITEMS: {
   { id: "stock", icon: "📋", label: "Inventario" },
   { id: "categories", icon: "🏷️", label: "Categorías", section: "config" },
   { id: "menu", icon: "🗂️", label: "Gestión de Menú", section: "config" },
+  { id: "versions", icon: "🕘", label: "Versiones", section: "config" },
   { id: "reports", icon: "📈", label: "Reportes", section: "config" },
 ];
 
@@ -1450,6 +1453,16 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                 onReload={() => void loadCategories()}
                 showToast={showToast}
                 onGoCategories={() => goPage("categories")}
+              />
+            </div>
+
+            <div className={`admin-page ${page === "versions" ? "active" : ""}`} style={{ display: page === "versions" ? "block" : "none" }}>
+              <AdminVersionsPanel
+                active={page === "versions"}
+                showToast={showToast}
+                onCatalogMutated={async () => {
+                  await Promise.all([loadProducts(), loadCategories()]);
+                }}
               />
             </div>
 
@@ -3187,7 +3200,16 @@ function AdminBulkTab({
                 fd.append("zip", zipFile);
                 const res = await postBulkImportPreview(fd);
                 bulkProgress.finish();
-                if (isBulkCsvZipMatchRateTooLow(res.preview.stats)) {
+                // Tintes: el match por «Nivel» solo se activa tras elegir tipo+familia.
+                // Un match bajo en el primer analyze es esperado; no bloquear con el modal.
+                if (res.preview.hasTintesRows === true && isBulkCsvZipMatchRateTooLow(res.preview.stats)) {
+                  applyAnalyzeResult(res);
+                  showToast(
+                    "Análisis listo. Elige tipo y familia de Tintes para emparejar las imágenes por nivel.",
+                    "default",
+                    "🎨"
+                  );
+                } else if (isBulkCsvZipMatchRateTooLow(res.preview.stats)) {
                   setPendingAnalyzeResult(res);
                   setShowLowMatchModal(true);
                   showToast(
@@ -3999,7 +4021,13 @@ function AdminBulkTab({
             );
             setTintModalDismissed(false);
             setShowTintTypeModal(false);
-            showToast(`Listo: ${typeKey} · ${familyKey}`, "success", "✅");
+            const matched = p.stats?.matchedRows ?? 0;
+            const total = p.stats?.totalRows ?? 0;
+            showToast(
+              `Tintes listos: ${typeKey} · ${familyKey}. Match: ${matched}/${total} filas con imagen.`,
+              "success",
+              "✅"
+            );
           } catch (err) {
             showToast(err instanceof Error ? err.message : "Error al configurar tintes", "danger", "⚠️");
           } finally {

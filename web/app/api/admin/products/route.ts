@@ -6,6 +6,12 @@ import { slugify } from "@/lib/slugify";
 import { isTrustedCdnImageUrl } from "@/lib/server/bunny-config";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
 import {
+  CatalogActions,
+  CatalogEntities,
+  snapshotProduct,
+} from "@/lib/server/catalog-versioning";
+import { recordCatalogVersionSafe } from "@/lib/server/record-catalog-version";
+import {
   adminProductCreateSchema,
   formatZodError,
 } from "@/lib/validation/admin-product";
@@ -140,6 +146,21 @@ export async function POST(req: NextRequest) {
         }),
       },
       include: { images: true },
+    });
+
+    await recordCatalogVersionSafe({
+      label: `Producto creado: ${row.name}`,
+      summary: `Se agregó el producto «${row.name}» al catálogo.`,
+      changes: [
+        {
+          entityType: CatalogEntities.PRODUCT,
+          entityId: row.id,
+          action: CatalogActions.CREATE,
+          label: `Producto: ${row.name}`,
+          beforeData: null,
+          afterData: snapshotProduct(row),
+        },
+      ],
     });
 
     return noStoreJson({ product: prismaProductToAdmin(row) }, { status: 201 });
