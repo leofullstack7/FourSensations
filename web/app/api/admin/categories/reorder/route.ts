@@ -56,20 +56,20 @@ export async function POST(req: NextRequest) {
     const afterRows = await prisma.category.findMany({
       where: { id: { in: orderedIds } },
     });
-    const changes: CatalogChangeInput[] = afterRows
-      .map((row) => {
-        const before = beforeById.get(row.id);
-        if (!before || before.sortOrder === row.sortOrder) return null;
-        return {
+    const changes: CatalogChangeInput[] = afterRows.flatMap((row) => {
+      const before = beforeById.get(row.id);
+      if (!before || before.sortOrder === row.sortOrder) return [];
+      return [
+        {
           entityType: CatalogEntities.CATEGORY,
           entityId: row.id,
           action: CatalogActions.UPDATE,
           label: `Categoría: ${row.name}`,
           beforeData: before,
           afterData: snapshotCategory(row),
-        } satisfies CatalogChangeInput;
-      })
-      .filter((c): c is CatalogChangeInput => c !== null);
+        },
+      ];
+    });
 
     if (changes.length > 0) {
       await recordCatalogVersionSafe({

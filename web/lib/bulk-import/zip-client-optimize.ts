@@ -119,7 +119,7 @@ export async function optimizeZipFileClient(
       continue;
     }
 
-    const inputBlob = new Blob([data], {
+    const inputBlob = new Blob([Uint8Array.from(data)], {
       type: ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg",
     });
     const optimized = await blobToWebp(
