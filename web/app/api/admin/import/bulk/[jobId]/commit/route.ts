@@ -40,7 +40,7 @@ const commitSchema = z
   .object({
     rowIds: z.array(z.string().min(1)).optional(),
     rowIndexes: z.array(z.number().int().min(0)).optional(),
-    existingPolicy: z.enum(["skip", "replace"]).optional().default("skip"),
+    existingPolicy: z.enum(["skip", "replace", "omit"]).optional().default("skip"),
   })
   .refine((v) => (v.rowIds?.length ?? 0) > 0 || (v.rowIndexes?.length ?? 0) > 0, {
     message: "Selecciona al menos una fila",
@@ -268,6 +268,11 @@ export async function POST(req: NextRequest, { params }: Ctx) {
         const clash = resolveExistingProductForRow(row, clashByRef, clashById);
         const { variantGroupCode, variantGroupOrder } = variantGroupFieldsFromRow(row);
         const { colorHex, colorName } = colorFieldsFromRow(row);
+
+        if (clash && existingPolicy === "omit") {
+          skippedExistingDuplicates += 1;
+          continue;
+        }
 
         if (clash && existingPolicy === "skip") {
           const hasVariantGroup = !!variantGroupCode;

@@ -137,7 +137,7 @@ export type BulkCommitResponse = {
 export async function postBulkImportCommit(
   jobId: string,
   rowIds: string[],
-  existingPolicy: "skip" | "replace"
+  existingPolicy: "skip" | "replace" | "omit"
 ): Promise<BulkCommitResponse> {
   const res = await fetch(`/api/admin/import/bulk/${jobId}/commit`, {
     method: "POST",

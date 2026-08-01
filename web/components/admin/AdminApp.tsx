@@ -2284,7 +2284,7 @@ function AdminBulkTab({
   const [jobId, setJobId] = useState<string | null>(null);
   const [preview, setPreview] = useState<BulkPreviewResult | null>(null);
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
-  const [existingPolicy, setExistingPolicy] = useState<"skip" | "replace">("skip");
+  const [existingPolicy, setExistingPolicy] = useState<"skip" | "replace" | "omit">("skip");
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [showBulkTemplateModal, setShowBulkTemplateModal] = useState(false);
   const [showNewCategoriesModal, setShowNewCategoriesModal] = useState(false);
@@ -3500,17 +3500,31 @@ function AdminBulkTab({
             </label>
             <select
               className="form-select"
-              style={{ width: "100%", maxWidth: 420, minHeight: 40 }}
+              style={{ width: "100%", maxWidth: 520, minHeight: 40 }}
               value={existingPolicy}
-              onChange={(e) => setExistingPolicy(e.target.value as "skip" | "replace")}
+              onChange={(e) => setExistingPolicy(e.target.value as "skip" | "replace" | "omit")}
             >
               <option value="skip">Solo agrupar como variantes (no modificar datos del producto)</option>
               <option value="replace">Reemplazar datos del producto ya registrado</option>
+              <option value="omit">No hacer nada con estos productos que ya están registrados en la tienda, omitirlos</option>
             </select>
             <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "10px 0 0", lineHeight: 1.45 }}>
-              Para productos que <strong>ya existen</strong>, usa el botón <strong>«Agrupar productos como variantes»</strong>.
-              No se vuelven a crear ni se suben imágenes de nuevo: solo se asigna el código de barras del CSV para unirlos
-              en la tienda. «Reemplazar» actualiza nombre, precio e imágenes desde el CSV.
+              {existingPolicy === "omit" ? (
+                <>
+                  Los productos <strong>ya registrados</strong> se omiten por completo: no se actualizan, no se agrupan
+                  ni se suben imágenes de nuevo. Solo se importan filas nuevas.
+                </>
+              ) : existingPolicy === "replace" ? (
+                <>
+                  «Reemplazar» actualiza nombre, precio e imágenes desde el CSV en los productos que ya existen.
+                </>
+              ) : (
+                <>
+                  Para productos que <strong>ya existen</strong>, usa el botón <strong>«Agrupar productos como variantes»</strong>.
+                  No se vuelven a crear ni se suben imágenes de nuevo: solo se asigna el código de barras del CSV para unirlos
+                  en la tienda.
+                </>
+              )}
             </p>
           </div>
 
@@ -3828,7 +3842,9 @@ function AdminBulkTab({
                     const skipped = res.skippedExistingDuplicates ?? 0;
                     if (skipped > 0) {
                       showToast(
-                        `${skipped} fila(s) omitida(s): ya registradas y sin código de barras en el CSV.`,
+                        existingPolicy === "omit"
+                          ? `${skipped} producto(s) ya registrados omitidos (sin cambios).`
+                          : `${skipped} fila(s) omitida(s): ya registradas y sin código de barras en el CSV.`,
                         "default",
                         "⏭️"
                       );

@@ -1,10 +1,13 @@
 import type { BulkPreviewRow } from "./build-preview";
 import { normalizeColorHex } from "@/lib/product-color";
 
+/** Política para filas cuyo código ya existe en tienda. */
+export type BulkExistingPolicy = "skip" | "replace" | "omit";
+
 /** Fila existente en tienda a la que solo se asignará código de barras / orden de variante. */
 export function bulkRowIsVariantGroupAssign(
   row: BulkPreviewRow,
-  existingPolicy: "skip" | "replace"
+  existingPolicy: BulkExistingPolicy
 ): boolean {
   return (
     existingPolicy === "skip" &&
@@ -18,7 +21,7 @@ export function bulkRowIsVariantGroupAssign(
 export function isIssueIgnorableForVariantGroupAssign(
   issue: string,
   row: BulkPreviewRow,
-  existingPolicy: "skip" | "replace"
+  existingPolicy: BulkExistingPolicy
 ): boolean {
   if (!bulkRowIsVariantGroupAssign(row, existingPolicy)) return false;
   if (issue.startsWith("Aviso:")) return true;
@@ -49,18 +52,31 @@ export function isIssueIgnorableForVariantGroupAssign(
   return false;
 }
 
+/** Con «omitir» no se toca el producto: cualquier issue de la fila existente deja de bloquear. */
+export function isIssueIgnorableForOmit(
+  issue: string,
+  row: BulkPreviewRow,
+  existingPolicy: BulkExistingPolicy
+): boolean {
+  if (existingPolicy !== "omit" || row.isExistingProduct !== true) return false;
+  void issue;
+  return true;
+}
+
 export function bulkRowBlockingIssues(
   row: BulkPreviewRow,
-  existingPolicy: "skip" | "replace"
+  existingPolicy: BulkExistingPolicy
 ): string[] {
   return row.issues.filter(
-    (issue) => !isIssueIgnorableForVariantGroupAssign(issue, row, existingPolicy)
+    (issue) =>
+      !isIssueIgnorableForVariantGroupAssign(issue, row, existingPolicy) &&
+      !isIssueIgnorableForOmit(issue, row, existingPolicy)
   );
 }
 
 export function bulkRowIsReadyForVariantGroupAssign(
   row: BulkPreviewRow,
-  existingPolicy: "skip" | "replace"
+  existingPolicy: BulkExistingPolicy
 ): boolean {
   return bulkRowIsVariantGroupAssign(row, existingPolicy) && bulkRowBlockingIssues(row, existingPolicy).length === 0;
 }
