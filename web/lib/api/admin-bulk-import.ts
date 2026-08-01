@@ -27,7 +27,14 @@ export async function postBulkImportPreview(form: FormData): Promise<BulkPreview
     credentials: "include",
     headers: { Accept: "application/json" },
   });
-  if (!res.ok) throw new Error(await parseError(res));
+  if (!res.ok) {
+    if (res.status === 502 || res.status === 504 || res.status === 413) {
+      throw new Error(
+        "El servidor no pudo analizar este ZIP (timeout o tamaño). Optimiza las imágenes a WebP y vuelve a intentar; si sigue fallando, divide el lote.",
+      );
+    }
+    throw new Error(await parseError(res));
+  }
   return (await res.json()) as BulkPreviewResponse;
 }
 

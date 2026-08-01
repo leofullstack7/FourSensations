@@ -11,9 +11,14 @@ import type { BulkPreviewResult } from "@/lib/bulk-import/build-preview";
 import { markBulkPreviewExistingByExternalRef } from "@/lib/server/bulk-import-mark-existing";
 import { fetchTintCatalogFromDb } from "@/lib/server/tint-catalog-db";
 import { readTintCatalogStateFromPreview } from "@/lib/bulk-import/tint-catalog";
+import {
+  deleteBulkImportZip,
+  resolveBulkImportZipBuffer,
+} from "@/lib/server/bulk-import-zip-store";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 type Ctx = { params: { jobId: string } };
 
@@ -179,11 +184,19 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   }
 
   const tintCatalogDb = await fetchTintCatalogFromDb(prisma);
+  let zipBuffer: Buffer;
+  try {
+    zipBuffer = await resolveBulkImportZipBuffer(jobId, job.zipBlob);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "ZIP no disponible";
+    return noStoreJson({ error: msg }, { status: 409 });
+  }
+
   const preview = rebuildBulkPreview({
     headers,
     rows,
     codeColumnIndex,
-    zipBuffer: Buffer.from(job.zipBlob),
+    zipBuffer,
     defaultCategorySlug: null,
     categoryTree,
     taxonomyOverrides,
@@ -254,6 +267,7 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
   const { jobId } = params;
   try {
     await prisma.bulkImportJob.delete({ where: { id: jobId } });
+    await deleteBulkImportZip(jobId);
   } catch {
     return noStoreJson({ error: "Job no encontrado" }, { status: 404 });
   }

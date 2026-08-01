@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { BulkImportStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -10,6 +11,7 @@ import { buildBulkPreview } from "@/lib/bulk-import/build-preview";
 import { applyTintCatalogToPreview } from "@/lib/bulk-import/tint-catalog";
 import { fetchTintCatalogFromDb } from "@/lib/server/tint-catalog-db";
 import { markBulkPreviewExistingByExternalRef } from "@/lib/server/bulk-import-mark-existing";
+import { saveBulkImportZip } from "@/lib/server/bulk-import-zip-store";
 import {
   BULK_CSV_MAX_BYTES,
   BULK_JOB_TTL_HOURS,
@@ -21,6 +23,8 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+/** Render: evitar corte prematuro con ZIPs grandes. */
+export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
   const denied = await requireAdminApi();
@@ -57,7 +61,8 @@ export async function POST(req: NextRequest) {
       return noStoreJson({ error: `Demasiadas filas (máx. ${BULK_MAX_ROWS})` }, { status: 400 });
     }
 
-    const { entries } = listZipImages(zipBuf);
+    // Solo metadatos: no cargar 300 buffers en RAM durante el analyze.
+    const { entries } = listZipImages(zipBuf, { includeBuffers: false });
     if (entries.length > BULK_MAX_ZIP_IMAGES) {
       return noStoreJson({ error: `Demasiadas imágenes en el ZIP (máx. ${BULK_MAX_ZIP_IMAGES})` }, { status: 400 });
     }
@@ -90,11 +95,19 @@ export async function POST(req: NextRequest) {
     const statsStored = {
       ...preview.stats,
       defaultCategorySlug: null,
+      zipStoredExternally: true,
+      zipBytes: zipBuf.length,
     };
 
     const expiresAt = new Date(Date.now() + BULK_JOB_TTL_HOURS * 60 * 60 * 1000);
+    const jobId = randomUUID();
+
+    // Disco temporal (rápido). No meter el ZIP en Neon → evita 502 por timeout/OOM.
+    await saveBulkImportZip(jobId, zipBuf);
+
     const job = await prisma.bulkImportJob.create({
       data: {
+        id: jobId,
         expiresAt,
         status: BulkImportStatus.PREVIEW,
         selectedCodeHeader: headers[codeColumnIndex] ?? "",
@@ -104,7 +117,7 @@ export async function POST(req: NextRequest) {
         rows: rows as unknown as object[],
         previewPayload: preview as unknown as object,
         stats: statsStored as unknown as object,
-        zipBlob: zipBuf,
+        zipBlob: Buffer.alloc(0),
       },
     });
 

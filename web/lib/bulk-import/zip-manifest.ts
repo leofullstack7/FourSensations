@@ -87,13 +87,18 @@ function isIgnoredPath(entryName: string): boolean {
 
 /**
  * Lista imágenes del ZIP y agrupa por clave normalizada (basename).
+ * @param options.includeBuffers Si false (preview), no lee bytes de cada imagen → mucho menos RAM/CPU.
  */
-export function listZipImages(zipBuffer: Buffer): {
+export function listZipImages(
+  zipBuffer: Buffer,
+  options?: { includeBuffers?: boolean },
+): {
   byNormalizedRawCode: Map<string, ZipImageEntry[]>;
   byNumericPrefixCode: Map<string, ZipImageEntry[]>;
   byFileName: Map<string, ZipImageEntry>;
   entries: ZipImageEntry[];
 } {
+  const includeBuffers = options?.includeBuffers !== false;
   const zip = new AdmZip(zipBuffer);
   const entries: ZipImageEntry[] = [];
   for (const e of zip.getEntries()) {
@@ -102,7 +107,7 @@ export function listZipImages(zipBuffer: Buffer): {
     if (isIgnoredPath(entryName)) continue;
     const ext = path.extname(entryName).toLowerCase();
     if (!IMAGE_EXT.has(ext)) continue;
-    const buf = e.getData();
+    const buf = includeBuffers ? e.getData() : Buffer.alloc(0);
     const fileName = path.basename(entryName);
     const base = path.basename(entryName, ext);
     const rawImageCode = toRawImageCode(base);

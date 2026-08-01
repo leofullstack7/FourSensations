@@ -24,10 +24,15 @@ import { normalizeTaxonomyNameForDb } from "@/lib/bulk-import/category-resolve";
 import { canonicalExternalRef, canonicalVariantGroupCode } from "@/lib/bulk-import/variant-group-code";
 import { normalizeColorHex } from "@/lib/product-color";
 import { revalidateStorefrontProducts } from "@/lib/server/revalidate-storefront-products";
+import {
+  deleteBulkImportZip,
+  resolveBulkImportZipBuffer,
+} from "@/lib/server/bulk-import-zip-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 300;
 
 type Ctx = { params: { jobId: string } };
 
@@ -237,7 +242,19 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     data: { status: BulkImportStatus.IMPORTING, errorMessage: null },
   });
 
-  const { byFileName } = listZipImages(Buffer.from(job.zipBlob));
+  let zipBuffer: Buffer;
+  try {
+    zipBuffer = await resolveBulkImportZipBuffer(jobId, job.zipBlob);
+  } catch (e) {
+    await prisma.bulkImportJob.update({
+      where: { id: jobId },
+      data: { status: BulkImportStatus.PREVIEW, errorMessage: "ZIP no disponible" },
+    });
+    const msg = e instanceof Error ? e.message : "ZIP no disponible";
+    return noStoreJson({ error: msg }, { status: 409 });
+  }
+
+  const { byFileName } = listZipImages(zipBuffer, { includeBuffers: true });
   const createdProducts: ReturnType<typeof prismaProductToAdmin>[] = [];
   const errors: string[] = [];
   let skippedExistingDuplicates = 0;
@@ -474,6 +491,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
         previewPayload: minimalPayload as unknown as object,
       },
     });
+    await deleteBulkImportZip(jobId);
 
     return noStoreJson({
       ok: true,
@@ -503,6 +521,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
         } as unknown as object,
       },
     });
+    await deleteBulkImportZip(jobId);
     console.error("[POST commit bulk]", e);
     return noStoreJson({ error: msg }, { status: 500 });
   }

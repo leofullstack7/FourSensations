@@ -21,7 +21,7 @@ export function rebuildBulkPreview(params: {
   tintCatalog?: TintCatalogState;
   previousPreview?: BulkPreviewResult | null;
 }): BulkPreviewResult {
-  const { entries } = listZipImages(params.zipBuffer);
+  const { entries } = listZipImages(params.zipBuffer, { includeBuffers: false });
   const prevState = params.tintCatalog ?? readTintCatalogStateFromPreview(params.previousPreview ?? null);
   const tintMatchScope = tintMatchScopeFromState(prevState);
 
