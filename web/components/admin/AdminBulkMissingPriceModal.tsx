@@ -16,8 +16,14 @@ type Props = {
   onApply: (price: number) => Promise<void>;
 };
 
-function digitsFromInput(raw: string): string {
-  return raw.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+/** Extrae dígitos; conserva el 0 solo (no lo borra como «vacío»). */
+function parseCopAmountInput(raw: string): number | null {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 0) return null;
+  // "0", "00", "000" → 0; "01000" → 1000
+  const normalized = digits.replace(/^0+(?=\d)/, "");
+  const n = Number.parseInt(normalized.length ? normalized : "0", 10);
+  return Number.isFinite(n) ? n : null;
 }
 
 export function AdminBulkMissingPriceModal({
@@ -29,17 +35,24 @@ export function AdminBulkMissingPriceModal({
   onSkip,
   onApply,
 }: Props) {
-  const [digits, setDigits] = useState("");
-  /** Busy local: se activa al instante al pulsar, sin esperar el re-render del padre. */
+  /** `null` = campo vacío; `0` = precio cero explícito. */
+  const [amount, setAmount] = useState<number | null>(null);
   const [busyLocal, setBusyLocal] = useState(false);
   const [displayDone, setDisplayDone] = useState(0);
   const applyingRef = useRef(false);
+  const wasOpenRef = useRef(false);
 
   const busy = busyLocal || saving;
 
   useEffect(() => {
-    if (open && !busy) setDigits("");
-  }, [open, busy]);
+    if (open && !wasOpenRef.current) {
+      setAmount(null);
+      setBusyLocal(false);
+      setDisplayDone(0);
+      applyingRef.current = false;
+    }
+    wasOpenRef.current = open;
+  }, [open]);
 
   useEffect(() => {
     if (!busy) {
@@ -68,9 +81,8 @@ export function AdminBulkMissingPriceModal({
 
   if (!open) return null;
 
-  const price = digits ? Number.parseInt(digits, 10) : NaN;
-  const canApply = Number.isFinite(price) && price >= 0 && !busy;
-  const display = digits ? formatPrice(price) : "";
+  const canApply = amount !== null && amount >= 0 && !busy;
+  const display = amount === null ? "" : formatPrice(amount);
   const shownDone = busy ? Math.min(rowCount, Math.max(displayDone, appliedCount)) : 0;
   const pct = rowCount > 0 ? Math.round((shownDone / rowCount) * 100) : 0;
 
@@ -106,7 +118,7 @@ export function AdminBulkMissingPriceModal({
         </div>
         <p style={{ marginTop: 0, marginBottom: 14, fontSize: 14, color: "var(--text-muted)", lineHeight: 1.55 }}>
           Hay <strong>{rowCount}</strong> productos con estado «Precio inválido o vacío». Puedes asignar el mismo
-          precio a todos ahora para quitar ese bloqueo de una vez.
+          precio a todos ahora para quitar ese bloqueo de una vez. También puedes poner <strong>$0</strong>.
         </p>
 
         <div
@@ -126,15 +138,22 @@ export function AdminBulkMissingPriceModal({
             className="form-input"
             inputMode="numeric"
             autoFocus
-            placeholder="$0"
+            placeholder="Ej. 10000 o 0"
             value={display}
             disabled={busy}
-            onChange={(e) => setDigits(digitsFromInput(e.target.value).slice(0, 12))}
+            onChange={(e) => setAmount(parseCopAmountInput(e.target.value))}
             style={{ fontSize: 20, fontWeight: 700, letterSpacing: "0.02em" }}
           />
           <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--text-muted)" }}>
-            Escribe solo números: <strong>10000</strong> se muestra como <strong>$10.000</strong>.
+            Escribe números: <strong>10000</strong> → <strong>$10.000</strong>. El valor <strong>0</strong> se guarda
+            como <strong>$0</strong>.
           </p>
+          {amount !== null ? (
+            <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--dark)", fontWeight: 600 }}>
+              Precio listo: {formatPrice(amount)}
+              {amount === 0 ? " (gratis / cero)" : ""}
+            </p>
+          ) : null}
         </div>
 
         {busy ? (
@@ -188,13 +207,14 @@ export function AdminBulkMissingPriceModal({
             className="btn btn-primary"
             disabled={!canApply}
             onClick={() => {
-              if (applyingRef.current || !canApply) return;
+              if (applyingRef.current || amount === null || amount < 0) return;
               applyingRef.current = true;
               setBusyLocal(true);
               setDisplayDone(0);
+              const priceToApply = amount;
               void (async () => {
                 try {
-                  await onApply(price);
+                  await onApply(priceToApply);
                   setDisplayDone(rowCount);
                 } finally {
                   applyingRef.current = false;
@@ -203,7 +223,11 @@ export function AdminBulkMissingPriceModal({
               })();
             }}
           >
-            {busy ? `Actualizando ${shownDone}/${rowCount}…` : `Poner ${display || "precio"} a ${rowCount}`}
+            {busy
+              ? `Actualizando ${shownDone}/${rowCount}…`
+              : amount === null
+                ? `Poner precio a ${rowCount}`
+                : `Poner ${formatPrice(amount)} a ${rowCount}`}
           </button>
         </div>
       </div>
