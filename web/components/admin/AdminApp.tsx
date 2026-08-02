@@ -2298,6 +2298,9 @@ function AdminBulkTab({
   const [newCategoriesModalAcknowledged, setNewCategoriesModalAcknowledged] = useState(false);
   const [showBulkPriceModal, setShowBulkPriceModal] = useState(false);
   const [bulkPriceModalDismissed, setBulkPriceModalDismissed] = useState(false);
+  const [applyingBulkPrice, setApplyingBulkPrice] = useState(false);
+  const [bulkPriceAppliedCount, setBulkPriceAppliedCount] = useState(0);
+  const [bulkPriceApplyTotal, setBulkPriceApplyTotal] = useState(0);
   const [showTaxonomyHintsModal, setShowTaxonomyHintsModal] = useState(false);
   const [showTintTypeModal, setShowTintTypeModal] = useState(false);
   const [tintModalDismissed, setTintModalDismissed] = useState(false);
@@ -2350,6 +2353,9 @@ function AdminBulkTab({
     setNewCategoriesModalAcknowledged(false);
     setShowBulkPriceModal(false);
     setBulkPriceModalDismissed(false);
+    setApplyingBulkPrice(false);
+    setBulkPriceAppliedCount(0);
+    setBulkPriceApplyTotal(0);
     setShowTaxonomyHintsModal(false);
     setShowTintTypeModal(false);
     setTintModalDismissed(false);
@@ -2401,6 +2407,9 @@ function AdminBulkTab({
       setNewCategoriesModalAcknowledged(false);
       setShowBulkPriceModal(false);
       setBulkPriceModalDismissed(false);
+      setApplyingBulkPrice(false);
+      setBulkPriceAppliedCount(0);
+      setBulkPriceApplyTotal(0);
       setShowLowMatchModal(false);
       setPendingAnalyzeResult(null);
       setEditingBulkRowId(null);
@@ -2529,6 +2538,7 @@ function AdminBulkTab({
     // mostrar otros modales, para evitar que queden ocultos detrás del modal de Tintes.
     const tintModalActive = needsTintSelection && !tintModalDismissed && !tintsExplicitlySkipped;
     if (tintModalActive) return;
+    if (applyingBulkPrice) return;
 
     const hints = preview.taxonomyRehomeHints?.length ?? 0;
     if (hints > 0) {
@@ -2562,6 +2572,7 @@ function AdminBulkTab({
     tintsExplicitlySkipped,
     newCategoriesModalAcknowledged,
     bulkPriceModalDismissed,
+    applyingBulkPrice,
   ]);
 
   const invalidPriceRows = useMemo(() => {
@@ -4099,44 +4110,92 @@ function AdminBulkTab({
         }}
       />
       <AdminBulkMissingPriceModal
-        open={showBulkPriceModal && invalidPriceRows.length > BULK_INVALID_PRICE_BATCH_THRESHOLD}
-        saving={saving}
-        rowCount={invalidPriceRows.length}
+        open={
+          applyingBulkPrice ||
+          (showBulkPriceModal && invalidPriceRows.length > BULK_INVALID_PRICE_BATCH_THRESHOLD)
+        }
+        saving={saving || applyingBulkPrice}
+        rowCount={applyingBulkPrice && bulkPriceApplyTotal > 0 ? bulkPriceApplyTotal : invalidPriceRows.length}
+        appliedCount={bulkPriceAppliedCount}
         onClose={() => {
-          if (saving) return;
+          if (saving || applyingBulkPrice) return;
           setShowBulkPriceModal(false);
           setBulkPriceModalDismissed(true);
         }}
         onSkip={() => {
-          if (saving) return;
+          if (saving || applyingBulkPrice) return;
           setShowBulkPriceModal(false);
           setBulkPriceModalDismissed(true);
           showToast("Continuaste sin asignar precio en lote. Puedes editar filas una a una.", "default", "ℹ️");
         }}
         onApply={async (price) => {
-          if (!jobId || invalidPriceRows.length === 0) return;
+          if (!jobId) {
+            showToast("No hay sesión de importación activa. Vuelve a analizar el CSV y ZIP.", "danger", "⚠️");
+            throw new Error("Sin jobId");
+          }
+          const rows = invalidPriceRows;
+          if (rows.length === 0) {
+            showToast("No hay productos sin precio para actualizar.", "default", "ℹ️");
+            return;
+          }
+
+          const total = rows.length;
+          setApplyingBulkPrice(true);
+          setBulkPriceApplyTotal(total);
+          setBulkPriceAppliedCount(0);
           setMutation("bulk");
+          setBulkProgressLabel(`Aplicando precio a 0 de ${total} productos…`);
+          bulkProgress.start("default");
+
+          const progressIv = window.setInterval(() => {
+            setBulkPriceAppliedCount((prev) => {
+              const next = Math.min(total - 1, prev + Math.max(1, Math.ceil(total / 45)));
+              setBulkProgressLabel(`Aplicando precio a ${next} de ${total} productos…`);
+              return next;
+            });
+          }, 110);
+
           try {
             const rowFieldOverrides: Record<string, { price: number }> = {};
-            for (const r of invalidPriceRows) {
+            for (const r of rows) {
               rowFieldOverrides[bulkImportStableRowId(r)] = { price };
             }
             const { preview: p } = await patchBulkImportJob(jobId, {
               rowFieldOverrides,
               selectedRowIds,
             });
+            window.clearInterval(progressIv);
+            setBulkPriceAppliedCount(total);
+            setBulkProgressLabel(`Aplicando precio a ${total} de ${total} productos…`);
             setPreview(p);
+            bulkProgress.finish();
             setShowBulkPriceModal(false);
             setBulkPriceModalDismissed(true);
-            showToast(
-              `Precio ${formatPrice(price)} aplicado a ${invalidPriceRows.length} producto(s).`,
-              "success",
-              "✅"
-            );
+            const stillInvalid = (p.rows ?? []).filter((r) =>
+              r.issues.includes("Precio inválido o vacío")
+            ).length;
+            if (stillInvalid > 0) {
+              showToast(
+                `Se envió el precio, pero ${stillInvalid} fila(s) siguen sin precio válido. Revisa el preview.`,
+                "danger",
+                "⚠️"
+              );
+            } else {
+              showToast(
+                `Precio ${formatPrice(price)} aplicado a ${total} producto(s).`,
+                "success",
+                "✅"
+              );
+            }
           } catch (err) {
+            window.clearInterval(progressIv);
+            bulkProgress.reset();
             showToast(err instanceof Error ? err.message : "No se pudo aplicar el precio", "danger", "⚠️");
+            throw err;
           } finally {
+            setApplyingBulkPrice(false);
             setMutation(null);
+            setBulkProgressLabel("");
           }
         }}
       />
