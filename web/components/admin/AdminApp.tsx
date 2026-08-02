@@ -3827,6 +3827,10 @@ function AdminBulkTab({
       <AdminBulkLowMatchModal
         open={showLowMatchModal && !!pendingAnalyzeResult && !!pendingLowMatchBreakdown}
         breakdown={pendingLowMatchBreakdown}
+        headers={pendingAnalyzeResult?.preview.headers ?? []}
+        codeColumnIndex={pendingAnalyzeResult?.preview.codeColumnIndex ?? 0}
+        codeColumnCandidates={pendingAnalyzeResult?.preview.codeColumnCandidates ?? []}
+        reanalyzing={saving}
         onConfirm={() => {
           if (!pendingAnalyzeResult) return;
           applyAnalyzeResult(pendingAnalyzeResult);
@@ -3834,6 +3838,7 @@ function AdminBulkTab({
           setShowLowMatchModal(false);
         }}
         onCancel={() => {
+          if (saving) return;
           const pendingJobId = pendingAnalyzeResult?.jobId ?? null;
           setPendingAnalyzeResult(null);
           setShowLowMatchModal(false);
@@ -3843,6 +3848,48 @@ function AdminBulkTab({
             });
           }
           showToast("Revisa el Excel y el ZIP antes de volver a analizar.", "default", "ℹ️");
+        }}
+        onReanalyzeWithColumn={(columnIndex) => {
+          void (async () => {
+            if (!pendingAnalyzeResult) return;
+            if (columnIndex === pendingAnalyzeResult.preview.codeColumnIndex) {
+              showToast("Esa columna ya está seleccionada. Elige otra distinta.", "default", "ℹ️");
+              return;
+            }
+            setMutation("bulk");
+            setBulkProgressLabel("Reanalizando match con otra columna…");
+            try {
+              const { preview: p } = await patchBulkImportJob(pendingAnalyzeResult.jobId, {
+                codeColumnIndex: columnIndex,
+              });
+              const next: BulkPreviewResponse = {
+                ...pendingAnalyzeResult,
+                preview: p,
+              };
+              if (isBulkCsvZipMatchRateTooLow(p.stats)) {
+                setPendingAnalyzeResult(next);
+                showToast(
+                  `Reanalizado con «${p.headers[columnIndex] || `columna ${columnIndex}`}». El match sigue bajo; prueba otra columna o confirma.`,
+                  "default",
+                  "⚠️"
+                );
+              } else {
+                applyAnalyzeResult(next);
+                setPendingAnalyzeResult(null);
+                setShowLowMatchModal(false);
+                showToast(
+                  `Match mejorado usando «${p.headers[columnIndex] || `columna ${columnIndex}`}».`,
+                  "success",
+                  "✅"
+                );
+              }
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : "No se pudo reanalizar", "danger", "⚠️");
+            } finally {
+              setMutation(null);
+              setBulkProgressLabel("");
+            }
+          })();
         }}
       />
       <AdminBulkTaxonomyHintsModal
@@ -5074,24 +5121,43 @@ function AdminBulkTintSetupModal({
 function AdminBulkLowMatchModal({
   open,
   breakdown,
+  headers,
+  codeColumnIndex,
+  codeColumnCandidates,
+  reanalyzing,
   onConfirm,
   onCancel,
+  onReanalyzeWithColumn,
 }: {
   open: boolean;
   breakdown: ReturnType<typeof computeBulkCsvZipMatchBreakdown> | null;
+  headers: string[];
+  codeColumnIndex: number;
+  codeColumnCandidates: { index: number; header: string; score: number }[];
+  reanalyzing: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  onReanalyzeWithColumn: (columnIndex: number) => void;
 }) {
+  const [selectedColumnIndex, setSelectedColumnIndex] = useState(codeColumnIndex);
+
+  useEffect(() => {
+    if (open) setSelectedColumnIndex(codeColumnIndex);
+  }, [open, codeColumnIndex]);
+
   if (!breakdown) return null;
+
+  const currentHeader = headers[codeColumnIndex]?.trim() || `Columna ${codeColumnIndex + 1}`;
+  const otherCandidates = codeColumnCandidates.filter((c) => c.index !== codeColumnIndex).slice(0, 4);
 
   return (
     <div
       className={`admin-modal-overlay${open ? " open" : ""}`}
-      onClick={(e) => e.target === e.currentTarget && onCancel()}
+      onClick={(e) => e.target === e.currentTarget && !reanalyzing && onCancel()}
       role="presentation"
     >
-      <div className="admin-modal" style={{ maxWidth: 560 }}>
-        <button type="button" className="modal-close" onClick={onCancel}>
+      <div className="admin-modal" style={{ maxWidth: 600 }}>
+        <button type="button" className="modal-close" onClick={onCancel} disabled={reanalyzing}>
           ✕
         </button>
         <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 8 }}>
@@ -5099,13 +5165,14 @@ function AdminBulkLowMatchModal({
         </div>
         <p style={{ marginTop: 0, marginBottom: 14, fontSize: 14, color: "var(--text-muted)", lineHeight: 1.55 }}>
           ¿Estás seguro de que son las imágenes correctas y el Excel correcto? Parece que casi no hubo coincidencias
-          entre los dos.
+          entre los dos. A veces el match no usa el código de producto, sino otra columna (por ejemplo{" "}
+          <strong>id de la imagen</strong>).
         </p>
         <div
           style={{
             display: "grid",
             gap: 10,
-            marginBottom: 18,
+            marginBottom: 16,
             padding: "12px 14px",
             borderRadius: "var(--radius-md)",
             background: "var(--lavender-light)",
@@ -5114,6 +5181,9 @@ function AdminBulkLowMatchModal({
             lineHeight: 1.5,
           }}
         >
+          <div>
+            <strong>Columna usada ahora:</strong> {currentHeader}
+          </div>
           <div>
             <strong>Coincidencia general:</strong> {formatBulkMatchPercent(breakdown.overallMatchRate)} (mínimo
             recomendado: 3%)
@@ -5127,12 +5197,78 @@ function AdminBulkLowMatchModal({
             {formatBulkMatchPercent(breakdown.zipMatchRate)})
           </div>
         </div>
+
+        <div
+          style={{
+            marginBottom: 18,
+            padding: "14px 16px",
+            borderRadius: "var(--radius-md)",
+            border: "1px solid var(--line, #e7d9d4)",
+            background: "#fff",
+          }}
+        >
+          <label className="form-label" style={{ marginBottom: 6, display: "block" }}>
+            Columna del CSV para hacer match con el nombre del archivo
+          </label>
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45 }}>
+            Por defecto se usa el código de producto. Si tus fotos coinciden con otra columna (p. ej. id de
+            imagen), elígela y vuelve a analizar sin subir de nuevo el CSV/ZIP.
+          </p>
+          <select
+            className="form-select"
+            value={selectedColumnIndex}
+            disabled={reanalyzing || headers.length === 0}
+            onChange={(e) => setSelectedColumnIndex(Number(e.target.value))}
+            style={{ width: "100%", marginBottom: otherCandidates.length ? 10 : 12 }}
+          >
+            {headers.map((h, i) => (
+              <option key={`${h}-${i}`} value={i}>
+                {h?.trim() || `(vacío ${i + 1})`}
+                {i === codeColumnIndex ? " — actual" : ""}
+              </option>
+            ))}
+          </select>
+          {otherCandidates.length > 0 ? (
+            <div style={{ margin: "0 0 12px", fontSize: 12, color: "var(--text-muted)" }}>
+              <span style={{ marginRight: 6 }}>Sugeridas:</span>
+              {otherCandidates.map((c) => (
+                <button
+                  key={c.index}
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  disabled={reanalyzing}
+                  style={{ marginRight: 6, marginBottom: 4 }}
+                  onClick={() => setSelectedColumnIndex(c.index)}
+                >
+                  {c.header?.trim() || `Col ${c.index + 1}`}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn-rose"
+            disabled={reanalyzing || headers.length === 0}
+            onClick={() => onReanalyzeWithColumn(selectedColumnIndex)}
+            style={{ width: "100%" }}
+          >
+            {reanalyzing ? (
+              <>
+                <span className="admin-inline-spinner" aria-hidden />
+                Reanalizando…
+              </>
+            ) : (
+              "Reanalizar con esta columna"
+            )}
+          </button>
+        </div>
+
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
-          <button type="button" className="btn btn-outline" onClick={onCancel}>
+          <button type="button" className="btn btn-outline" onClick={onCancel} disabled={reanalyzing}>
             Cancelar, volveré a verificarlo
           </button>
-          <button type="button" className="btn btn-primary" onClick={onConfirm}>
-            Confirmar
+          <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={reanalyzing}>
+            Confirmar con esta coincidencia
           </button>
         </div>
       </div>

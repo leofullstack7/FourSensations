@@ -68,6 +68,14 @@ export function parseCsv(text: string): ParsedCsv {
 
 /** Patrones de nombre de columna “código” (orden = prioridad, menor = mejor). */
 export const CODE_HEADER_PATTERNS: string[] = [
+  "id de la imagen",
+  "id de imagen",
+  "id imagen",
+  "image id",
+  "imagen id",
+  "nombre imagen",
+  "nombre de imagen",
+  "nombre archivo",
   "codigo variante",
   "cod variante",
   "codigo de producto",
