@@ -8,6 +8,7 @@ import { requireAdminApi } from "@/lib/server/require-admin-api";
 import {
   CatalogActions,
   CatalogEntities,
+  describeProductSnapshotDiff,
   snapshotProduct,
 } from "@/lib/server/catalog-versioning";
 import { recordCatalogVersionSafe } from "@/lib/server/record-catalog-version";
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest) {
 
     await recordCatalogVersionSafe({
       label: `Producto creado: ${row.name}`,
-      summary: `Se agregó el producto «${row.name}» al catálogo.`,
+      summary: describeProductSnapshotDiff(null, snapshotProduct(row)),
       changes: [
         {
           entityType: CatalogEntities.PRODUCT,

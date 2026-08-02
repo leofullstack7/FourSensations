@@ -28,6 +28,14 @@ import {
   deleteBulkImportZip,
   resolveBulkImportZipBuffer,
 } from "@/lib/server/bulk-import-zip-store";
+import {
+  CatalogActions,
+  CatalogEntities,
+  loadProductSnapshot,
+  snapshotProduct,
+  type CatalogChangeInput,
+} from "@/lib/server/catalog-versioning";
+import { recordCatalogVersionSafe } from "@/lib/server/record-catalog-version";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -260,6 +268,9 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   let skippedExistingDuplicates = 0;
   let variantGroupsAssigned = 0;
   const assignedGroupCodes = new Set<string>();
+  const versionChanges: CatalogChangeInput[] = [];
+  let versionCreatedCount = 0;
+  let versionUpdatedCount = 0;
 
   try {
     for (const row of toImport) {
@@ -278,6 +289,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
           const hasVariantGroup = !!variantGroupCode;
           const hasColor = !!colorHex;
           if (hasVariantGroup || hasColor) {
+            const beforeSnap = await loadProductSnapshot(clash.id);
             const productRow = await prisma.product.update({
               where: { id: clash.id },
               data: {
@@ -287,6 +299,15 @@ export async function POST(req: NextRequest, { params }: Ctx) {
               include: { images: true },
             });
             createdProducts.push(prismaProductToAdmin(productRow));
+            versionChanges.push({
+              entityType: CatalogEntities.PRODUCT,
+              entityId: productRow.id,
+              action: CatalogActions.UPDATE,
+              label: `Producto: ${productRow.name}`,
+              beforeData: beforeSnap,
+              afterData: snapshotProduct(productRow),
+            });
+            versionUpdatedCount += 1;
             if (hasVariantGroup) {
               variantGroupsAssigned += 1;
               assignedGroupCodes.add(variantGroupCode!);
@@ -363,6 +384,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
           ? { tintFamilyId, tintTypeId, tintLevel, tintGroup }
           : {};
 
+        const beforeSnap = clash ? await loadProductSnapshot(clash.id) : null;
+
         const productRow = clash
           ? await prisma.product.update({
               where: { id: clash.id },
@@ -427,6 +450,27 @@ export async function POST(req: NextRequest, { params }: Ctx) {
               include: { images: true },
             });
         createdProducts.push(prismaProductToAdmin(productRow));
+        if (clash) {
+          versionChanges.push({
+            entityType: CatalogEntities.PRODUCT,
+            entityId: productRow.id,
+            action: CatalogActions.UPDATE,
+            label: `Producto: ${productRow.name}`,
+            beforeData: beforeSnap,
+            afterData: snapshotProduct(productRow),
+          });
+          versionUpdatedCount += 1;
+        } else {
+          versionChanges.push({
+            entityType: CatalogEntities.PRODUCT,
+            entityId: productRow.id,
+            action: CatalogActions.CREATE,
+            label: `Producto: ${productRow.name}`,
+            beforeData: null,
+            afterData: snapshotProduct(productRow),
+          });
+          versionCreatedCount += 1;
+        }
         if (!clash) {
           const refKey = canonicalExternalRef(ref);
           if (refKey) {
@@ -462,6 +506,16 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
     if (variantGroupsAssigned > 0 || createdProducts.length > 0) {
       revalidateStorefrontProducts();
+    }
+
+    if (versionChanges.length > 0) {
+      const labelParts: string[] = [];
+      if (versionCreatedCount > 0) labelParts.push(`${versionCreatedCount} nuevos`);
+      if (versionUpdatedCount > 0) labelParts.push(`${versionUpdatedCount} actualizados`);
+      await recordCatalogVersionSafe({
+        label: `Importación masiva: ${labelParts.join(", ") || `${versionChanges.length} cambios`}`,
+        changes: versionChanges,
+      });
     }
 
     const finalStats = {

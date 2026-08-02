@@ -275,49 +275,52 @@ export async function commitCatalogChanges(opts: {
 
   await ensureCatalogVersionBaseline(opts.createdBy);
 
-  return prisma.$transaction(async (tx) => {
-    const meta = await tx.catalogVersionMeta.findUnique({ where: { id: 1 } });
-    if (!meta) throw new Error("CatalogVersionMeta no inicializado");
+  return prisma.$transaction(
+    async (tx) => {
+      const meta = await tx.catalogVersionMeta.findUnique({ where: { id: 1 } });
+      if (!meta) throw new Error("CatalogVersionMeta no inicializado");
 
-    if (meta.currentVersionNumber < meta.headVersionNumber) {
-      await tx.catalogVersion.deleteMany({
-        where: { number: { gt: meta.currentVersionNumber } },
-      });
-    }
+      if (meta.currentVersionNumber < meta.headVersionNumber) {
+        await tx.catalogVersion.deleteMany({
+          where: { number: { gt: meta.currentVersionNumber } },
+        });
+      }
 
-    const nextNumber = meta.currentVersionNumber + 1;
-    const version = await tx.catalogVersion.create({
-      data: {
-        number: nextNumber,
-        label: opts.label.slice(0, 200),
-        summary: opts.summary?.slice(0, 2000) ?? null,
-        isBaseline: false,
-        createdBy: opts.createdBy ?? null,
-        changes: {
-          create: changes.map((c, i) => ({
-            entityType: c.entityType,
-            entityId: c.entityId,
-            action: c.action,
-            label: c.label?.slice(0, 200) ?? null,
-            beforeData: nullableJson(c.beforeData),
-            afterData: nullableJson(c.afterData),
-            sortOrder: i,
-          })),
+      const nextNumber = meta.currentVersionNumber + 1;
+      const version = await tx.catalogVersion.create({
+        data: {
+          number: nextNumber,
+          label: opts.label.slice(0, 200),
+          summary: opts.summary?.slice(0, 2000) ?? null,
+          isBaseline: false,
+          createdBy: opts.createdBy ?? null,
+          changes: {
+            create: changes.map((c, i) => ({
+              entityType: c.entityType,
+              entityId: c.entityId,
+              action: c.action,
+              label: c.label?.slice(0, 200) ?? null,
+              beforeData: nullableJson(c.beforeData),
+              afterData: nullableJson(c.afterData),
+              sortOrder: i,
+            })),
+          },
         },
-      },
-      include: { changes: true },
-    });
+        include: { changes: true },
+      });
 
-    await tx.catalogVersionMeta.update({
-      where: { id: 1 },
-      data: {
-        currentVersionNumber: nextNumber,
-        headVersionNumber: nextNumber,
-      },
-    });
+      await tx.catalogVersionMeta.update({
+        where: { id: 1 },
+        data: {
+          currentVersionNumber: nextNumber,
+          headVersionNumber: nextNumber,
+        },
+      });
 
-    return version;
-  });
+      return version;
+    },
+    { timeout: 120_000, maxWait: 20_000 },
+  );
 }
 
 export async function listCatalogVersions(): Promise<{
@@ -715,3 +718,115 @@ export async function restoreCatalogVersion(targetNumber: number) {
 /** Atajo tipado para commits desde rutas API. */
 export const CatalogEntities = CatalogEntityType;
 export const CatalogActions = CatalogChangeAction;
+
+const PRODUCT_DIFF_FIELDS: Array<{
+  key: keyof ProductVersionSnapshot;
+  label: string;
+  format?: (v: unknown) => string;
+}> = [
+  { key: "name", label: "nombre" },
+  { key: "price", label: "precio", format: (v) => `$${Number(v).toLocaleString("es-CO")}` },
+  { key: "stock", label: "stock" },
+  { key: "category", label: "categoría" },
+  { key: "subcategory", label: "subcategoría" },
+  { key: "description", label: "descripción" },
+  { key: "brand", label: "marca" },
+  { key: "active", label: "activo" },
+  { key: "variantGroupCode", label: "código de barras / grupo" },
+  { key: "colorHex", label: "color" },
+  { key: "imageUrl", label: "imagen principal" },
+  { key: "externalRef", label: "código" },
+];
+
+function fmtSnapValue(v: unknown, format?: (v: unknown) => string): string {
+  if (v == null || v === "") return "—";
+  if (format) return format(v);
+  if (typeof v === "boolean") return v ? "sí" : "no";
+  if (typeof v === "string") {
+    const t = v.trim();
+    return t.length > 80 ? `${t.slice(0, 77)}…` : t;
+  }
+  return String(v);
+}
+
+/** Texto legible de qué cambió en un producto (para summary de versión). */
+export function describeProductSnapshotDiff(
+  before: ProductVersionSnapshot | null | undefined,
+  after: ProductVersionSnapshot | null | undefined,
+): string {
+  if (!before && after) {
+    return `Producto nuevo «${after.name}» · ${after.category}/${after.subcategory} · $${after.price.toLocaleString("es-CO")}.`;
+  }
+  if (before && !after) {
+    return `Se eliminó el producto «${before.name}».`;
+  }
+  if (!before || !after) return "Cambio en producto.";
+
+  const parts: string[] = [];
+  for (const f of PRODUCT_DIFF_FIELDS) {
+    const a = before[f.key];
+    const b = after[f.key];
+    if (a === b) continue;
+    parts.push(`${f.label}: ${fmtSnapValue(a, f.format)} → ${fmtSnapValue(b, f.format)}`);
+  }
+  const beforeImgCount = before.images?.length ?? 0;
+  const afterImgCount = after.images?.length ?? 0;
+  if (beforeImgCount !== afterImgCount) {
+    parts.push(`galería: ${beforeImgCount} → ${afterImgCount} imagen(es)`);
+  }
+  if (parts.length === 0) {
+    return `Se tocó «${after.name}» sin cambios visibles en campos principales.`;
+  }
+  return `«${after.name}»: ${parts.slice(0, 8).join("; ")}${parts.length > 8 ? "…" : ""}.`;
+}
+
+/** Summary de una versión a partir de sus cambios (qué pasó vs la anterior). */
+export function buildCatalogVersionSummary(changes: CatalogChangeInput[]): string {
+  if (changes.length === 0) return "Sin cambios.";
+
+  const creates = changes.filter((c) => c.action === CatalogChangeAction.CREATE);
+  const updates = changes.filter((c) => c.action === CatalogChangeAction.UPDATE);
+  const deletes = changes.filter((c) => c.action === CatalogChangeAction.DELETE);
+
+  const nameOf = (c: CatalogChangeInput) =>
+    (c.label ?? "").replace(/^(Producto|Categoría|Subcategoría|Combo):\s*/i, "").trim() || c.entityId;
+
+  const lines: string[] = [];
+  if (creates.length > 0) {
+    const names = creates.map(nameOf).filter(Boolean).slice(0, 20);
+    lines.push(
+      `Respecto a la versión anterior se agregaron ${creates.length} elemento(s)${
+        names.length ? `: ${names.join(", ")}${creates.length > names.length ? "…" : ""}` : ""
+      }.`,
+    );
+  }
+  if (updates.length > 0) {
+    const names = updates.map(nameOf).filter(Boolean).slice(0, 15);
+    lines.push(
+      `Se actualizaron ${updates.length}${
+        names.length ? ` (${names.join(", ")}${updates.length > names.length ? "…" : ""})` : ""
+      }.`,
+    );
+  }
+  if (deletes.length > 0) {
+    const names = deletes.map(nameOf).filter(Boolean).slice(0, 15);
+    lines.push(
+      `Se eliminaron ${deletes.length}${
+        names.length ? `: ${names.join(", ")}${deletes.length > names.length ? "…" : ""}` : ""
+      }.`,
+    );
+  }
+
+  if (changes.length === 1) {
+    const only = changes[0]!;
+    if (only.entityType === CatalogEntityType.PRODUCT) {
+      const detail = describeProductSnapshotDiff(
+        only.beforeData as ProductVersionSnapshot | null,
+        only.afterData as ProductVersionSnapshot | null,
+      );
+      return detail;
+    }
+  }
+
+  return lines.join(" ");
+}

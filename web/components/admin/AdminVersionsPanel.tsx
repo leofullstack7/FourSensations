@@ -142,8 +142,8 @@ export function AdminVersionsPanel({
           <div>
             <h2 style={{ margin: 0, fontSize: 18 }}>Versiones del catálogo</h2>
             <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: 13, maxWidth: 640 }}>
-              Cada cambio en productos, categorías o menú crea una versión nueva con solo lo modificado.
-              Puedes volver a una versión anterior o reactivar una más reciente.
+              Cada vez que agregas, editas o eliminas productos (también en carga masiva), se crea una versión nueva
+              con una descripción de qué cambió respecto a la anterior. Puedes volver a una versión previa.
             </p>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -174,12 +174,29 @@ export function AdminVersionsPanel({
 
       {loading && versions.length === 0 ? (
         <p style={{ color: "var(--text-muted)" }}>Cargando versiones…</p>
+      ) : versions.length === 0 ? (
+        <div className="admin-card" style={{ padding: 16, fontSize: 13, color: "var(--text-muted)" }}>
+          Aún no hay versiones. Al crear o importar productos aparecerán aquí.
+        </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 1fr) minmax(280px, 1.1fr)", gap: 16 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(280px, 1fr) minmax(280px, 1.1fr)",
+            gap: 16,
+          }}
+          className="admin-versions-grid"
+        >
           <div className="admin-card" style={{ padding: 0, overflow: "hidden" }}>
             <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--cream)", fontWeight: 600, fontSize: 14 }}>
               Historial
             </div>
+            {versions.length === 1 && versions[0]?.isBaseline ? (
+              <div style={{ padding: "12px 14px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45, borderBottom: "1px solid var(--cream)" }}>
+                Solo está la versión inicial. Cuando agregues productos (manual o carga masiva) o edites el catálogo,
+                verás aquí la descripción de lo que cambió.
+              </div>
+            ) : null}
             <ul style={{ listStyle: "none", margin: 0, padding: 0, maxHeight: 560, overflow: "auto" }}>
               {versions.map((v) => {
                 const selected = selectedNumber === v.number;
@@ -212,7 +229,23 @@ export function AdminVersionsPanel({
                           )}
                         </span>
                       </div>
-                      <div style={{ fontSize: 13, marginTop: 4 }}>{v.label}</div>
+                      <div style={{ fontSize: 13, marginTop: 4, fontWeight: 600 }}>{v.label}</div>
+                      {v.summary ? (
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: "var(--text-muted)",
+                            marginTop: 4,
+                            lineHeight: 1.4,
+                            display: "-webkit-box",
+                            WebkitLineClamp: 3,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {v.summary}
+                        </div>
+                      ) : null}
                       <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
                         {formatDate(v.createdAt)}
                         {v.isBaseline ? "" : ` · ${v.changeCount} cambio${v.changeCount === 1 ? "" : "s"}`}
@@ -236,7 +269,24 @@ export function AdminVersionsPanel({
                     <h3 style={{ margin: 0, fontSize: 17 }}>Versión {detail.number}</h3>
                     <p style={{ margin: "6px 0 0", fontSize: 14 }}>{detail.label}</p>
                     {detail.summary && (
-                      <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--text-muted)" }}>{detail.summary}</p>
+                      <p
+                        style={{
+                          margin: "10px 0 0",
+                          fontSize: 13,
+                          color: "var(--text)",
+                          lineHeight: 1.5,
+                          padding: "10px 12px",
+                          background: "var(--lavender-light)",
+                          borderRadius: "var(--radius-md)",
+                          border: "1px solid rgba(199, 165, 178, 0.35)",
+                          whiteSpace: "pre-wrap",
+                        }}
+                      >
+                        <strong style={{ display: "block", marginBottom: 4, fontSize: 11, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--dusty-rose)" }}>
+                          Qué cambió respecto a la anterior
+                        </strong>
+                        {detail.summary}
+                      </p>
                     )}
                     <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--text-muted)" }}>
                       {formatDate(detail.createdAt)}

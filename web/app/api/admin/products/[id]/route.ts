@@ -11,6 +11,7 @@ import { revalidateStorefrontProducts } from "@/lib/server/revalidate-storefront
 import {
   CatalogActions,
   CatalogEntities,
+  describeProductSnapshotDiff,
   loadProductSnapshot,
   snapshotProduct,
 } from "@/lib/server/catalog-versioning";
@@ -160,7 +161,7 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
 
     await recordCatalogVersionSafe({
       label: `Producto actualizado: ${row.name}`,
-      summary: `Se modificó el producto «${row.name}».`,
+      summary: describeProductSnapshotDiff(beforeSnap, snapshotProduct(row)),
       changes: [
         {
           entityType: CatalogEntities.PRODUCT,
@@ -203,7 +204,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteCtx) {
     await prisma.product.delete({ where: { id } });
     await recordCatalogVersionSafe({
       label: `Producto eliminado: ${before.name}`,
-      summary: `Se eliminó el producto «${before.name}» del catálogo.`,
+      summary: describeProductSnapshotDiff(before, null),
       changes: [
         {
           entityType: CatalogEntities.PRODUCT,
