@@ -69,7 +69,7 @@ export function AdminBulkMissingPriceModal({
   if (!open) return null;
 
   const price = digits ? Number.parseInt(digits, 10) : NaN;
-  const canApply = Number.isFinite(price) && price > 0 && !busy;
+  const canApply = Number.isFinite(price) && price >= 0 && !busy;
   const display = digits ? formatPrice(price) : "";
   const shownDone = busy ? Math.min(rowCount, Math.max(displayDone, appliedCount)) : 0;
   const pct = rowCount > 0 ? Math.round((shownDone / rowCount) * 100) : 0;
