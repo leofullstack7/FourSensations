@@ -27,6 +27,13 @@ const taxonomyOverrideEntry = z.object({
   subcategoryName: z.string().min(1),
 });
 
+const rowFieldOverrideEntry = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  price: z.number().nullable().optional(),
+  stock: z.number().int().nullable().optional(),
+});
+
 const tintRowSelectionEntry = z.object({
   tintFamilyId: z.string().min(1),
   tintTypeId: z.string().min(1),
@@ -38,6 +45,7 @@ const patchSchema = z.object({
   selectedRowIds: z.array(z.string().min(1)).optional(),
   taxonomyOverrides: z.record(z.string(), taxonomyOverrideEntry).optional(),
   rowTaxonomyOverrides: z.record(z.string(), taxonomyOverrideEntry).optional(),
+  rowFieldOverrides: z.record(z.string(), rowFieldOverrideEntry).optional(),
   taxonomyRehomeDismissed: z.record(z.string(), z.boolean()).optional(),
   /** Tipo Tintes activo para esta importación (un tipo por carga). */
   activeTintTypeCsvKey: z.string().min(1).nullable().optional(),
@@ -55,11 +63,12 @@ const patchSchema = z.object({
 function readTaxonomyStateFromJob(jobPreview: unknown): {
   overrides: Record<string, { categorySlug: string; subcategoryName: string }>;
   rowOverrides: Record<string, { categorySlug: string; subcategoryName: string }>;
+  fieldOverrides: NonNullable<BulkPreviewResult["rowFieldOverrides"]>;
   dismissed: Record<string, boolean>;
 } {
   const p = jobPreview as BulkPreviewResult | null;
   if (!p || typeof p !== "object") {
-    return { overrides: {}, rowOverrides: {}, dismissed: {} };
+    return { overrides: {}, rowOverrides: {}, fieldOverrides: {}, dismissed: {} };
   }
   return {
     overrides:
@@ -70,6 +79,8 @@ function readTaxonomyStateFromJob(jobPreview: unknown): {
       p.rowTaxonomyOverrides && typeof p.rowTaxonomyOverrides === "object"
         ? p.rowTaxonomyOverrides
         : {},
+    fieldOverrides:
+      p.rowFieldOverrides && typeof p.rowFieldOverrides === "object" ? p.rowFieldOverrides : {},
     dismissed:
       p.taxonomyRehomeDismissed && typeof p.taxonomyRehomeDismissed === "object"
         ? p.taxonomyRehomeDismissed
@@ -140,6 +151,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     ...prevTax.rowOverrides,
     ...(parsed.data.rowTaxonomyOverrides ?? {}),
   };
+  const rowFieldOverrides = {
+    ...prevTax.fieldOverrides,
+    ...(parsed.data.rowFieldOverrides ?? {}),
+  };
   const taxonomyRehomeDismissed = {
     ...prevTax.dismissed,
     ...(parsed.data.taxonomyRehomeDismissed ?? {}),
@@ -201,6 +216,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     categoryTree,
     taxonomyOverrides,
     rowTaxonomyOverrides,
+    rowFieldOverrides,
     taxonomyRehomeDismissed,
     previousPreview: job.previewPayload as BulkPreviewResult | null,
     tintCatalog: {

@@ -247,6 +247,14 @@ export function buildPreviewNewTaxonomyItems(
   );
 }
 
+/** Campos de producto editables desde el preview (por fila). */
+export type BulkRowFieldOverride = {
+  name?: string;
+  description?: string;
+  price?: number | null;
+  stock?: number | null;
+};
+
 /** Sugerencia: el CSV parece confundir categoría/sub con otra rama ya registrada. */
 export type BulkTaxonomyRehomeHint = {
   id: string;
@@ -278,6 +286,8 @@ export type BulkPreviewResult = {
   taxonomyOverrides: Record<string, { categorySlug: string; subcategoryName: string }>;
   /** Overrides por fila individual (previewRowId → slug + sub). Tienen prioridad sobre taxonomyOverrides. */
   rowTaxonomyOverrides: Record<string, { categorySlug: string; subcategoryName: string }>;
+  /** Overrides de campos editables por fila (nombre, descripción, precio, stock). */
+  rowFieldOverrides: Record<string, BulkRowFieldOverride>;
   /** Pares CSV para los que el usuario rechazó la sugerencia (no volver a mostrar). */
   taxonomyRehomeDismissed: Record<string, boolean>;
   taxonomyRehomeHints: BulkTaxonomyRehomeHint[];
@@ -413,6 +423,7 @@ export function buildBulkPreview(params: {
   defaultCategorySlug: string | null;
   taxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
   rowTaxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
+  rowFieldOverrides?: Record<string, BulkRowFieldOverride>;
   taxonomyRehomeDismissed?: Record<string, boolean>;
   /** Tintes: solo emparejar imágenes por nivel dentro de este tipo+familia. */
   tintMatchScope?: TintMatchScope | null;
@@ -426,6 +437,7 @@ export function buildBulkPreview(params: {
     defaultCategorySlug,
     taxonomyOverrides = {},
     rowTaxonomyOverrides = {},
+    rowFieldOverrides = {},
     taxonomyRehomeDismissed = {},
     tintMatchScope = null,
   } = params;
@@ -452,9 +464,15 @@ export function buildBulkPreview(params: {
       .map(([i]) => i);
     const hasStockInput = stockCols.some((i) => (values[i] ?? "").trim() !== "");
     const enriched = enrichSparseMappedFromTags(mappedForEnrich, codeRaw);
+    const rowPreviewId = `${rowIndex}:${normalizedCode ?? "nocode"}`;
+    const fieldOv = rowFieldOverrides[rowPreviewId];
     const mappedBase: SemanticMapped = {
       ...enriched,
       stock: !hasStockInput && enriched.stock == null ? 0 : enriched.stock,
+      ...(fieldOv?.name !== undefined ? { name: fieldOv.name } : {}),
+      ...(fieldOv?.description !== undefined ? { description: fieldOv.description } : {}),
+      ...(fieldOv?.price !== undefined ? { price: fieldOv.price } : {}),
+      ...(fieldOv?.stock !== undefined ? { stock: fieldOv.stock } : {}),
     };
 
     const pairKey = taxonomyPairKey(mappedBase.category, mappedBase.subcategory);
@@ -548,7 +566,6 @@ export function buildBulkPreview(params: {
     };
 
     // Override por fila tiene prioridad; si no existe, aplica el override por par CSV.
-    const rowPreviewId = `${rowIndex}:${normalizedCode ?? "nocode"}`;
     const ov = rowTaxonomyOverrides[rowPreviewId] ?? taxonomyOverrides[pairKey];
     if (ov) {
       effectiveCat = ov.categorySlug;
@@ -873,6 +890,7 @@ export function buildBulkPreview(params: {
     newCategories,
     taxonomyOverrides: { ...taxonomyOverrides },
     rowTaxonomyOverrides: { ...rowTaxonomyOverrides },
+    rowFieldOverrides: { ...rowFieldOverrides },
     taxonomyRehomeDismissed: { ...taxonomyRehomeDismissed },
     taxonomyRehomeHints,
     orphanFileNames,

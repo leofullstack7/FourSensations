@@ -48,6 +48,7 @@ import {
 import { AdminProductVariantsModal } from "@/components/admin/AdminProductVariantsModal";
 import { AdminProductColorModal } from "@/components/admin/AdminProductColorModal";
 import { AdminBulkTemplateModal } from "@/components/admin/AdminBulkTemplateModal";
+import { AdminBulkRowEditModal } from "@/components/admin/AdminBulkRowEditModal";
 import { AdminProductAiDetailPanel, AdminProductDescriptionBlock } from "@/components/admin/AdminProductAiUi";
 import { menuTagForProduct, productOwnTags, tagsToInputValue } from "@/lib/product-tags";
 import { fetchAdminPaidOrders } from "@/lib/api/admin-orders";
@@ -2300,11 +2301,8 @@ function AdminBulkTab({
   const [showLowMatchModal, setShowLowMatchModal] = useState(false);
   const [pendingAnalyzeResult, setPendingAnalyzeResult] = useState<BulkPreviewResponse | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
-  const [editingTaxonomyRowId, setEditingTaxonomyRowId] = useState<string | null>(null);
-  const [manualCategorySlug, setManualCategorySlug] = useState("");
-  const [manualSubcategoryName, setManualSubcategoryName] = useState("");
-  const [manualSubcategoryMode, setManualSubcategoryMode] = useState<"existing" | "new">("existing");
-  const [manualSubcategoryCustom, setManualSubcategoryCustom] = useState("");
+  const [editingBulkRowId, setEditingBulkRowId] = useState<string | null>(null);
+  const [showAllImageMatches, setShowAllImageMatches] = useState(false);
   const bulkProgress = useBufferedProgress(93);
   const [bulkProgressLabel, setBulkProgressLabel] = useState("");
 
@@ -2352,6 +2350,8 @@ function AdminBulkTab({
     setIsAnalyzing(false);
     setShowLowMatchModal(false);
     setPendingAnalyzeResult(null);
+    setEditingBulkRowId(null);
+    setShowAllImageMatches(false);
     bulkProgress.reset();
     setFileInputKey((k) => k + 1);
   };
@@ -2393,7 +2393,8 @@ function AdminBulkTab({
       setNewCategoriesModalAcknowledged(false);
       setShowLowMatchModal(false);
       setPendingAnalyzeResult(null);
-      setEditingTaxonomyRowId(null);
+      setEditingBulkRowId(null);
+      setShowAllImageMatches(false);
       setJobId(null);
       setPreview(null);
       setExpiresAt(null);
@@ -2575,10 +2576,6 @@ function AdminBulkTab({
   }, [preview, selectedRowIds]);
 
   const selectedRowIdSet = useMemo(() => new Set(selectedRowIds), [selectedRowIds]);
-  const manualSubcategoryOptions = useMemo(() => {
-    const cat = sortedCats.find((c) => c.slug === manualCategorySlug);
-    return cat ? [...cat.subcategories].sort((a, b) => a.sortOrder - b.sortOrder) : [];
-  }, [sortedCats, manualCategorySlug]);
 
   const previewTableRows = useMemo(() => {
     const sourceRows = preview?.csvHasVariantGroupColumn
@@ -2696,64 +2693,53 @@ function AdminBulkTab({
     [previewTableRows]
   );
 
-  const openManualTaxonomyEditor = useCallback(
-    (r: {
-      previewRowId: string;
-      categorySlug: string | null;
-      subcategoryValue: string | null;
-      categoryCsv: string | null;
-      subcategoryCsv: string | null;
-    }) => {
-      const fallbackCategory = r.categorySlug ?? sortedCats[0]?.slug ?? "";
-      setEditingTaxonomyRowId(r.previewRowId);
-      setManualCategorySlug(fallbackCategory);
-      setManualSubcategoryMode("existing");
-      setManualSubcategoryCustom("");
-      if (r.subcategoryValue?.trim()) {
-        setManualSubcategoryName(r.subcategoryValue);
-        return;
-      }
-      const cat = sortedCats.find((c) => c.slug === fallbackCategory);
-      setManualSubcategoryName(cat?.subcategories?.[0]?.name ?? "");
-    },
-    [sortedCats]
+  type BulkPreviewTableRow = (typeof previewTableRows)[number];
+
+  const editingBulkRow = useMemo(
+    () => previewTableRows.find((r) => r.previewRowId === editingBulkRowId) ?? null,
+    [previewTableRows, editingBulkRowId]
   );
 
-  /** Formatea a título: primera letra de cada palabra en mayúscula. */
-  const toTitleCase = (str: string) =>
-    str.toLowerCase().replace(/(^|[\s\-/])(\S)/g, (_m, sep, ch) => sep + (ch as string).toUpperCase());
-
-  /** Nombre final de subcategoría según el modo activo (existente o nueva). */
-  const effectiveSubcategoryName =
-    manualSubcategoryMode === "new" ? toTitleCase(manualSubcategoryCustom) : manualSubcategoryName;
-
-  const applyManualTaxonomyOverride = useCallback(
-    async (r: { previewRowId: string }) => {
-      if (!jobId || !manualCategorySlug || !effectiveSubcategoryName) return;
+  const saveBulkRowEdits = useCallback(
+    async (payload: {
+      name: string;
+      description: string;
+      price: number | null;
+      stock: number | null;
+      categorySlug: string;
+      subcategoryName: string;
+    }) => {
+      if (!jobId || !editingBulkRowId) return;
       setMutation("bulk");
       try {
         const { preview: p } = await patchBulkImportJob(jobId, {
           rowTaxonomyOverrides: {
-            [r.previewRowId]: {
-              categorySlug: manualCategorySlug,
-              subcategoryName: effectiveSubcategoryName,
+            [editingBulkRowId]: {
+              categorySlug: payload.categorySlug,
+              subcategoryName: payload.subcategoryName,
+            },
+          },
+          rowFieldOverrides: {
+            [editingBulkRowId]: {
+              name: payload.name,
+              description: payload.description,
+              price: payload.price,
+              stock: payload.stock,
             },
           },
           selectedRowIds,
         });
         setPreview(p);
-        setEditingTaxonomyRowId(null);
-        showToast("Categoría/subcategoría ajustada solo para esta fila", "success", "✅");
+        setEditingBulkRowId(null);
+        showToast("Producto actualizado en el preview", "success", "✅");
       } catch (err) {
-        showToast(err instanceof Error ? err.message : "No se pudo aplicar el ajuste", "danger", "⚠️");
+        showToast(err instanceof Error ? err.message : "No se pudo guardar el producto", "danger", "⚠️");
       } finally {
         setMutation(null);
       }
     },
-    [jobId, manualCategorySlug, effectiveSubcategoryName, selectedRowIds, setMutation, showToast]
+    [jobId, editingBulkRowId, selectedRowIds, setMutation, showToast]
   );
-
-  type BulkPreviewTableRow = (typeof previewTableRows)[number];
 
   const bulkPreviewTableColSpan =
     (hasTintesInBatch ? 17 : 14) + (preview?.csvHasVariantGroupColumn ? 1 : 0);
@@ -2853,132 +2839,18 @@ function AdminBulkTab({
             </span>
           )}
         </td>
-        <td style={{ minWidth: 220 }}>
-          {r.errors.length > 0 ? (
-            editingTaxonomyRowId === r.previewRowId ? (
-              <div style={{ display: "grid", gap: 6 }}>
-                <select
-                  className="form-select"
-                  value={manualCategorySlug}
-                  onChange={(e) => {
-                    const slug = e.target.value;
-                    setManualCategorySlug(slug);
-                    const cat = sortedCats.find((c) => c.slug === slug);
-                    setManualSubcategoryName(cat?.subcategories?.[0]?.name ?? "");
-                  }}
-                  disabled={saving}
-                >
-                  {sortedCats.map((c) => (
-                    <option key={c.id} value={c.slug}>
-                      {c.icon ? `${c.icon} ` : ""}
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                {/* Toggle: subcategoría existente vs. nueva */}
-                <div style={{ display: "flex", gap: 6, fontSize: 11.5 }}>
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${manualSubcategoryMode === "existing" ? "btn-primary" : "btn-outline"}`}
-                    onClick={() => setManualSubcategoryMode("existing")}
-                    disabled={saving}
-                  >
-                    Existente
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${manualSubcategoryMode === "new" ? "btn-primary" : "btn-outline"}`}
-                    onClick={() => {
-                      setManualSubcategoryMode("new");
-                      setManualSubcategoryCustom("");
-                    }}
-                    disabled={saving}
-                  >
-                    + Nueva
-                  </button>
-                </div>
-
-                {manualSubcategoryMode === "existing" ? (
-                  <select
-                    className="form-select"
-                    value={manualSubcategoryName}
-                    onChange={(e) => setManualSubcategoryName(e.target.value)}
-                    disabled={saving || manualSubcategoryOptions.length === 0}
-                  >
-                    {manualSubcategoryOptions.map((s) => (
-                      <option key={s.id} value={s.name}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div>
-                    <input
-                      className="form-input"
-                      style={{ width: "100%" }}
-                      placeholder="Ej: Cuero Cabelludo"
-                      value={manualSubcategoryCustom}
-                      disabled={saving}
-                      onChange={(e) => setManualSubcategoryCustom(e.target.value)}
-                      onBlur={(e) => {
-                        // Aplicar title case al perder el foco
-                        const formatted = e.target.value
-                          .toLowerCase()
-                          .replace(/(^|[\s\-/])(\S)/g, (_m, sep, ch) => sep + (ch as string).toUpperCase());
-                        setManualSubcategoryCustom(formatted);
-                      }}
-                    />
-                    {manualSubcategoryCustom.trim() && (
-                      <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--text-muted)" }}>
-                        Se guardará como:{" "}
-                        <strong>
-                          {manualSubcategoryCustom
-                            .toLowerCase()
-                            .replace(/(^|[\s\-/])(\S)/g, (_m, sep, ch) => sep + (ch as string).toUpperCase())}
-                        </strong>
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    disabled={
-                      saving ||
-                      !manualCategorySlug ||
-                      (manualSubcategoryMode === "existing" ? !manualSubcategoryName : !manualSubcategoryCustom.trim())
-                    }
-                    onClick={() => {
-                      void applyManualTaxonomyOverride(r);
-                    }}
-                  >
-                    Aplicar
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline btn-sm"
-                    disabled={saving}
-                    onClick={() => setEditingTaxonomyRowId(null)}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                disabled={saving || sortedCats.length === 0}
-                onClick={() => openManualTaxonomyEditor(r)}
-              >
-                Editar categoría/subcategoría
-              </button>
-            )
-          ) : (
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>—</span>
-          )}
+        <td style={{ minWidth: 96 }}>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            disabled={saving || sortedCats.length === 0}
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingBulkRowId(r.previewRowId);
+            }}
+          >
+            Editar
+          </button>
         </td>
       </tr>
     );
@@ -3595,7 +3467,7 @@ function AdminBulkTab({
                   <th>Etiquetas</th>
                   <th>Imágenes</th>
                   <th>Estado</th>
-                  <th>Ajuste</th>
+                  <th>Editar</th>
                 </tr>
               </thead>
               <tbody>
@@ -3668,6 +3540,27 @@ function AdminBulkTab({
           </div>
 
           <div
+            style={{
+              marginBottom: 12,
+              padding: "14px 16px",
+              borderRadius: "var(--radius-md)",
+              background: "linear-gradient(135deg, var(--lavender-light) 0%, #fff8f6 100%)",
+              border: "1px solid var(--line, #e7d9d4)",
+              fontSize: 13,
+              lineHeight: 1.5,
+              color: "var(--text)",
+            }}
+          >
+            <strong>Detalle del emparejamiento imagen ↔ CSV</strong>
+            <p style={{ margin: "6px 0 0", color: "var(--text-muted)" }}>
+              Esta tabla muestra cómo se relacionó cada archivo del ZIP con un código del CSV: el nombre
+              de la imagen, el código extraído del archivo, el prefijo numérico, el código CSV con el que
+              coincidió y el método de match (exacto, prefijo, similitud, etc.). Sirve para auditar
+              emparejamientos dudosos antes de importar.
+            </p>
+          </div>
+
+          <div
             className="admin-bulk-scroll"
             style={{ marginBottom: 16, border: "1px solid var(--line, #e7d9d4)", borderRadius: "var(--radius-md)" }}
           >
@@ -3682,27 +3575,29 @@ function AdminBulkTab({
                 </tr>
               </thead>
               <tbody>
-                {preview.imageMatches.map((m, idx) => (
-                  <tr key={`${m.imageFilename}-${idx}`}>
-                    <td style={{ fontSize: 12 }}>{m.imageFilename}</td>
-                    <td style={{ fontFamily: "monospace", fontSize: 12 }}>{m.rawImageCode}</td>
-                    <td style={{ fontFamily: "monospace", fontSize: 12 }}>{m.numericPrefixCode ?? "—"}</td>
-                    <td style={{ fontFamily: "monospace", fontSize: 12 }}>{m.matchedCsvCode ?? "—"}</td>
-                    <td style={{ fontSize: 12 }}>
-                      {m.matchedBy === "exact"
-                        ? "exact"
-                        : m.matchedBy === "numericPrefix"
-                          ? "numericPrefix"
-                          : m.matchedBy === "sixDigitPrefix"
-                            ? "sixDigitPrefix"
-                            : m.matchedBy === "fuzzy"
-                              ? `fuzzy${m.fuzzySimilarity != null ? ` (${Math.round(m.fuzzySimilarity * 100)}%)` : ""}`
-                              : m.matchedBy === "ambiguous"
-                                ? "ambiguous"
-                                : "none"}
-                    </td>
-                  </tr>
-                ))}
+                {(showAllImageMatches ? preview.imageMatches : preview.imageMatches.slice(0, 5)).map(
+                  (m, idx) => (
+                    <tr key={`${m.imageFilename}-${idx}`}>
+                      <td style={{ fontSize: 12 }}>{m.imageFilename}</td>
+                      <td style={{ fontFamily: "monospace", fontSize: 12 }}>{m.rawImageCode}</td>
+                      <td style={{ fontFamily: "monospace", fontSize: 12 }}>{m.numericPrefixCode ?? "—"}</td>
+                      <td style={{ fontFamily: "monospace", fontSize: 12 }}>{m.matchedCsvCode ?? "—"}</td>
+                      <td style={{ fontSize: 12 }}>
+                        {m.matchedBy === "exact"
+                          ? "exact"
+                          : m.matchedBy === "numericPrefix"
+                            ? "numericPrefix"
+                            : m.matchedBy === "sixDigitPrefix"
+                              ? "sixDigitPrefix"
+                              : m.matchedBy === "fuzzy"
+                                ? `fuzzy${m.fuzzySimilarity != null ? ` (${Math.round(m.fuzzySimilarity * 100)}%)` : ""}`
+                                : m.matchedBy === "ambiguous"
+                                  ? "ambiguous"
+                                  : "none"}
+                      </td>
+                    </tr>
+                  )
+                )}
                 {preview.imageMatches.length === 0 && (
                   <tr>
                     <td colSpan={5} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>
@@ -3713,6 +3608,19 @@ function AdminBulkTab({
               </tbody>
             </table>
           </div>
+          {preview.imageMatches.length > 5 ? (
+            <div style={{ marginTop: -8, marginBottom: 16 }}>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => setShowAllImageMatches((v) => !v)}
+              >
+                {showAllImageMatches
+                  ? "Mostrar solo 5"
+                  : `Ver todos (${preview.imageMatches.length})`}
+              </button>
+            </div>
+          ) : null}
 
           <div className="admin-bulk-actions-spacer" aria-hidden />
 
@@ -3905,6 +3813,17 @@ function AdminBulkTab({
           )}
         </>
       )}
+      <AdminBulkRowEditModal
+        open={!!editingBulkRow}
+        saving={saving}
+        zipFile={zipFile}
+        categories={categories}
+        row={editingBulkRow}
+        onClose={() => {
+          if (!saving) setEditingBulkRowId(null);
+        }}
+        onSave={saveBulkRowEdits}
+      />
       <AdminBulkLowMatchModal
         open={showLowMatchModal && !!pendingAnalyzeResult && !!pendingLowMatchBreakdown}
         breakdown={pendingLowMatchBreakdown}

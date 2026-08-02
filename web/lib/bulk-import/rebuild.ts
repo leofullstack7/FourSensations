@@ -1,4 +1,4 @@
-import { buildBulkPreview, type BulkPreviewResult } from "./build-preview";
+import { buildBulkPreview, type BulkPreviewResult, type BulkRowFieldOverride } from "./build-preview";
 import { listZipImages } from "./zip-manifest";
 import type { CategoryRow } from "./category-resolve";
 import {
@@ -17,6 +17,7 @@ export function rebuildBulkPreview(params: {
   categoryTree: CategoryRow[];
   taxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
   rowTaxonomyOverrides?: Record<string, { categorySlug: string; subcategoryName: string }>;
+  rowFieldOverrides?: Record<string, BulkRowFieldOverride>;
   taxonomyRehomeDismissed?: Record<string, boolean>;
   tintCatalog?: TintCatalogState;
   previousPreview?: BulkPreviewResult | null;
@@ -35,6 +36,7 @@ export function rebuildBulkPreview(params: {
     taxonomyOverrides: params.taxonomyOverrides,
     rowTaxonomyOverrides:
       params.rowTaxonomyOverrides ?? params.previousPreview?.rowTaxonomyOverrides ?? {},
+    rowFieldOverrides: params.rowFieldOverrides ?? params.previousPreview?.rowFieldOverrides ?? {},
     taxonomyRehomeDismissed: params.taxonomyRehomeDismissed,
     tintMatchScope,
   });
