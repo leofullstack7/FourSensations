@@ -49,6 +49,10 @@ import { AdminProductVariantsModal } from "@/components/admin/AdminProductVarian
 import { AdminProductColorModal } from "@/components/admin/AdminProductColorModal";
 import { AdminBulkTemplateModal } from "@/components/admin/AdminBulkTemplateModal";
 import { AdminBulkRowEditModal } from "@/components/admin/AdminBulkRowEditModal";
+import {
+  AdminBulkMissingPriceModal,
+  BULK_INVALID_PRICE_BATCH_THRESHOLD,
+} from "@/components/admin/AdminBulkMissingPriceModal";
 import { AdminProductAiDetailPanel, AdminProductDescriptionBlock } from "@/components/admin/AdminProductAiUi";
 import { menuTagForProduct, productOwnTags, tagsToInputValue } from "@/lib/product-tags";
 import { fetchAdminPaidOrders } from "@/lib/api/admin-orders";
@@ -2292,6 +2296,8 @@ function AdminBulkTab({
   const [applyingNewCategories, setApplyingNewCategories] = useState(false);
   /** Tras «Continuar sin crear» o cerrar el modal, se permite importar filas válidas aunque el preview siga listando novedades. */
   const [newCategoriesModalAcknowledged, setNewCategoriesModalAcknowledged] = useState(false);
+  const [showBulkPriceModal, setShowBulkPriceModal] = useState(false);
+  const [bulkPriceModalDismissed, setBulkPriceModalDismissed] = useState(false);
   const [showTaxonomyHintsModal, setShowTaxonomyHintsModal] = useState(false);
   const [showTintTypeModal, setShowTintTypeModal] = useState(false);
   const [tintModalDismissed, setTintModalDismissed] = useState(false);
@@ -2342,6 +2348,8 @@ function AdminBulkTab({
     setShowNewCategoriesModal(false);
     setApplyingNewCategories(false);
     setNewCategoriesModalAcknowledged(false);
+    setShowBulkPriceModal(false);
+    setBulkPriceModalDismissed(false);
     setShowTaxonomyHintsModal(false);
     setShowTintTypeModal(false);
     setTintModalDismissed(false);
@@ -2391,6 +2399,8 @@ function AdminBulkTab({
       setShowTaxonomyHintsModal(false);
       setShowNewCategoriesModal(false);
       setNewCategoriesModalAcknowledged(false);
+      setShowBulkPriceModal(false);
+      setBulkPriceModalDismissed(false);
       setShowLowMatchModal(false);
       setPendingAnalyzeResult(null);
       setEditingBulkRowId(null);
@@ -2462,6 +2472,7 @@ function AdminBulkTab({
 
   useEffect(() => {
     setNewCategoriesModalAcknowledged(false);
+    setBulkPriceModalDismissed(false);
   }, [jobId]);
 
   const pendingNewCategories = useMemo((): BulkPreviewNewTaxonomyItem[] => {
@@ -2511,6 +2522,7 @@ function AdminBulkTab({
     if (!preview) {
       setShowNewCategoriesModal(false);
       setShowTaxonomyHintsModal(false);
+      setShowBulkPriceModal(false);
       return;
     }
     // Esperar a que el modal de Tintes esté resuelto (configurado u omitido) antes de
@@ -2522,11 +2534,40 @@ function AdminBulkTab({
     if (hints > 0) {
       setShowTaxonomyHintsModal(true);
       setShowNewCategoriesModal(false);
+      setShowBulkPriceModal(false);
       return;
     }
     setShowTaxonomyHintsModal(false);
-    setShowNewCategoriesModal((preview.newCategories?.length ?? 0) > 0);
-  }, [preview, needsTintSelection, tintModalDismissed, tintsExplicitlySkipped]);
+
+    const hasNewCategories = (preview.newCategories?.length ?? 0) > 0;
+    if (hasNewCategories && !newCategoriesModalAcknowledged) {
+      setShowNewCategoriesModal(true);
+      setShowBulkPriceModal(false);
+      return;
+    }
+    setShowNewCategoriesModal(false);
+
+    const invalidPriceCount = (preview.rows ?? []).filter((r) =>
+      r.issues.includes("Precio inválido o vacío")
+    ).length;
+    if (!bulkPriceModalDismissed && invalidPriceCount > BULK_INVALID_PRICE_BATCH_THRESHOLD) {
+      setShowBulkPriceModal(true);
+    } else {
+      setShowBulkPriceModal(false);
+    }
+  }, [
+    preview,
+    needsTintSelection,
+    tintModalDismissed,
+    tintsExplicitlySkipped,
+    newCategoriesModalAcknowledged,
+    bulkPriceModalDismissed,
+  ]);
+
+  const invalidPriceRows = useMemo(() => {
+    if (!preview) return [];
+    return (preview.rows ?? []).filter((r) => r.issues.includes("Precio inválido o vacío"));
+  }, [preview]);
 
   const toggleRow = useCallback((previewRowId: string) => {
     setSelectedRowIds((prev) => {
@@ -4055,6 +4096,48 @@ function AdminBulkTab({
         onCreateCatalog={async ({ newFamilies, newTypes }) => {
           const res = await postTintResolveCatalog({ newFamilies, newTypes });
           return res;
+        }}
+      />
+      <AdminBulkMissingPriceModal
+        open={showBulkPriceModal && invalidPriceRows.length > BULK_INVALID_PRICE_BATCH_THRESHOLD}
+        saving={saving}
+        rowCount={invalidPriceRows.length}
+        onClose={() => {
+          if (saving) return;
+          setShowBulkPriceModal(false);
+          setBulkPriceModalDismissed(true);
+        }}
+        onSkip={() => {
+          if (saving) return;
+          setShowBulkPriceModal(false);
+          setBulkPriceModalDismissed(true);
+          showToast("Continuaste sin asignar precio en lote. Puedes editar filas una a una.", "default", "ℹ️");
+        }}
+        onApply={async (price) => {
+          if (!jobId || invalidPriceRows.length === 0) return;
+          setMutation("bulk");
+          try {
+            const rowFieldOverrides: Record<string, { price: number }> = {};
+            for (const r of invalidPriceRows) {
+              rowFieldOverrides[bulkImportStableRowId(r)] = { price };
+            }
+            const { preview: p } = await patchBulkImportJob(jobId, {
+              rowFieldOverrides,
+              selectedRowIds,
+            });
+            setPreview(p);
+            setShowBulkPriceModal(false);
+            setBulkPriceModalDismissed(true);
+            showToast(
+              `Precio ${formatPrice(price)} aplicado a ${invalidPriceRows.length} producto(s).`,
+              "success",
+              "✅"
+            );
+          } catch (err) {
+            showToast(err instanceof Error ? err.message : "No se pudo aplicar el precio", "danger", "⚠️");
+          } finally {
+            setMutation(null);
+          }
         }}
       />
       <AdminBulkNewCategoriesModal
