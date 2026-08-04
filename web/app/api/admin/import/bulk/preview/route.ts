@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { BulkImportStatus } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import { prisma, withPrismaRetry } from "@/lib/prisma";
 import { noStoreJson } from "@/lib/server/no-store-json";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { fetchCategoryTreeForImport } from "@/lib/server/admin-category-tree";
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     }
 
     const codeColumnIndex = pickCodeColumnIndex(headers, rows);
-    const categoryTree = await fetchCategoryTreeForImport();
+    const categoryTree = await withPrismaRetry(() => fetchCategoryTreeForImport());
 
     const previewBase = buildBulkPreview({
       headers,
@@ -78,9 +78,9 @@ export async function POST(req: NextRequest) {
       categoryTree,
       defaultCategorySlug: null,
     });
-    await markBulkPreviewExistingByExternalRef(prisma, previewBase);
+    await withPrismaRetry(() => markBulkPreviewExistingByExternalRef(prisma, previewBase));
 
-    const tintCatalog = await fetchTintCatalogFromDb(prisma);
+    const tintCatalog = await withPrismaRetry(() => fetchTintCatalogFromDb(prisma));
     const preview = applyTintCatalogToPreview(previewBase, {
       existingTintFamilies: tintCatalog.families,
       existingTintTypes: tintCatalog.types,
@@ -102,24 +102,26 @@ export async function POST(req: NextRequest) {
     const expiresAt = new Date(Date.now() + BULK_JOB_TTL_HOURS * 60 * 60 * 1000);
     const jobId = randomUUID();
 
-    // Disco temporal (rápido). No meter el ZIP en Neon → evita 502 por timeout/OOM.
+    // Disco temporal + backup Bunny (sobrevive reinicios de Render).
     await saveBulkImportZip(jobId, zipBuf);
 
-    const job = await prisma.bulkImportJob.create({
-      data: {
-        id: jobId,
-        expiresAt,
-        status: BulkImportStatus.PREVIEW,
-        selectedCodeHeader: headers[codeColumnIndex] ?? "",
-        codeColumnIndex,
-        csvDelimiter: delimiter,
-        headers: headers as unknown as object[],
-        rows: rows as unknown as object[],
-        previewPayload: preview as unknown as object,
-        stats: statsStored as unknown as object,
-        zipBlob: Buffer.alloc(0),
-      },
-    });
+    const job = await withPrismaRetry(() =>
+      prisma.bulkImportJob.create({
+        data: {
+          id: jobId,
+          expiresAt,
+          status: BulkImportStatus.PREVIEW,
+          selectedCodeHeader: headers[codeColumnIndex] ?? "",
+          codeColumnIndex,
+          csvDelimiter: delimiter,
+          headers: headers as unknown as object[],
+          rows: rows as unknown as object[],
+          previewPayload: preview as unknown as object,
+          stats: statsStored as unknown as object,
+          zipBlob: Buffer.alloc(0),
+        },
+      })
+    );
 
     return noStoreJson({
       jobId: job.id,

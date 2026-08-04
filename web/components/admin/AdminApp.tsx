@@ -271,12 +271,37 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailProductId, setDetailProductId] = useState<string | null>(null);
   const [featuredHomeSavingId, setFeaturedHomeSavingId] = useState<string | null>(null);
-  const [toasts, setToasts] = useState<{ id: number; msg: string; type: string; icon: string }[]>([]);
+  const [toasts, setToasts] = useState<
+    { id: number; msg: string; type: string; icon: string }[]
+  >([]);
+  const toastTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const toastSeqRef = useRef(0);
 
-  const showToast = useCallback((msg: string, type = "default", icon = "✅") => {
-    const id = Date.now();
-    setToasts((t) => [...t, { id, msg, type, icon }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
+  const dismissToast = useCallback((id: number) => {
+    const timer = toastTimersRef.current.get(id);
+    if (timer != null) {
+      clearTimeout(timer);
+      toastTimersRef.current.delete(id);
+    }
+    setToasts((t) => t.filter((x) => x.id !== id));
+  }, []);
+
+  const showToast = useCallback(
+    (msg: string, type = "default", icon = "✅") => {
+      toastSeqRef.current += 1;
+      const id = Date.now() * 1000 + (toastSeqRef.current % 1000);
+      setToasts((t) => [...t.slice(-7), { id, msg, type, icon }]);
+      const timer = setTimeout(() => dismissToast(id), 10_000);
+      toastTimersRef.current.set(id, timer);
+    },
+    [dismissToast]
+  );
+
+  useEffect(() => {
+    return () => {
+      for (const timer of toastTimersRef.current.values()) clearTimeout(timer);
+      toastTimersRef.current.clear();
+    };
   }, []);
 
   useReveal();
@@ -1556,11 +1581,21 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
         onClose={closeAiBulkModal}
       />
 
-      <div className="admin-toast-container" id="admin-toast-container">
+      <div className="admin-toast-container" id="admin-toast-container" aria-live="polite">
         {toasts.map((t) => (
-          <div key={t.id} className={`toast ${t.type}`}>
-            <span>{t.icon}</span>
-            <span>{t.msg}</span>
+          <div key={t.id} className={`toast ${t.type}`} role="status">
+            <span className="toast-icon" aria-hidden>
+              {t.icon}
+            </span>
+            <span className="toast-msg">{t.msg}</span>
+            <button
+              type="button"
+              className="toast-close"
+              aria-label="Cerrar notificación"
+              onClick={() => dismissToast(t.id)}
+            >
+              ✕
+            </button>
           </div>
         ))}
       </div>

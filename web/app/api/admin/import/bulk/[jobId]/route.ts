@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BulkImportStatus } from "@prisma/client";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { prisma, withPrismaRetry } from "@/lib/prisma";
 import { noStoreJson } from "@/lib/server/no-store-json";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { fetchCategoryTreeForImport } from "@/lib/server/admin-category-tree";
@@ -109,7 +109,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (denied) return denied;
 
   const { jobId } = params;
-  const job = await prisma.bulkImportJob.findUnique({ where: { id: jobId } });
+  const job = await withPrismaRetry(() => prisma.bulkImportJob.findUnique({ where: { id: jobId } }));
   if (!job) return noStoreJson({ error: "Job no encontrado" }, { status: 404 });
   if (job.status !== BulkImportStatus.PREVIEW) {
     return noStoreJson({ error: "El job no está en modo preview" }, { status: 409 });
@@ -141,7 +141,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     return noStoreJson({ error: "codeColumnIndex fuera de rango" }, { status: 400 });
   }
 
-  const categoryTree = await fetchCategoryTreeForImport();
+  const categoryTree = await withPrismaRetry(() => fetchCategoryTreeForImport());
   const prevTax = readTaxonomyStateFromJob(job.previewPayload);
   const taxonomyOverrides = {
     ...prevTax.overrides,
@@ -198,7 +198,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     activeTintFamilyId = null;
   }
 
-  const tintCatalogDb = await fetchTintCatalogFromDb(prisma);
+  const tintCatalogDb = await withPrismaRetry(() => fetchTintCatalogFromDb(prisma));
   let zipBuffer: Buffer;
   try {
     zipBuffer = await resolveBulkImportZipBuffer(jobId, job.zipBlob);
@@ -233,7 +233,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       tintTypeOverrides,
     },
   });
-  await markBulkPreviewExistingByExternalRef(prisma, preview);
+  await withPrismaRetry(() => markBulkPreviewExistingByExternalRef(prisma, preview));
 
   const statsStored = {
     ...preview.stats,
@@ -264,15 +264,17 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     }
   }
 
-  await prisma.bulkImportJob.update({
-    where: { id: jobId },
-    data: {
-      codeColumnIndex,
-      selectedCodeHeader: headers[codeColumnIndex] ?? "",
-      previewPayload: preview as unknown as object,
-      stats: statsStored as unknown as object,
-    },
-  });
+  await withPrismaRetry(() =>
+    prisma.bulkImportJob.update({
+      where: { id: jobId },
+      data: {
+        codeColumnIndex,
+        selectedCodeHeader: headers[codeColumnIndex] ?? "",
+        previewPayload: preview as unknown as object,
+        stats: statsStored as unknown as object,
+      },
+    })
+  );
 
   return noStoreJson({ preview });
 }
