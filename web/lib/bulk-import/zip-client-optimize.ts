@@ -59,6 +59,19 @@ async function blobToWebp(
   }
 }
 
+/** Optimiza una sola imagen en el navegador (Canvas → WebP). */
+export async function optimizeImageFileClient(file: File): Promise<File> {
+  const webp = await blobToWebp(
+    file,
+    CLIENT_ZIP_OPTIMIZE_MAX_WIDTH,
+    CLIENT_ZIP_OPTIMIZE_MAX_HEIGHT,
+    CLIENT_ZIP_WEBP_QUALITY
+  );
+  if (!webp || webp.size >= file.size) return file;
+  const base = file.name.replace(/\.[^.]+$/, "") || "imagen";
+  return new File([webp], `${base}.webp`, { type: "image/webp" });
+}
+
 export type ClientZipOptimizeResult = {
   file: File;
   stats: ZipOptimizeStats;

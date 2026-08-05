@@ -161,6 +161,24 @@ export async function postBulkImportCommit(
   return (await res.json()) as BulkCommitResponse;
 }
 
+export async function postBulkImportRowImage(
+  jobId: string,
+  rowId: string,
+  file: File
+): Promise<{ preview: BulkPreviewResult; imageFilename: string; rowId: string }> {
+  const fd = new FormData();
+  fd.append("rowId", rowId);
+  fd.append("file", file);
+  const res = await fetch(`/api/admin/import/bulk/${jobId}/row-image`, {
+    method: "POST",
+    body: fd,
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as { preview: BulkPreviewResult; imageFilename: string; rowId: string };
+}
+
 export type TintCatalogResolveResponse = {
   ok: boolean;
   families: { id: string; name: string }[];

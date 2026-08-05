@@ -66,6 +66,7 @@ import {
   patchBulkImportJob,
   postBulkImportCommit,
   postBulkImportPreview,
+  postBulkImportRowImage,
   postBulkZipOptimize,
   postTintResolveCatalog,
   type BulkPreviewResponse,
@@ -88,7 +89,7 @@ import {
   inspectZipFileClient,
   type ZipInspectResult,
 } from "@/lib/bulk-import/zip-client-inspect";
-import { optimizeZipFileClient } from "@/lib/bulk-import/zip-client-optimize";
+import { optimizeZipFileClient, optimizeImageFileClient } from "@/lib/bulk-import/zip-client-optimize";
 import { canonicalVariantGroupCode } from "@/lib/bulk-import/variant-group-code";
 import type { BulkPreviewDbVariant } from "@/lib/bulk-import/variant-groups-preview";
 import type {
@@ -2411,6 +2412,12 @@ function AdminBulkTab({
   const [incidentNavOpen, setIncidentNavOpen] = useState(false);
   const [incidentFocusIndex, setIncidentFocusIndex] = useState(0);
   const [omittedIncidentIds, setOmittedIncidentIds] = useState<string[]>([]);
+  /** Tras subir imagen manual: ofrecer optimizar esa fila. */
+  const [optimizeImageRowIds, setOptimizeImageRowIds] = useState<string[]>([]);
+  const [uploadingImageRowId, setUploadingImageRowId] = useState<string | null>(null);
+  const rowImageInputRef = useRef<HTMLInputElement | null>(null);
+  const [rowImageTargetId, setRowImageTargetId] = useState<string | null>(null);
+  const rowImageFilesRef = useRef<Record<string, File>>({});
   const bulkProgress = useBufferedProgress(93);
   const [bulkProgressLabel, setBulkProgressLabel] = useState("");
 
@@ -2474,6 +2481,9 @@ function AdminBulkTab({
     setIncidentNavOpen(false);
     setIncidentFocusIndex(0);
     setOmittedIncidentIds([]);
+    setOptimizeImageRowIds([]);
+    setUploadingImageRowId(null);
+    setRowImageTargetId(null);
     bulkProgress.reset();
     setFileInputKey((k) => k + 1);
   };
@@ -2527,6 +2537,9 @@ function AdminBulkTab({
       setIncidentNavOpen(false);
       setIncidentFocusIndex(0);
       setOmittedIncidentIds([]);
+      setOptimizeImageRowIds([]);
+      setUploadingImageRowId(null);
+      setRowImageTargetId(null);
       setJobId(null);
       setPreview(null);
       setExpiresAt(null);
@@ -2551,6 +2564,7 @@ function AdminBulkTab({
       setIncidentNavOpen(false);
       setIncidentFocusIndex(0);
       setOmittedIncidentIds([]);
+      setOptimizeImageRowIds([]);
       const hintN = res.preview.taxonomyRehomeHints?.length ?? 0;
       const newN = res.preview.newCategories?.length ?? 0;
       if (hintN > 0) {
@@ -2932,8 +2946,34 @@ function AdminBulkTab({
           ...previewRowsByBarcodeGroup.ungrouped,
         ]
       : actionPreviewTableRows;
-    return source.filter((r) => r.errors.length > 0 && !omittedIncidentIdSet.has(r.previewRowId));
-  }, [previewRowsByBarcodeGroup, actionPreviewTableRows, omittedIncidentIdSet]);
+    return source.filter((r) => {
+      if (omittedIncidentIdSet.has(r.previewRowId)) return false;
+      if (r.alreadyVariantGrouped) return false;
+      if (r.readyForVariantGroup) return false;
+      const tone = describeBulkRowStatus(
+        {
+          errors: r.errors,
+          warnings: r.warnings,
+          hasExisting: r.hasExisting,
+          readyForVariantGroup: r.readyForVariantGroup,
+          alreadyVariantGrouped: r.alreadyVariantGrouped,
+          hasImageMatch: r.hasImageMatch,
+          barcodeRaw: r.barcodeRaw,
+          nameValue: r.nameValue,
+          categorySlug: r.categorySlug,
+          subcategoryValue: r.subcategoryValue,
+          priceValue: r.priceValue,
+        },
+        existingPolicy
+      ).tone;
+      if (tone === "ok") return false;
+      // Errores, sin foto, avisos bloqueantes, existentes sin poder agrupar, etc.
+      if (r.errors.length > 0) return true;
+      if (!r.hasExisting && !r.hasImageMatch) return true;
+      if (tone === "warn" || tone === "error") return true;
+      return false;
+    });
+  }, [previewRowsByBarcodeGroup, actionPreviewTableRows, omittedIncidentIdSet, existingPolicy]);
 
   const incidentFocusRow = incidentRows[incidentFocusIndex] ?? incidentRows[0] ?? null;
 
@@ -3203,11 +3243,120 @@ function AdminBulkTab({
     [jobId, existingPolicy, bulkProgress, applyPartialCommitResult, showToast, onImported, setMutation]
   );
 
+  const commitSingleAsVariant = useCallback(
+    async (rowId: string, groupKey: string | null) => {
+      if (!jobId) return;
+      setMutation("bulk");
+      setBulkProgressLabel("Agrupando producto como variante…");
+      bulkProgress.start("import");
+      try {
+        const res = await postBulkImportCommit(jobId, [rowId], "skip", { keepJob: true });
+        bulkProgress.finish();
+        applyPartialCommitResult(res, [rowId]);
+        if (groupKey) {
+          setCompletedGroupKeys((prev) => (prev.includes(groupKey) ? prev : [...prev, groupKey]));
+        }
+        const grouped = res.variantGroupsAssigned ?? 0;
+        if (grouped > 0) {
+          showToast("Producto agrupado como variante.", "success", "📦");
+        } else {
+          showToast("No se pudo agrupar este producto.", "default", "ℹ️");
+        }
+        await onImported();
+      } catch (e) {
+        bulkProgress.reset();
+        showToast(e instanceof Error ? e.message : "Error al agrupar", "danger", "⚠️");
+      } finally {
+        setMutation(null);
+      }
+    },
+    [jobId, bulkProgress, applyPartialCommitResult, showToast, onImported, setMutation]
+  );
+
+  const uploadRowImage = useCallback(
+    async (rowId: string, file: File, opts?: { fromOptimize?: boolean }) => {
+      if (!jobId) return;
+      setUploadingImageRowId(rowId);
+      setMutation("bulk");
+      try {
+        const { preview: p } = await postBulkImportRowImage(jobId, rowId, file);
+        setPreview(p);
+        setOptimizeImageRowIds((prev) =>
+          opts?.fromOptimize
+            ? prev.filter((id) => id !== rowId)
+            : prev.includes(rowId)
+              ? prev
+              : [...prev, rowId]
+        );
+        showToast(
+          opts?.fromOptimize
+            ? "Imagen optimizada y vinculada a la fila."
+            : "Imagen subida. Puedes optimizarla si quieres.",
+          "success",
+          "🖼️"
+        );
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "No se pudo subir la imagen", "danger", "⚠️");
+      } finally {
+        setUploadingImageRowId(null);
+        setMutation(null);
+      }
+    },
+    [jobId, setMutation, showToast]
+  );
+
+  const onPickRowImage = useCallback(
+    async (file: File | null) => {
+      const rowId = rowImageTargetId;
+      setRowImageTargetId(null);
+      if (!file || !rowId) return;
+      rowImageFilesRef.current[rowId] = file;
+      await uploadRowImage(rowId, file);
+    },
+    [rowImageTargetId, uploadRowImage]
+  );
+
+  const optimizeUploadedRowImage = useCallback(
+    async (rowId: string) => {
+      const original = rowImageFilesRef.current[rowId];
+      if (!original) {
+        showToast("Vuelve a subir la imagen para poder optimizarla.", "default", "ℹ️");
+        setRowImageTargetId(rowId);
+        rowImageInputRef.current?.click();
+        return;
+      }
+      setUploadingImageRowId(rowId);
+      try {
+        const optimized = await optimizeImageFileClient(original);
+        rowImageFilesRef.current[rowId] = optimized;
+        await uploadRowImage(rowId, optimized, { fromOptimize: true });
+      } catch (e) {
+        setUploadingImageRowId(null);
+        showToast(e instanceof Error ? e.message : "No se pudo optimizar", "danger", "⚠️");
+      }
+    },
+    [uploadRowImage, showToast]
+  );
+
   const renderBulkPreviewDataRow = (r: BulkPreviewTableRow, groupColor?: VariantGroupColor) => {
     const status = rowStatusOf(r);
     const hasErrors = r.errors.length > 0;
     const canUploadNew = status.tone === "ok" && !r.hasExisting;
-    const isIncident = hasErrors && !omittedIncidentIdSet.has(r.previewRowId) && incidentNavOpen;
+    const needsManualImage =
+      !r.hasImageMatch &&
+      !r.hasExisting &&
+      !r.readyForVariantGroup &&
+      !r.alreadyVariantGrouped;
+    const canOptimizeUploaded = optimizeImageRowIds.includes(r.previewRowId);
+    const canOmitRow =
+      !omittedIncidentIdSet.has(r.previewRowId) &&
+      !r.readyForVariantGroup &&
+      !r.alreadyVariantGrouped &&
+      (hasErrors || status.tone !== "ok");
+    const isIncident =
+      incidentNavOpen &&
+      !omittedIncidentIdSet.has(r.previewRowId) &&
+      incidentRows.some((i) => i.previewRowId === r.previewRowId);
     const isIncidentFocus = isIncident && incidentFocusRow?.previewRowId === r.previewRowId;
     const statusColor =
       status.tone === "ok"
@@ -3311,7 +3460,7 @@ function AdminBulkTab({
             {status.label}
           </span>
         </td>
-        <td style={{ minWidth: canUploadNew || hasErrors ? 168 : 96 }}>
+        <td style={{ minWidth: 168 }}>
           <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
             <button
               type="button"
@@ -3324,7 +3473,7 @@ function AdminBulkTab({
             >
               Editar
             </button>
-            {hasErrors && !omittedIncidentIdSet.has(r.previewRowId) ? (
+            {canOmitRow ? (
               <button
                 type="button"
                 className="btn btn-outline btn-sm"
@@ -3336,6 +3485,59 @@ function AdminBulkTab({
                 }}
               >
                 Omitir
+              </button>
+            ) : null}
+            {needsManualImage ? (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={saving || uploadingImageRowId === r.previewRowId}
+                title="Subir una imagen para este código"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRowImageTargetId(r.previewRowId);
+                  window.setTimeout(() => rowImageInputRef.current?.click(), 0);
+                }}
+              >
+                {uploadingImageRowId === r.previewRowId ? "…" : "Subir imagen"}
+              </button>
+            ) : null}
+            {canOptimizeUploaded ? (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={saving || uploadingImageRowId === r.previewRowId}
+                title="Optimizar la imagen subida a WebP"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void optimizeUploadedRowImage(r.previewRowId);
+                }}
+              >
+                Optimizar
+              </button>
+            ) : null}
+            {r.readyForVariantGroup ? (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={saving || taxonomyRehomeHints.length > 0}
+                title="Agrupar este producto como variante"
+                aria-label="Agrupar"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void commitSingleAsVariant(r.previewRowId, r.barcodeGroupKey);
+                }}
+                style={{
+                  width: 36,
+                  height: 32,
+                  padding: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 14,
+                }}
+              >
+                📦
               </button>
             ) : null}
             {canUploadNew ? (
@@ -3377,6 +3579,17 @@ function AdminBulkTab({
     <div className="admin-bulk-tab">
       <div className="admin-card">
       <BulkImportProgressOverlay open={bulkProgress.active} percent={bulkProgress.percent} label={bulkProgressLabel} />
+      <input
+        ref={rowImageInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const file = e.target.files?.[0] ?? null;
+          e.target.value = "";
+          void onPickRowImage(file);
+        }}
+      />
       <div className="admin-card-title" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span>📦 Carga masiva CSV + ZIP</span>
         <span
@@ -4178,14 +4391,44 @@ function AdminBulkTab({
                                 {joinsExistingGroup && !isLocallyCompleted ? (
                                   <div
                                     style={{
-                                      marginTop: 8,
+                                      marginTop: 10,
+                                      padding: "10px 12px",
+                                      borderRadius: 10,
+                                      background: "rgba(255,255,255,0.55)",
+                                      border: "1px solid rgba(0,0,0,0.06)",
                                       fontSize: 12,
                                       fontWeight: 500,
                                       color: groupColor.headerText,
+                                      lineHeight: 1.5,
+                                      maxWidth: 720,
                                     }}
                                   >
-                                    Se asociará al grupo ya registrado en tienda ·{" "}
-                                    {dbVariants.length} variante(s) existentes
+                                    <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                                      ¿Qué está pasando con este grupo?
+                                    </div>
+                                    <div>
+                                      En el CSV hay <strong>{meta.rowCount}</strong> producto(s)
+                                      {meta.newInCsvCount > 0
+                                        ? ` (${meta.newInCsvCount} nuevo(s)`
+                                        : ""}
+                                      {meta.existingInCsvCount > 0
+                                        ? `${meta.newInCsvCount > 0 ? ", " : " ("}${meta.existingInCsvCount} ya en tienda)`
+                                        : meta.newInCsvCount > 0
+                                          ? ")"
+                                          : ""}
+                                      {" "}con el código de barras <strong>{meta.groupLabel}</strong>.
+                                    </div>
+                                    <div style={{ marginTop: 4 }}>
+                                      Ese código de barras <strong>ya existe en la tienda</strong> con{" "}
+                                      <strong>{dbVariants.length}</strong> variante(s) (miniaturas abajo).
+                                      {dbOnly.length > 0
+                                        ? ` ${dbOnly.length} de ellas no vienen en este CSV; se muestran solo como referencia.`
+                                        : ""}
+                                    </div>
+                                    <div style={{ marginTop: 4 }}>
+                                      Al importar o agrupar, los productos de este CSV se{" "}
+                                      <strong>unirán a ese mismo grupo</strong> (no se crea un grupo aparte).
+                                    </div>
                                   </div>
                                 ) : null}
                               </div>
@@ -4205,62 +4448,74 @@ function AdminBulkTab({
                               ) : null}
                             </div>
                             {joinsExistingGroup && dbVariants.length > 0 ? (
-                              <div
-                                style={{
-                                  display: "flex",
-                                  flexWrap: "wrap",
-                                  gap: 8,
-                                  marginTop: 10,
-                                }}
-                              >
-                                {dbVariants.map((v) => (
-                                  <div
-                                    key={v.id}
-                                    title={`${v.name}${v.externalRef ? ` · ${v.externalRef}` : ""}`}
-                                    style={{
-                                      width: 56,
-                                      textAlign: "center",
-                                      fontSize: 10,
-                                      color: groupColor.headerText,
-                                    }}
-                                  >
+                              <div style={{ marginTop: 10 }}>
+                                <div
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: 650,
+                                    marginBottom: 6,
+                                    color: groupColor.headerText,
+                                    opacity: 0.9,
+                                  }}
+                                >
+                                  Variantes que ya están en la tienda (referencia):
+                                </div>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 8,
+                                  }}
+                                >
+                                  {dbVariants.map((v) => (
                                     <div
+                                      key={v.id}
+                                      title={`${v.name}${v.externalRef ? ` · ${v.externalRef}` : ""}`}
                                       style={{
-                                        width: 48,
-                                        height: 48,
-                                        margin: "0 auto 4px",
-                                        borderRadius: 8,
-                                        overflow: "hidden",
-                                        background: "rgba(255,255,255,0.7)",
-                                        border: "1px solid rgba(0,0,0,0.08)",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
+                                        width: 56,
+                                        textAlign: "center",
+                                        fontSize: 10,
+                                        color: groupColor.headerText,
                                       }}
                                     >
-                                      {v.imageUrl ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img
-                                          src={v.imageUrl}
-                                          alt=""
-                                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                                        />
-                                      ) : (
-                                        <span style={{ fontSize: 16 }}>🖼️</span>
-                                      )}
+                                      <div
+                                        style={{
+                                          width: 48,
+                                          height: 48,
+                                          margin: "0 auto 4px",
+                                          borderRadius: 8,
+                                          overflow: "hidden",
+                                          background: "rgba(255,255,255,0.7)",
+                                          border: "1px solid rgba(0,0,0,0.08)",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                        }}
+                                      >
+                                        {v.imageUrl ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img
+                                            src={v.imageUrl}
+                                            alt=""
+                                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                          />
+                                        ) : (
+                                          <span style={{ fontSize: 16 }}>🖼️</span>
+                                        )}
+                                      </div>
+                                      <div
+                                        style={{
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
+                                          whiteSpace: "nowrap",
+                                          maxWidth: 56,
+                                        }}
+                                      >
+                                        {v.externalRef ?? v.name}
+                                      </div>
                                     </div>
-                                    <div
-                                      style={{
-                                        overflow: "hidden",
-                                        textOverflow: "ellipsis",
-                                        whiteSpace: "nowrap",
-                                        maxWidth: 56,
-                                      }}
-                                    >
-                                      {v.externalRef ?? v.name}
-                                    </div>
-                                  </div>
-                                ))}
+                                  ))}
+                                </div>
                               </div>
                             ) : null}
                           </td>
@@ -4578,13 +4833,13 @@ function AdminBulkTab({
                 if (selectedOkNewProductRowIds.length === 0) {
                   if (incidentRows.length > 0) {
                     openIncidentNav();
-                    return;
+                  } else {
+                    showToast(
+                      "No hay productos nuevos con estado «✓ OK» para importar.",
+                      "default",
+                      "ℹ️"
+                    );
                   }
-                  showToast(
-                    "No hay productos nuevos con estado «✓ OK» para importar.",
-                    "default",
-                    "ℹ️"
-                  );
                   return;
                 }
                 void (async () => {
@@ -4680,7 +4935,7 @@ function AdminBulkTab({
                   }
                   if (selectedOkNewProductRowIds.length === 0 && selectedVariantGroupRowIds.length === 0) {
                     showToast(
-                      "Selecciona productos OK para importar y/o listos para agrupar.",
+                      "No hay productos OK para importar ni listos para agrupar. Revisa el match.",
                       "default",
                       "ℹ️"
                     );
@@ -4688,14 +4943,15 @@ function AdminBulkTab({
                   }
                   if (selectedOkNewProductRowIds.length === 0) {
                     showToast(
-                      "Para «Importar y agrupar» también necesitas al menos un producto nuevo OK.",
+                      "Faltan productos nuevos OK (por ejemplo sin foto o con error). Te llevo a esas filas.",
                       "default",
-                      "ℹ️"
+                      "⚠️"
                     );
+                    openIncidentNav();
                     return;
                   }
                   showToast(
-                    "Para «Importar y agrupar» también necesitas productos listos para agrupar.",
+                    "Faltan productos listos para agrupar. Marca filas «📦 Listo para agrupar» o añade barras en el CSV.",
                     "default",
                     "ℹ️"
                   );
