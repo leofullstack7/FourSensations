@@ -2407,6 +2407,10 @@ function AdminBulkTab({
   const [showFullMatchesModal, setShowFullMatchesModal] = useState(false);
   /** Grupos que el admin acaba de agrupar en esta sesión (UI grisácea). */
   const [completedGroupKeys, setCompletedGroupKeys] = useState<string[]>([]);
+  /** Navegación de filas con error al intentar importar. */
+  const [incidentNavOpen, setIncidentNavOpen] = useState(false);
+  const [incidentFocusIndex, setIncidentFocusIndex] = useState(0);
+  const [omittedIncidentIds, setOmittedIncidentIds] = useState<string[]>([]);
   const bulkProgress = useBufferedProgress(93);
   const [bulkProgressLabel, setBulkProgressLabel] = useState("");
 
@@ -2467,6 +2471,9 @@ function AdminBulkTab({
     setShowAllImageMatches(false);
     setShowFullMatchesModal(false);
     setCompletedGroupKeys([]);
+    setIncidentNavOpen(false);
+    setIncidentFocusIndex(0);
+    setOmittedIncidentIds([]);
     bulkProgress.reset();
     setFileInputKey((k) => k + 1);
   };
@@ -2517,6 +2524,9 @@ function AdminBulkTab({
       setShowAllImageMatches(false);
       setShowFullMatchesModal(false);
       setCompletedGroupKeys([]);
+      setIncidentNavOpen(false);
+      setIncidentFocusIndex(0);
+      setOmittedIncidentIds([]);
       setJobId(null);
       setPreview(null);
       setExpiresAt(null);
@@ -2538,6 +2548,9 @@ function AdminBulkTab({
       setSelectedRowIds(collectBulkAutoSelectIds(res.preview, existingPolicy));
       setCompletedGroupKeys([]);
       setShowFullMatchesModal(false);
+      setIncidentNavOpen(false);
+      setIncidentFocusIndex(0);
+      setOmittedIncidentIds([]);
       const hintN = res.preview.taxonomyRehomeHints?.length ?? 0;
       const newN = res.preview.newCategories?.length ?? 0;
       if (hintN > 0) {
@@ -2910,6 +2923,145 @@ function AdminBulkTab({
 
   type BulkPreviewTableRow = (typeof previewTableRows)[number];
 
+  const omittedIncidentIdSet = useMemo(() => new Set(omittedIncidentIds), [omittedIncidentIds]);
+
+  const incidentRows = useMemo(() => {
+    const source = previewRowsByBarcodeGroup
+      ? [
+          ...previewRowsByBarcodeGroup.groups.flatMap((g) => g.displayRows),
+          ...previewRowsByBarcodeGroup.ungrouped,
+        ]
+      : actionPreviewTableRows;
+    return source.filter((r) => r.errors.length > 0 && !omittedIncidentIdSet.has(r.previewRowId));
+  }, [previewRowsByBarcodeGroup, actionPreviewTableRows, omittedIncidentIdSet]);
+
+  const incidentFocusRow = incidentRows[incidentFocusIndex] ?? incidentRows[0] ?? null;
+
+  const scrollToBulkRow = useCallback((rowId: string) => {
+    const el = document.getElementById(`bulk-row-${rowId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
+  const openIncidentNav = useCallback(
+    (startId?: string) => {
+      const list = incidentRows;
+      if (list.length === 0) {
+        showToast("No hay filas con error para revisar.", "default", "ℹ️");
+        return;
+      }
+      const idx = startId ? Math.max(0, list.findIndex((r) => r.previewRowId === startId)) : 0;
+      const safeIdx = idx >= 0 ? idx : 0;
+      setIncidentFocusIndex(safeIdx);
+      setIncidentNavOpen(true);
+      window.setTimeout(() => {
+        const id = list[safeIdx]?.previewRowId;
+        if (id) scrollToBulkRow(id);
+      }, 60);
+      showToast(
+        `Hay ${list.length} incidencia(s) que impiden importar. Revísalas o omítelas.`,
+        "default",
+        "⚠️"
+      );
+    },
+    [incidentRows, scrollToBulkRow, showToast]
+  );
+
+  useEffect(() => {
+    if (!incidentNavOpen) return;
+    if (incidentRows.length === 0) {
+      setIncidentNavOpen(false);
+      setIncidentFocusIndex(0);
+      return;
+    }
+    if (incidentFocusIndex >= incidentRows.length) {
+      setIncidentFocusIndex(incidentRows.length - 1);
+      return;
+    }
+    const id = incidentRows[incidentFocusIndex]?.previewRowId;
+    if (id) scrollToBulkRow(id);
+  }, [incidentNavOpen, incidentFocusIndex, incidentRows, scrollToBulkRow]);
+
+  const omitIncidentRow = useCallback((rowId: string) => {
+    setOmittedIncidentIds((prev) => (prev.includes(rowId) ? prev : [...prev, rowId]));
+    setSelectedRowIds((prev) => prev.filter((id) => id !== rowId));
+  }, []);
+
+  const omitAllIncidents = useCallback(() => {
+    const ids = incidentRows.map((r) => r.previewRowId);
+    if (ids.length === 0) return;
+    setOmittedIncidentIds((prev) => Array.from(new Set([...prev, ...ids])));
+    setSelectedRowIds((prev) => prev.filter((id) => !ids.includes(id)));
+    setIncidentNavOpen(false);
+    setIncidentFocusIndex(0);
+    showToast(`Se omitieron ${ids.length} incidencia(s).`, "default", "⏭️");
+  }, [incidentRows, showToast]);
+
+  const matchSummary = useMemo(() => {
+    if (!preview) return null;
+    const s = preview.stats;
+    const toneOf = (r: (typeof previewTableRows)[number]) =>
+      describeBulkRowStatus(
+        {
+          errors: r.errors,
+          warnings: r.warnings,
+          hasExisting: r.hasExisting,
+          readyForVariantGroup: r.readyForVariantGroup,
+          alreadyVariantGrouped: r.alreadyVariantGrouped,
+          hasImageMatch: r.hasImageMatch,
+          barcodeRaw: r.barcodeRaw,
+          nameValue: r.nameValue,
+          categorySlug: r.categorySlug,
+          subcategoryValue: r.subcategoryValue,
+          priceValue: r.priceValue,
+        },
+        existingPolicy
+      ).tone;
+    const okCount = previewTableRows.filter((r) => toneOf(r) === "ok").length;
+    const readyGroup = previewTableRows.filter((r) => r.readyForVariantGroup).length;
+    const errorCount = previewTableRows.filter((r) => r.errors.length > 0).length;
+    const alreadyGrouped = previewTableRows.filter((r) => r.alreadyVariantGrouped).length;
+    const phrases: string[] = [];
+    phrases.push(
+      `Encontramos ${s.totalRows} fila(s) en el CSV y ${s.zipImageFiles} imagen(es) en el ZIP.`
+    );
+    phrases.push(
+      `${s.matchedRows} fila(s) tienen foto emparejada` +
+        (s.unmatchedRows > 0 ? ` y ${s.unmatchedRows} aún sin match de imagen` : "") +
+        "."
+    );
+    if ((s.existingProductRows ?? 0) > 0) {
+      phrases.push(
+        `${s.existingProductRows} producto(s) ya están en la tienda` +
+          (alreadyGrouped > 0 ? ` (${alreadyGrouped} ya agrupados como variantes)` : "") +
+          "."
+      );
+    }
+    if (preview.csvHasVariantGroupColumn && (s.variantGroupCount ?? 0) > 0) {
+      phrases.push(`Hay ${s.variantGroupCount} grupo(s) de variantes por código de barras.`);
+    }
+    if (okCount > 0) phrases.push(`${okCount} producto(s) nuevos listos para importar (✓ OK).`);
+    if (readyGroup > 0) phrases.push(`${readyGroup} producto(s) listos para agrupar como variantes.`);
+    if (errorCount > 0) phrases.push(`${errorCount} fila(s) tienen errores que hay que corregir u omitir.`);
+    if (invalidPriceRows.length > BULK_INVALID_PRICE_BATCH_THRESHOLD) {
+      phrases.push(`${invalidPriceRows.length} filas tienen precio inválido o vacío.`);
+    }
+
+    const tips: string[] = [];
+    if (readyGroup > 0) tips.push("Usa «Agrupar» en cada grupo o el botón de abajo para unir variantes ya registradas.");
+    if (okCount > 0) tips.push("Importa los productos nuevos con estado ✓ OK, o súbelos uno a uno con ⬆️.");
+    if (errorCount > 0) tips.push("Corrige las filas en rojo con «Editar», o omítelas si no las vas a subir ahora.");
+    if (invalidPriceRows.length > BULK_INVALID_PRICE_BATCH_THRESHOLD) {
+      tips.push("Puedes asignar un mismo precio a todas las filas sin precio con el botón «Precio en lote».");
+    }
+    if (hiddenMatchCount > 0) {
+      tips.push("Las coincidencias ya agrupadas están ocultas: ábreas en «Ver coincidencias completas».");
+    }
+    if (tips.length === 0) tips.push("Revisa la tabla y usa los botones de abajo cuando todo esté listo.");
+
+    return { phrases, tips: tips.slice(0, 3) };
+  }, [preview, previewTableRows, invalidPriceRows.length, hiddenMatchCount, existingPolicy]);
+
   const editingBulkRow = useMemo(
     () => previewTableRows.find((r) => r.previewRowId === editingBulkRowId) ?? null,
     [previewTableRows, editingBulkRowId]
@@ -3055,6 +3207,8 @@ function AdminBulkTab({
     const status = rowStatusOf(r);
     const hasErrors = r.errors.length > 0;
     const canUploadNew = status.tone === "ok" && !r.hasExisting;
+    const isIncident = hasErrors && !omittedIncidentIdSet.has(r.previewRowId) && incidentNavOpen;
+    const isIncidentFocus = isIncident && incidentFocusRow?.previewRowId === r.previewRowId;
     const statusColor =
       status.tone === "ok"
         ? "green"
@@ -3065,16 +3219,27 @@ function AdminBulkTab({
             : status.tone === "existing"
               ? "#6b7280"
               : "#b45309";
+    const rowClass = [
+      isIncidentFocus ? "admin-bulk-row--incident-focus" : "",
+      isIncident && !isIncidentFocus ? "admin-bulk-row--incident" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
     return (
       <tr
+        id={`bulk-row-${r.previewRowId}`}
         key={r.previewRowId}
+        className={rowClass || undefined}
         style={{
-          opacity: hasErrors ? 0.85 : 1,
-          background: hasErrors
-            ? "rgba(255, 84, 84, 0.12)"
-            : groupColor
-              ? groupColor.rowBg
-              : undefined,
+          opacity: hasErrors && !isIncident ? 0.85 : 1,
+          background:
+            isIncident
+              ? undefined
+              : hasErrors
+                ? "rgba(255, 84, 84, 0.12)"
+                : groupColor
+                  ? groupColor.rowBg
+                  : undefined,
         }}
         onClick={(e) => {
           const el = e.target as HTMLElement;
@@ -3146,7 +3311,7 @@ function AdminBulkTab({
             {status.label}
           </span>
         </td>
-        <td style={{ minWidth: canUploadNew ? 148 : 96 }}>
+        <td style={{ minWidth: canUploadNew || hasErrors ? 168 : 96 }}>
           <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
             <button
               type="button"
@@ -3159,6 +3324,20 @@ function AdminBulkTab({
             >
               Editar
             </button>
+            {hasErrors && !omittedIncidentIdSet.has(r.previewRowId) ? (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={saving}
+                title="Omitir esta incidencia (no se importará)"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  omitIncidentRow(r.previewRowId);
+                }}
+              >
+                Omitir
+              </button>
+            ) : null}
             {canUploadNew ? (
               <button
                 type="button"
@@ -3514,6 +3693,39 @@ function AdminBulkTab({
             </p>
           )}
 
+          {matchSummary && (
+            <div
+              style={{
+                marginBottom: 18,
+                padding: "16px 18px",
+                borderRadius: "var(--radius-md)",
+                background: "linear-gradient(135deg, #f7faf7 0%, #fff8f6 100%)",
+                border: "1px solid var(--line, #e7d9d4)",
+              }}
+            >
+              <div style={{ fontSize: 14, fontWeight: 700, color: "var(--dark)", marginBottom: 8 }}>
+                Resumen del match
+              </div>
+              <ul style={{ margin: "0 0 12px", paddingLeft: 18, fontSize: 13, lineHeight: 1.55, color: "var(--text)" }}>
+                {matchSummary.phrases.map((p) => (
+                  <li key={p} style={{ marginBottom: 4 }}>
+                    {p}
+                  </li>
+                ))}
+              </ul>
+              <div style={{ fontSize: 12, fontWeight: 650, color: "var(--text-muted)", marginBottom: 6 }}>
+                Qué puedes hacer
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.5, color: "var(--text)" }}>
+                {matchSummary.tips.map((t) => (
+                  <li key={t} style={{ marginBottom: 3 }}>
+                    {t}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
             {(
               [
@@ -3521,8 +3733,6 @@ function AdminBulkTab({
                 ["Imágenes en ZIP", preview.stats.zipImageFiles],
                 ["Filas con match", preview.stats.matchedRows],
                 ["Filas sin match", preview.stats.unmatchedRows],
-                ["Filas ambiguas", preview.stats.ambiguousRows],
-                ["Imágenes sin fila", preview.stats.unmatchedImages],
                 ["Con errores", preview.stats.rowsWithErrors],
                 ["Ya en tienda (código)", preview.stats.existingProductRows ?? 0],
                 ...(preview.csvHasVariantGroupColumn
@@ -3622,6 +3832,30 @@ function AdminBulkTab({
             <button type="button" className="btn btn-outline btn-sm" onClick={clearSelection}>
               Quitar selección
             </button>
+            {invalidPriceRows.length > BULK_INVALID_PRICE_BATCH_THRESHOLD && (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={saving || applyingBulkPrice}
+                onClick={() => {
+                  setBulkPriceModalDismissed(false);
+                  setShowBulkPriceModal(true);
+                }}
+                title="Asigna el mismo precio a todas las filas con precio inválido o vacío"
+              >
+                💲 Precio en lote ({invalidPriceRows.length})
+              </button>
+            )}
+            {incidentRows.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => openIncidentNav()}
+                style={{ borderColor: "rgba(220,38,38,0.35)", color: "#b00020" }}
+              >
+                Revisar incidencias ({incidentRows.length})
+              </button>
+            )}
             {hasTintesInBatch && selectedTintRowCount > 0 && (
               <button
                 type="button"
@@ -3879,6 +4113,22 @@ function AdminBulkTab({
                         !isLocallyCompleted && allActionableReadyOrOk && readyIds.length > 0;
 
                       return [
+                        ...(groupIndex > 0
+                          ? [
+                              <tr key={`gap-${meta.groupKey}`} aria-hidden>
+                                <td
+                                  colSpan={bulkPreviewTableColSpan}
+                                  style={{
+                                    height: 32,
+                                    padding: 0,
+                                    border: "none",
+                                    background: "var(--ivory, #faf7f5)",
+                                    boxShadow: "inset 0 1px 0 rgba(0,0,0,0.04), inset 0 -1px 0 rgba(0,0,0,0.04)",
+                                  }}
+                                />
+                              </tr>,
+                            ]
+                          : []),
                         <tr
                           key={`group-${meta.groupKey}`}
                           style={{
@@ -4166,7 +4416,65 @@ function AdminBulkTab({
             </div>
           ) : null}
 
-          <div className="admin-bulk-actions-spacer" aria-hidden />
+          <div className="admin-bulk-actions-spacer" aria-hidden style={incidentNavOpen ? { height: 168 } : undefined} />
+
+          {incidentNavOpen && incidentRows.length > 0 ? (
+            <div className="admin-bulk-incident-nav" role="navigation" aria-label="Navegación de incidencias">
+              <div className="admin-bulk-incident-nav__meta">
+                Incidencia <strong>{Math.min(incidentFocusIndex + 1, incidentRows.length)}</strong> de{" "}
+                <strong>{incidentRows.length}</strong>
+                {incidentFocusRow ? (
+                  <>
+                    {" "}
+                    · {incidentFocusRow.codeValue ?? "sin código"} · {incidentFocusRow.errors[0] ?? "Error"}
+                  </>
+                ) : null}
+              </div>
+              <div className="admin-bulk-incident-nav__arrows">
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  aria-label="Incidencia anterior"
+                  disabled={incidentFocusIndex <= 0}
+                  onClick={() => setIncidentFocusIndex((i) => Math.max(0, i - 1))}
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  aria-label="Siguiente incidencia"
+                  disabled={incidentFocusIndex >= incidentRows.length - 1}
+                  onClick={() =>
+                    setIncidentFocusIndex((i) => Math.min(incidentRows.length - 1, i + 1))
+                  }
+                >
+                  ↓
+                </button>
+              </div>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={!incidentFocusRow}
+                onClick={() => {
+                  if (!incidentFocusRow) return;
+                  omitIncidentRow(incidentFocusRow.previewRowId);
+                }}
+              >
+                Omitir esta
+              </button>
+              <button type="button" className="btn btn-outline btn-sm" onClick={omitAllIncidents}>
+                Omitir todas
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => setIncidentNavOpen(false)}
+              >
+                Cerrar
+              </button>
+            </div>
+          ) : null}
 
           <div
             className="admin-bulk-actions-bar"
@@ -4262,12 +4570,23 @@ function AdminBulkTab({
               className="btn btn-outline"
               disabled={
                 saving ||
-                selectedOkNewProductRowIds.length === 0 ||
                 (needsTintSelection && !tintsExplicitlySkipped) ||
                 (pendingNewCategories.length > 0 && !newCategoriesModalAcknowledged) ||
                 taxonomyRehomeHints.length > 0
               }
               onClick={() => {
+                if (selectedOkNewProductRowIds.length === 0) {
+                  if (incidentRows.length > 0) {
+                    openIncidentNav();
+                    return;
+                  }
+                  showToast(
+                    "No hay productos nuevos con estado «✓ OK» para importar.",
+                    "default",
+                    "ℹ️"
+                  );
+                  return;
+                }
                 void (async () => {
                   setMutation("bulk");
                   setBulkProgressLabel("Importando productos nuevos y subiendo imágenes…");
@@ -4279,6 +4598,7 @@ function AdminBulkTab({
                       existingPolicy
                     );
                     bulkProgress.finish();
+                    setIncidentNavOpen(false);
                     const grouped = res.variantGroupsAssigned ?? 0;
                     if (grouped > 0) {
                       showToast(
@@ -4315,7 +4635,9 @@ function AdminBulkTab({
                     resetSession();
                   } catch (e) {
                     bulkProgress.reset();
-                    showToast(e instanceof Error ? e.message : "Error al importar", "danger", "⚠️");
+                    const msg = e instanceof Error ? e.message : "Error al importar";
+                    showToast(msg, "danger", "⚠️");
+                    if (incidentRows.length > 0) openIncidentNav();
                   } finally {
                     setMutation(null);
                   }
@@ -4341,7 +4663,6 @@ function AdminBulkTab({
               className="btn btn-outline"
               disabled={
                 saving ||
-                !canImportAndGroup ||
                 (needsTintSelection && !tintsExplicitlySkipped) ||
                 (pendingNewCategories.length > 0 && !newCategoriesModalAcknowledged) ||
                 taxonomyRehomeHints.length > 0
@@ -4349,9 +4670,37 @@ function AdminBulkTab({
               title={
                 canImportAndGroup
                   ? "Importa los productos nuevos OK y agrupa los ya registrados como variantes"
-                  : "Necesitas al menos un producto OK para importar y uno listo para agrupar"
+                  : "Necesitas productos OK y/o listos para agrupar"
               }
               onClick={() => {
+                if (!canImportAndGroup) {
+                  if (incidentRows.length > 0) {
+                    openIncidentNav();
+                    return;
+                  }
+                  if (selectedOkNewProductRowIds.length === 0 && selectedVariantGroupRowIds.length === 0) {
+                    showToast(
+                      "Selecciona productos OK para importar y/o listos para agrupar.",
+                      "default",
+                      "ℹ️"
+                    );
+                    return;
+                  }
+                  if (selectedOkNewProductRowIds.length === 0) {
+                    showToast(
+                      "Para «Importar y agrupar» también necesitas al menos un producto nuevo OK.",
+                      "default",
+                      "ℹ️"
+                    );
+                    return;
+                  }
+                  showToast(
+                    "Para «Importar y agrupar» también necesitas productos listos para agrupar.",
+                    "default",
+                    "ℹ️"
+                  );
+                  return;
+                }
                 void (async () => {
                   setMutation("bulk");
                   setBulkProgressLabel("Importando productos nuevos y agrupando variantes…");
@@ -4362,6 +4711,7 @@ function AdminBulkTab({
                     ).sort();
                     const res = await postBulkImportCommit(jobId, combinedIds, existingPolicy);
                     bulkProgress.finish();
+                    setIncidentNavOpen(false);
                     const grouped = res.variantGroupsAssigned ?? 0;
                     const merged = res.variantGroupsWithMultipleMembers ?? 0;
                     const created = Math.max(0, res.imported - grouped);
@@ -4403,6 +4753,7 @@ function AdminBulkTab({
                       "danger",
                       "⚠️"
                     );
+                    if (incidentRows.length > 0) openIncidentNav();
                   } finally {
                     setMutation(null);
                   }
@@ -4811,7 +5162,11 @@ function AdminBulkTab({
           if (saving || applyingBulkPrice) return;
           setShowBulkPriceModal(false);
           setBulkPriceModalDismissed(true);
-          showToast("Continuaste sin asignar precio en lote. Puedes editar filas una a una.", "default", "ℹ️");
+          showToast(
+            "Continuaste sin asignar precio en lote. Cuando quieras, usa el botón «Precio en lote».",
+            "default",
+            "ℹ️"
+          );
         }}
         onApply={async (price) => {
           if (!jobId) {
