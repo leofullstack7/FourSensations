@@ -75,7 +75,13 @@ import {
   bulkRowBlockingIssues,
   bulkRowIsReadyForVariantGroupAssign,
   bulkRowIsVariantGroupAssign,
+  type BulkExistingPolicy,
 } from "@/lib/bulk-import/variant-group-assign";
+import {
+  describeBulkRowStatus,
+  variantGroupColorAt,
+  type VariantGroupColor,
+} from "@/lib/bulk-import/bulk-row-status";
 import {
   formatZipBytes,
   inspectZipFileClient,
@@ -2298,6 +2304,55 @@ function AdminAddProductForm({
   );
 }
 
+/** Selección automática tras analizar: listas para agrupar + productos nuevos con estado «✓ OK». */
+function collectBulkAutoSelectIds(
+  preview: BulkPreviewResult,
+  existingPolicy: BulkExistingPolicy
+): string[] {
+  const source = preview.csvHasVariantGroupColumn ? preview.rows ?? [] : preview.matchedRows ?? [];
+  const ids: string[] = [];
+  for (const r of source) {
+    if (bulkRowIsReadyForVariantGroupAssign(r, "skip")) {
+      ids.push(bulkImportStableRowId(r));
+      continue;
+    }
+    if (r.isExistingProduct) continue;
+    const hasImageMatch = r.imageMatches.some(
+      (m) =>
+        m.matchedBy === "exact" ||
+        m.matchedBy === "numericPrefix" ||
+        m.matchedBy === "sixDigitPrefix" ||
+        m.matchedBy === "tintLevel" ||
+        m.matchedBy === "fuzzy"
+    );
+    const errors = bulkRowBlockingIssues(r, existingPolicy);
+    const warnings = r.issues.filter(
+      (x) =>
+        x === "Sin imagen en ZIP para este código" ||
+        x === "Sin imagen en ZIP para este nivel" ||
+        x === "Código de barras distinto al registrado en tienda" ||
+        x.startsWith("Aviso:")
+    );
+    const status = describeBulkRowStatus(
+      {
+        errors,
+        warnings,
+        hasExisting: false,
+        readyForVariantGroup: false,
+        hasImageMatch,
+        barcodeRaw: r.mapped.variantGroupCode?.trim() || null,
+        nameValue: r.mapped.name,
+        categorySlug: r.mapped.categorySlug,
+        subcategoryValue: r.mapped.subcategoryName,
+        priceValue: r.mapped.price,
+      },
+      existingPolicy
+    );
+    if (status.tone === "ok") ids.push(bulkImportStableRowId(r));
+  }
+  return Array.from(new Set(ids));
+}
+
 function AdminBulkTab({
   categories,
   categoriesLoading,
@@ -2355,21 +2410,25 @@ function AdminBulkTab({
     [categories]
   );
 
-  /** Tras un PATCH del preview, conserva la intersección o re-selecciona si los IDs cambiaron (p. ej. columna de código). */
+  /** Tras un PATCH del preview, conserva la intersección o re-selecciona filas OK / listas para agrupar. */
   useEffect(() => {
     if (!preview || !jobId) {
       setSelectedRowIds([]);
       return;
     }
-    const allIds = (preview.matchedRows ?? []).map(bulkImportStableRowId);
-    const available = new Set(allIds);
+    const sourceRows = preview.csvHasVariantGroupColumn
+      ? preview.rows ?? []
+      : preview.matchedRows ?? [];
+    const available = new Set(sourceRows.map(bulkImportStableRowId));
     setSelectedRowIds((prev) => {
       const kept = prev.filter((id) => available.has(id));
       if (kept.length > 0) return kept;
-      if (prev.length > 0) return allIds;
+      if (prev.length > 0) {
+        return collectBulkAutoSelectIds(preview, existingPolicy);
+      }
       return prev;
     });
-  }, [preview, jobId]);
+  }, [preview, jobId, existingPolicy]);
 
   const resetSession = () => {
     setJobId(null);
@@ -2467,24 +2526,7 @@ function AdminBulkTab({
       setJobId(res.jobId);
       setPreview(res.preview);
       setExpiresAt(res.expiresAt);
-      setSelectedRowIds(
-        res.preview.csvHasVariantGroupColumn
-          ? (() => {
-              const rows = res.preview.rows ?? [];
-              const groupable = rows.filter((r) =>
-                bulkRowIsReadyForVariantGroupAssign(r, "skip")
-              );
-              if (groupable.length > 0) {
-                return groupable.map(bulkImportStableRowId);
-              }
-              return rows
-                .filter((r) => r.mapped.variantGroupCode?.trim() && r.normalizedCode)
-                .map(bulkImportStableRowId);
-            })()
-          : (res.preview.matchedRows ?? [])
-              .filter((r) => !r.isExistingProduct)
-              .map(bulkImportStableRowId)
-      );
+      setSelectedRowIds(collectBulkAutoSelectIds(res.preview, existingPolicy));
       const hintN = res.preview.taxonomyRehomeHints?.length ?? 0;
       const newN = res.preview.newCategories?.length ?? 0;
       if (hintN > 0) {
@@ -2505,7 +2547,7 @@ function AdminBulkTab({
         showToast("Vista previa lista. Revisa columnas y filas.", "success", "🔍");
       }
     },
-    [showToast]
+    [showToast, existingPolicy]
   );
 
   const pendingLowMatchBreakdown = useMemo(
@@ -2742,10 +2784,37 @@ function AdminBulkTab({
       .map(bulkImportStableRowId);
   }, [preview, selectedRowIdSet]);
 
-  const selectedNewProductRowIds = useMemo(
-    () => selectedRowIds.filter((id) => !selectedVariantGroupRowIds.includes(id)),
-    [selectedRowIds, selectedVariantGroupRowIds]
-  );
+  /** Solo productos nuevos con estado «✓ OK» (importables). */
+  const selectedOkNewProductRowIds = useMemo(() => {
+    const variantSet = new Set(selectedVariantGroupRowIds);
+    return previewTableRows
+      .filter((r) => {
+        if (!r.selected || variantSet.has(r.previewRowId)) return false;
+        const status = describeBulkRowStatus(
+          {
+            errors: r.errors,
+            warnings: r.warnings,
+            hasExisting: r.hasExisting,
+            readyForVariantGroup: r.readyForVariantGroup,
+            hasImageMatch: r.hasImageMatch,
+            barcodeRaw: r.barcodeRaw,
+            nameValue: r.nameValue,
+            categorySlug: r.categorySlug,
+            subcategoryValue: r.subcategoryValue,
+            priceValue: r.priceValue,
+          },
+          existingPolicy
+        );
+        return status.tone === "ok";
+      })
+      .map((r) => r.previewRowId);
+  }, [previewTableRows, selectedVariantGroupRowIds, existingPolicy]);
+
+  const selectedNewProductRowIds = selectedOkNewProductRowIds;
+
+  const canImportAndGroup =
+    selectedVariantGroupRowIds.length > 0 && selectedOkNewProductRowIds.length > 0;
+
 
   const previewRowsByBarcodeGroup = useMemo(() => {
     if (!preview?.csvHasVariantGroupColumn) return null;
@@ -2831,15 +2900,43 @@ function AdminBulkTab({
   const bulkPreviewTableColSpan =
     (hasTintesInBatch ? 17 : 14) + (preview?.csvHasVariantGroupColumn ? 1 : 0);
 
-  const renderBulkPreviewDataRow = (r: BulkPreviewTableRow) => {
-    const warnOnly = r.warnings.length > 0;
-    const ok = r.errors.length === 0;
+  const renderBulkPreviewDataRow = (r: BulkPreviewTableRow, groupColor?: VariantGroupColor) => {
+    const status = describeBulkRowStatus(
+      {
+        errors: r.errors,
+        warnings: r.warnings,
+        hasExisting: r.hasExisting,
+        readyForVariantGroup: r.readyForVariantGroup,
+        hasImageMatch: r.hasImageMatch,
+        barcodeRaw: r.barcodeRaw,
+        nameValue: r.nameValue,
+        categorySlug: r.categorySlug,
+        subcategoryValue: r.subcategoryValue,
+        priceValue: r.priceValue,
+      },
+      existingPolicy
+    );
+    const hasErrors = r.errors.length > 0;
+    const statusColor =
+      status.tone === "ok"
+        ? "green"
+        : status.tone === "group"
+          ? "#2e7d5a"
+          : status.tone === "error"
+            ? "var(--danger, #b00020)"
+            : status.tone === "existing"
+              ? "#b00020"
+              : "#b45309";
     return (
       <tr
         key={r.previewRowId}
         style={{
-          opacity: ok ? 1 : 0.75,
-          background: r.hasExisting ? "rgba(255, 84, 84, 0.10)" : undefined,
+          opacity: hasErrors ? 0.85 : 1,
+          background: hasErrors
+            ? "rgba(255, 84, 84, 0.12)"
+            : groupColor
+              ? groupColor.rowBg
+              : undefined,
         }}
         onClick={(e) => {
           const el = e.target as HTMLElement;
@@ -2904,27 +3001,12 @@ function AdminBulkTab({
             : "—"}
         </td>
         <td style={{ fontSize: 12 }}>
-          {ok ? (
-            <span style={{ color: r.readyForVariantGroup ? "#2e7d5a" : r.hasExisting ? "#b00020" : "green" }}>
-              {r.readyForVariantGroup
-                ? "📦 Listo para agrupar"
-                : r.hasExisting
-                  ? existingPolicy === "replace"
-                    ? "↺ Reemplazar"
-                    : r.barcodeRaw
-                      ? "⚠ Revisar fila"
-                      : "⛔ Sin código de barras"
-                  : !r.hasImageMatch
-                    ? "⚠ Sin foto"
-                    : warnOnly
-                      ? "⚠ Aviso"
-                      : "✓ OK"}
-            </span>
-          ) : (
-            <span style={{ color: "var(--danger, #b00020)" }} title={r.errors.join(" · ")}>
-              ✗ {r.errors[0] ?? "Error"}
-            </span>
-          )}
+          <span
+            style={{ color: statusColor, cursor: "help", borderBottom: "1px dotted currentColor" }}
+            title={status.hint}
+          >
+            {status.label}
+          </span>
         </td>
         <td style={{ minWidth: 96 }}>
           <button
@@ -3559,20 +3641,27 @@ function AdminBulkTab({
               </thead>
               <tbody>
                 {previewRowsByBarcodeGroup
-                  ? previewRowsByBarcodeGroup.groups.flatMap(({ meta, rows, dbOnly }) => [
-                      <tr key={`group-${meta.groupKey}`} style={{ background: "var(--lavender-light)" }}>
+                  ? previewRowsByBarcodeGroup.groups.flatMap(({ meta, rows, dbOnly }, groupIndex) => {
+                      const groupColor = variantGroupColorAt(groupIndex);
+                      return [
+                      <tr
+                        key={`group-${meta.groupKey}`}
+                        style={{
+                          background: groupColor.headerBg,
+                        }}
+                      >
                         <td
                           colSpan={bulkPreviewTableColSpan}
                           style={{
                             padding: "10px 14px",
                             fontSize: 13,
                             fontWeight: 600,
-                            color: "var(--dark)",
-                            borderBottom: "2px solid var(--dusty-rose)",
+                            color: groupColor.headerText,
+                            borderBottom: `2px solid ${groupColor.headerBorder}`,
                           }}
                         >
                           <span style={{ fontFamily: "monospace", marginRight: 10 }}>📦 {meta.groupLabel}</span>
-                          <span style={{ fontWeight: 500, color: "var(--text-muted)", fontSize: 12 }}>
+                          <span style={{ fontWeight: 500, color: groupColor.headerText, opacity: 0.85, fontSize: 12 }}>
                             {meta.rowCount} en CSV
                             {meta.existingInCsvCount > 0 && ` · ${meta.existingInCsvCount} ya en tienda`}
                             {meta.newInCsvCount > 0 && ` · ${meta.newInCsvCount} nueva(s)`}
@@ -3581,9 +3670,12 @@ function AdminBulkTab({
                           </span>
                         </td>
                       </tr>,
-                      ...rows.map((r) => renderBulkPreviewDataRow(r)),
+                      ...rows.map((r) => renderBulkPreviewDataRow(r, groupColor)),
                       ...dbOnly.map((p) => (
-                        <tr key={`db-only-${p.id}`} style={{ background: "rgba(120, 120, 120, 0.06)" }}>
+                        <tr
+                          key={`db-only-${p.id}`}
+                          style={{ background: groupColor.rowBg, opacity: 0.75 }}
+                        >
                           <td className="admin-bulk-check-cell" />
                           {preview.csvHasVariantGroupColumn && (
                             <td style={{ textAlign: "center", fontSize: 12, color: "var(--text-muted)" }}>
@@ -3598,7 +3690,8 @@ function AdminBulkTab({
                           </td>
                         </tr>
                       )),
-                    ])
+                    ];
+                    })
                   : previewTableRows.map((r) => renderBulkPreviewDataRow(r))}
                 {previewRowsByBarcodeGroup && previewRowsByBarcodeGroup.ungrouped.length > 0 && (
                   <>
@@ -3724,10 +3817,10 @@ function AdminBulkTab({
                   · <strong>{selectedVariantGroupRowIds.length}</strong> para agrupar
                 </>
               ) : null}
-              {selectedNewProductRowIds.length > 0 ? (
+              {selectedOkNewProductRowIds.length > 0 ? (
                 <>
                   {" "}
-                  · <strong>{selectedNewProductRowIds.length}</strong> nuevas
+                  · <strong>{selectedOkNewProductRowIds.length}</strong> OK para importar
                 </>
               ) : null}
             </div>
@@ -3805,7 +3898,7 @@ function AdminBulkTab({
               className="btn btn-outline"
               disabled={
                 saving ||
-                selectedNewProductRowIds.length === 0 ||
+                selectedOkNewProductRowIds.length === 0 ||
                 (needsTintSelection && !tintsExplicitlySkipped) ||
                 (pendingNewCategories.length > 0 && !newCategoriesModalAcknowledged) ||
                 taxonomyRehomeHints.length > 0
@@ -3818,7 +3911,7 @@ function AdminBulkTab({
                   try {
                     const res = await postBulkImportCommit(
                       jobId,
-                      [...selectedNewProductRowIds].sort(),
+                      [...selectedOkNewProductRowIds].sort(),
                       existingPolicy
                     );
                     bulkProgress.finish();
@@ -3846,7 +3939,7 @@ function AdminBulkTab({
                     }
                     if (res.imported === 0 && grouped === 0 && skipped === 0 && res.failed === 0) {
                       showToast(
-                        "No se aplicaron cambios. Selecciona filas nuevas con match de imagen.",
+                        "No se aplicaron cambios. Selecciona filas nuevas con estado «✓ OK».",
                         "default",
                         "ℹ️"
                       );
@@ -3870,12 +3963,97 @@ function AdminBulkTab({
                   <span className="admin-inline-spinner" aria-hidden />
                   Importando...
                 </>
-              ) : selectedNewProductRowIds.length === 0 ? (
+              ) : selectedOkNewProductRowIds.length === 0 ? (
                 "⬆️ Importar productos nuevos"
-              ) : selectedNewProductRowIds.length === 1 ? (
+              ) : selectedOkNewProductRowIds.length === 1 ? (
                 "⬆️ Importar 1 producto nuevo"
               ) : (
-                `⬆️ Importar ${selectedNewProductRowIds.length} productos nuevos`
+                `⬆️ Importar ${selectedOkNewProductRowIds.length} productos nuevos`
+              )}
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-outline"
+              disabled={
+                saving ||
+                !canImportAndGroup ||
+                (needsTintSelection && !tintsExplicitlySkipped) ||
+                (pendingNewCategories.length > 0 && !newCategoriesModalAcknowledged) ||
+                taxonomyRehomeHints.length > 0
+              }
+              title={
+                canImportAndGroup
+                  ? "Importa los productos nuevos OK y agrupa los ya registrados como variantes"
+                  : "Necesitas al menos un producto OK para importar y uno listo para agrupar"
+              }
+              onClick={() => {
+                void (async () => {
+                  setMutation("bulk");
+                  setBulkProgressLabel("Importando productos nuevos y agrupando variantes…");
+                  bulkProgress.start("import");
+                  try {
+                    const combinedIds = Array.from(
+                      new Set([...selectedVariantGroupRowIds, ...selectedOkNewProductRowIds])
+                    ).sort();
+                    const res = await postBulkImportCommit(jobId, combinedIds, existingPolicy);
+                    bulkProgress.finish();
+                    const grouped = res.variantGroupsAssigned ?? 0;
+                    const merged = res.variantGroupsWithMultipleMembers ?? 0;
+                    const created = Math.max(0, res.imported - grouped);
+                    if (created > 0) {
+                      showToast(`Importados ${created} producto(s) nuevo(s)`, "success", "🎉");
+                    }
+                    if (grouped > 0 && merged > 0) {
+                      showToast(
+                        `${grouped} producto(s) agrupados en ${merged} grupo(s) con variantes.`,
+                        "success",
+                        "📦"
+                      );
+                    } else if (grouped > 0) {
+                      showToast(
+                        `Se asignó código Barras a ${grouped} producto(s).`,
+                        "success",
+                        "📦"
+                      );
+                    }
+                    const skipped = res.skippedExistingDuplicates ?? 0;
+                    if (skipped > 0) {
+                      showToast(
+                        existingPolicy === "omit"
+                          ? `${skipped} producto(s) ya registrados omitidos (sin cambios).`
+                          : `${skipped} fila(s) omitida(s): ya registradas y sin código de barras en el CSV.`,
+                        "default",
+                        "⏭️"
+                      );
+                    }
+                    if (res.failed > 0) {
+                      showToast(`${res.failed} error(es). Revisa consola o mensajes.`, "danger", "⚠️");
+                    }
+                    await onImported();
+                    resetSession();
+                  } catch (e) {
+                    bulkProgress.reset();
+                    showToast(
+                      e instanceof Error ? e.message : "Error al importar y agrupar",
+                      "danger",
+                      "⚠️"
+                    );
+                  } finally {
+                    setMutation(null);
+                  }
+                })();
+              }}
+            >
+              {saving ? (
+                <>
+                  <span className="admin-inline-spinner" aria-hidden />
+                  Importando y agrupando...
+                </>
+              ) : !canImportAndGroup ? (
+                "✨ Importar y agrupar por variantes"
+              ) : (
+                `✨ Importar ${selectedOkNewProductRowIds.length} y agrupar ${selectedVariantGroupRowIds.length}`
               )}
             </button>
           </div>
