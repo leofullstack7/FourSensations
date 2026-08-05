@@ -2405,7 +2405,6 @@ function AdminBulkTab({
   const [fileInputKey, setFileInputKey] = useState(0);
   const [editingBulkRowId, setEditingBulkRowId] = useState<string | null>(null);
   const [showAllImageMatches, setShowAllImageMatches] = useState(false);
-  const [showFullMatchesModal, setShowFullMatchesModal] = useState(false);
   /** Grupos que el admin acaba de agrupar en esta sesión (UI grisácea). */
   const [completedGroupKeys, setCompletedGroupKeys] = useState<string[]>([]);
   /** Navegación de filas con error al intentar importar. */
@@ -2420,8 +2419,8 @@ function AdminBulkTab({
   const rowImageFilesRef = useRef<Record<string, File>>({});
   const bulkProgress = useBufferedProgress(93);
   const [bulkProgressLabel, setBulkProgressLabel] = useState("");
-  /** false = solo filas listas para importar/agrupar; true = también el resto del análisis. */
-  const [showSecondaryMatchRows, setShowSecondaryMatchRows] = useState(false);
+  /** false = solo grupos con OK/agrupar (+ hermanas); true = también el resto de casos abajo. */
+  const [showAllCases, setShowAllCases] = useState(false);
   const [bulkSuccessModal, setBulkSuccessModal] = useState<{
     imported: number;
     variantsAssigned: number;
@@ -2483,7 +2482,6 @@ function AdminBulkTab({
     setPendingAnalyzeResult(null);
     setEditingBulkRowId(null);
     setShowAllImageMatches(false);
-    setShowFullMatchesModal(false);
     setCompletedGroupKeys([]);
     setIncidentNavOpen(false);
     setIncidentFocusIndex(0);
@@ -2491,7 +2489,7 @@ function AdminBulkTab({
     setOptimizeImageRowIds([]);
     setUploadingImageRowId(null);
     setRowImageTargetId(null);
-    setShowSecondaryMatchRows(false);
+    setShowAllCases(false);
     setBulkSuccessModal(null);
     bulkProgress.reset();
     setFileInputKey((k) => k + 1);
@@ -2541,7 +2539,6 @@ function AdminBulkTab({
       setPendingAnalyzeResult(null);
       setEditingBulkRowId(null);
       setShowAllImageMatches(false);
-      setShowFullMatchesModal(false);
       setCompletedGroupKeys([]);
       setIncidentNavOpen(false);
       setIncidentFocusIndex(0);
@@ -2549,7 +2546,7 @@ function AdminBulkTab({
       setOptimizeImageRowIds([]);
       setUploadingImageRowId(null);
       setRowImageTargetId(null);
-      setShowSecondaryMatchRows(false);
+      setShowAllCases(false);
       setBulkSuccessModal(null);
       setJobId(null);
       setPreview(null);
@@ -2571,13 +2568,12 @@ function AdminBulkTab({
       setExpiresAt(res.expiresAt);
       setSelectedRowIds(collectBulkAutoSelectIds(res.preview, existingPolicy));
       setCompletedGroupKeys([]);
-      setShowFullMatchesModal(false);
+      setShowAllCases(false);
+      setBulkSuccessModal(null);
       setIncidentNavOpen(false);
       setIncidentFocusIndex(0);
       setOmittedIncidentIds([]);
       setOptimizeImageRowIds([]);
-      setShowSecondaryMatchRows(false);
-      setBulkSuccessModal(null);
       const hintN = res.preview.taxonomyRehomeHints?.length ?? 0;
       const newN = res.preview.newCategories?.length ?? 0;
       if (hintN > 0) {
@@ -2936,32 +2932,36 @@ function AdminBulkTab({
       }))
       .filter((g) => g.rows.length > 0 || g.dbOnly.length > 0);
 
-    /** Vista de trabajo: oculta grupos ya resueltos en tienda (salvo los recién agrupados en esta sesión). */
-    const actionGroups = allGroups
-      .map((g) => {
-        const actionableRows = g.rows.filter((r) => !r.alreadyVariantGrouped);
-        const primaryRows = actionableRows.filter((r) => isPrimaryMatchRow(r));
-        const secondaryRows = actionableRows.filter((r) => !isPrimaryMatchRow(r));
-        const isLocallyCompleted = completedGroupKeySet.has(g.meta.groupKey);
-        return {
-          ...g,
-          actionableRows,
-          primaryRows,
-          secondaryRows,
-          displayRows: isLocallyCompleted
-            ? g.rows
-            : showSecondaryMatchRows
-              ? actionableRows
-              : primaryRows,
-          isLocallyCompleted,
-          joinsExistingGroup: g.dbVariants.length > 0,
-        };
-      })
-      .filter((g) => {
-        if (g.isLocallyCompleted) return true;
-        if (showSecondaryMatchRows) return g.actionableRows.length > 0;
-        return g.primaryRows.length > 0;
-      });
+    /** Vista principal vs resto de casos (grupos solo con incidencias). */
+    const enriched = allGroups.map((g) => {
+      const actionableRows = g.rows.filter((r) => !r.alreadyVariantGrouped);
+      const primaryRows = actionableRows.filter((r) => isPrimaryMatchRow(r));
+      const secondaryRows = actionableRows.filter((r) => !isPrimaryMatchRow(r));
+      const isLocallyCompleted = completedGroupKeySet.has(g.meta.groupKey);
+      return {
+        ...g,
+        actionableRows,
+        primaryRows,
+        secondaryRows,
+        isLocallyCompleted,
+        joinsExistingGroup: g.dbVariants.length > 0,
+      };
+    });
+
+    const primaryGroups = enriched
+      .filter((g) => g.isLocallyCompleted || g.primaryRows.length > 0)
+      .map((g) => ({
+        ...g,
+        // Si hay OK/agrupar en el grupo, también se muestran hermanas con incidencia (Omitir).
+        displayRows: g.isLocallyCompleted ? g.rows : g.actionableRows,
+      }));
+
+    const secondaryGroups = enriched
+      .filter((g) => !g.isLocallyCompleted && g.primaryRows.length === 0 && g.actionableRows.length > 0)
+      .map((g) => ({
+        ...g,
+        displayRows: g.actionableRows,
+      }));
 
     const actionUngrouped = ungrouped.filter((r) => {
       if (r.alreadyVariantGrouped) return false;
@@ -2972,15 +2972,17 @@ function AdminBulkTab({
     const secondaryUngrouped = actionUngrouped.filter((r) => !isPrimaryMatchRow(r));
 
     return {
-      groups: actionGroups,
-      ungrouped: showSecondaryMatchRows ? actionUngrouped : primaryUngrouped,
-      actionUngrouped,
+      groups: primaryGroups,
+      ungrouped: primaryUngrouped,
+      secondaryGroups,
       secondaryUngrouped,
-      secondaryGroupRowCount: actionGroups.reduce((n, g) => n + g.secondaryRows.length, 0),
-      allGroups,
+      actionUngrouped,
+      secondaryCaseCount:
+        secondaryGroups.reduce((n, g) => n + g.displayRows.length, 0) + secondaryUngrouped.length,
+      allGroups: enriched,
       allUngrouped: ungrouped,
     };
-  }, [preview, previewTableRows, completedGroupKeySet, showSecondaryMatchRows, isPrimaryMatchRow]);
+  }, [preview, previewTableRows, completedGroupKeySet, isPrimaryMatchRow]);
 
   /** Filas sin barras (o sin columna): solo acción pendiente en la tabla principal. */
   const allPendingPreviewRows = useMemo(() => {
@@ -2993,24 +2995,20 @@ function AdminBulkTab({
   }, [preview, previewTableRows]);
 
   const actionPreviewTableRows = useMemo(() => {
-    if (showSecondaryMatchRows) return allPendingPreviewRows;
     return allPendingPreviewRows.filter((r) => isPrimaryMatchRow(r));
-  }, [allPendingPreviewRows, showSecondaryMatchRows, isPrimaryMatchRow]);
+  }, [allPendingPreviewRows, isPrimaryMatchRow]);
+
+  const secondaryFlatRows = useMemo(() => {
+    return allPendingPreviewRows.filter((r) => !isPrimaryMatchRow(r));
+  }, [allPendingPreviewRows, isPrimaryMatchRow]);
 
   const secondaryMatchCount = useMemo(() => {
     if (!preview) return 0;
     if (preview.csvHasVariantGroupColumn && previewRowsByBarcodeGroup) {
-      return (
-        (previewRowsByBarcodeGroup.secondaryGroupRowCount ?? 0) +
-        (previewRowsByBarcodeGroup.secondaryUngrouped?.length ?? 0)
-      );
+      return previewRowsByBarcodeGroup.secondaryCaseCount ?? 0;
     }
-    return previewTableRows.filter((r) => {
-      if (r.alreadyVariantGrouped) return false;
-      if (r.hasExisting && !r.readyForVariantGroup) return false;
-      return !isPrimaryMatchRow(r);
-    }).length;
-  }, [preview, previewTableRows, previewRowsByBarcodeGroup, isPrimaryMatchRow]);
+    return secondaryFlatRows.length;
+  }, [preview, previewRowsByBarcodeGroup, secondaryFlatRows]);
 
   const hiddenMatchCount = useMemo(() => {
     if (!preview) return 0;
@@ -3083,7 +3081,7 @@ function AdminBulkTab({
         showToast("No hay filas con error para revisar.", "default", "ℹ️");
         return;
       }
-      setShowSecondaryMatchRows(true);
+      setShowAllCases(true);
       const idx = startId ? Math.max(0, list.findIndex((r) => r.previewRowId === startId)) : 0;
       const safeIdx = idx >= 0 ? idx : 0;
       setIncidentFocusIndex(safeIdx);
@@ -3189,7 +3187,7 @@ function AdminBulkTab({
       tips.push("Puedes asignar un mismo precio a todas las filas sin precio con el botón «Precio en lote».");
     }
     if (hiddenMatchCount > 0) {
-      tips.push("Las coincidencias ya agrupadas están ocultas: ábreas en «Ver coincidencias completas».");
+      tips.push("Las coincidencias ya agrupadas no requieren acción; el foco está en lo que puedes importar o agrupar.");
     }
     if (tips.length === 0) tips.push("Revisa la tabla y usa los botones de abajo cuando todo esté listo.");
 
@@ -4340,51 +4338,19 @@ function AdminBulkTab({
             </div>
           ) : null}
 
-          {(hiddenMatchCount > 0 || (preview.stats?.existingProductRows ?? 0) > 0) && (
-            <div
-              style={{
-                marginBottom: 12,
-                padding: "12px 14px",
-                borderRadius: "var(--radius-md)",
-                background: "#f3f4f6",
-                border: "1px solid #e5e7eb",
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 10,
-                alignItems: "center",
-                justifyContent: "space-between",
-                fontSize: 13,
-              }}
-            >
-              <span style={{ color: "var(--text-muted)", lineHeight: 1.45 }}>
-                {hiddenMatchCount > 0 ? (
-                  <>
-                    Se ocultaron <strong>{hiddenMatchCount}</strong> coincidencia(s) ya registradas
-                    {preview.csvHasVariantGroupColumn ? " y agrupadas" : ""} en la tienda. La tabla muestra solo lo que
-                    aún requiere acción.
-                  </>
-                ) : (
-                  <>Hay productos ya registrados en este lote. Revisa las coincidencias completas si lo necesitas.</>
-                )}
-              </span>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={() => setShowFullMatchesModal(true)}
-              >
-                Ver coincidencias completas
-              </button>
-            </div>
-          )}
-
+          {hiddenMatchCount > 0 ? (
             <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
-              Primero ves solo lo listo para <strong>importar</strong> (nuevos con foto) o{" "}
-              <strong>agrupar</strong>. Lo que no hizo match de imagen u otros estados está en «Ver demás…».
+              Se omiten de esta vista <strong>{hiddenMatchCount}</strong> coincidencia(s) ya registradas
+              {preview.csvHasVariantGroupColumn ? " y agrupadas" : ""} en la tienda (no requieren acción).
             </p>
-            <div
-            className="admin-bulk-scroll"
-            style={{ marginBottom: 12 }}
-          >
+          ) : null}
+
+          <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
+            Primero ves lo listo para <strong>importar</strong> (nuevos con foto) o <strong>agrupar</strong>. Si un
+            grupo tiene variantes hermanas con incidencia, también aparecen aquí con <strong>Omitir</strong>. El resto
+            de casos está más abajo.
+          </p>
+          <div className="admin-bulk-scroll" style={{ marginBottom: 12 }}>
             <table className="admin-table admin-bulk-matched-table" style={{ minWidth: 720, margin: 0 }}>
               <thead>
                 <tr>
@@ -4695,9 +4661,8 @@ function AdminBulkTab({
                         colSpan={bulkPreviewTableColSpan}
                         style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}
                       >
-                        Todas las coincidencias ya están en la tienda
-                        {preview.csvHasVariantGroupColumn ? " y agrupadas" : ""}. Usa{" "}
-                        <strong>Ver coincidencias completas</strong> para revisarlas.
+                        Todas las filas listas para importar o agrupar ya están resueltas o no hay ninguna. Usa{" "}
+                        <strong>Ver todos los casos</strong> si quedan incidencias.
                       </td>
                     </tr>
                   )}
@@ -4714,44 +4679,225 @@ function AdminBulkTab({
             </table>
           </div>
 
-          {!showSecondaryMatchRows && secondaryMatchCount > 0 ? (
+          {!showAllCases && secondaryMatchCount > 0 ? (
             <div style={{ marginBottom: 16, display: "flex", justifyContent: "center" }}>
               <button
                 type="button"
                 className="btn btn-outline"
-                onClick={() => setShowSecondaryMatchRows(true)}
+                onClick={() => setShowAllCases(true)}
               >
-                Ver demás productos de este análisis y su estado ({secondaryMatchCount})
+                Ver todos los casos ({secondaryMatchCount})
               </button>
             </div>
           ) : null}
-          {showSecondaryMatchRows && secondaryMatchCount > 0 ? (
-            <div
-              style={{
-                marginBottom: 16,
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 10,
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "10px 12px",
-                borderRadius: "var(--radius-md)",
-                background: "#f8f6f5",
-                border: "1px solid var(--line, #e7d9d4)",
-                fontSize: 13,
-                color: "var(--text-muted)",
-              }}
-            >
-              <span>
-                Mostrando también filas sin match de imagen, con errores u otros estados.
-              </span>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={() => setShowSecondaryMatchRows(false)}
+
+          {showAllCases && secondaryMatchCount > 0 ? (
+            <div style={{ marginBottom: 20 }}>
+              <div
+                style={{
+                  marginBottom: 12,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 10,
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "12px 14px",
+                  borderRadius: "var(--radius-md)",
+                  background: "#fff5f5",
+                  border: "1px solid rgba(220, 38, 38, 0.22)",
+                  fontSize: 13,
+                  color: "var(--text)",
+                }}
               >
-                Solo ver listos para importar/agrupar
-              </button>
+                <span style={{ lineHeight: 1.45 }}>
+                  <strong>Todos los demás casos</strong> — filas con incidencias (sin foto, errores, etc.),
+                  agrupadas por código de barras cuando aplica. Decide editar, omitir o subir imagen.
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => setShowAllCases(false)}
+                >
+                  Ocultar
+                </button>
+              </div>
+              <div className="admin-bulk-scroll" style={{ marginBottom: 12 }}>
+                <table className="admin-table admin-bulk-matched-table" style={{ minWidth: 720, margin: 0 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 44 }} className="admin-bulk-check-cell">
+                        Sel.
+                      </th>
+                      {preview.csvHasVariantGroupColumn && (
+                        <th style={{ width: 36, textAlign: "center" }} title="Orden de variante en el grupo">
+                          #
+                        </th>
+                      )}
+                      <th>Código</th>
+                      <th>Nombre</th>
+                      <th>Descripción</th>
+                      {hasTintesInBatch && (
+                        <>
+                          <th>Familia</th>
+                          <th>Nivel</th>
+                          <th>Grupo</th>
+                        </>
+                      )}
+                      <th>Categoría CSV</th>
+                      <th>Subcategoría CSV</th>
+                      <th>Categoría</th>
+                      <th>Subcategoría</th>
+                      <th>Precio</th>
+                      <th>Stock</th>
+                      <th>Etiquetas</th>
+                      <th>Imágenes</th>
+                      <th>Estado</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewRowsByBarcodeGroup
+                      ? [
+                          ...previewRowsByBarcodeGroup.secondaryGroups.flatMap((group, groupIndex) => {
+                            const {
+                              meta,
+                              dbOnly,
+                              dbVariants,
+                              displayRows,
+                              actionableRows,
+                              isLocallyCompleted,
+                              joinsExistingGroup,
+                            } = group;
+                            const groupColor = variantGroupColorAt(groupIndex + 3);
+                            const readyIds = actionableRows
+                              .filter((r) => r.readyForVariantGroup)
+                              .map((r) => r.previewRowId);
+                            const allActionableReadyOrOk =
+                              actionableRows.length > 0 &&
+                              actionableRows.every((r) => {
+                                const st = rowStatusOf(r);
+                                return r.readyForVariantGroup || st.tone === "ok";
+                              });
+                            const canAgruparGroup =
+                              !isLocallyCompleted && allActionableReadyOrOk && readyIds.length > 0;
+                            return [
+                              ...(groupIndex > 0
+                                ? [
+                                    <tr key={`sec-gap-${meta.groupKey}`} aria-hidden>
+                                      <td
+                                        colSpan={bulkPreviewTableColSpan}
+                                        style={{
+                                          height: 32,
+                                          padding: 0,
+                                          border: "none",
+                                          background: "var(--ivory, #faf7f5)",
+                                        }}
+                                      />
+                                    </tr>,
+                                  ]
+                                : []),
+                              <tr
+                                key={`sec-group-${meta.groupKey}`}
+                                style={{
+                                  background: groupColor.headerBg,
+                                }}
+                              >
+                                <td
+                                  colSpan={bulkPreviewTableColSpan}
+                                  style={{
+                                    padding: "10px 14px",
+                                    fontSize: 13,
+                                    fontWeight: 600,
+                                    color: groupColor.headerText,
+                                    borderBottom: `2px solid ${groupColor.headerBorder}`,
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      flexWrap: "wrap",
+                                      gap: 10,
+                                      alignItems: "center",
+                                      justifyContent: "space-between",
+                                    }}
+                                  >
+                                    <div>
+                                      <span style={{ fontFamily: "monospace", marginRight: 10 }}>
+                                        📦 {meta.groupLabel}
+                                      </span>
+                                      <span style={{ fontWeight: 500, fontSize: 12, opacity: 0.85 }}>
+                                        {displayRows.length} caso(s) en este grupo
+                                        {joinsExistingGroup
+                                          ? ` · ${dbVariants.length} variante(s) ya en tienda`
+                                          : ""}
+                                      </span>
+                                    </div>
+                                    {canAgruparGroup ? (
+                                      <button
+                                        type="button"
+                                        className="btn btn-primary btn-sm"
+                                        disabled={saving || taxonomyRehomeHints.length > 0}
+                                        onClick={() => void commitGroupAsVariants(meta.groupKey, readyIds)}
+                                      >
+                                        📦 Agrupar
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </td>
+                              </tr>,
+                              ...displayRows.map((r) => renderBulkPreviewDataRow(r, groupColor)),
+                              ...dbOnly.map((p) => (
+                                <tr
+                                  key={`sec-db-${p.id}`}
+                                  style={{ background: groupColor.rowBg, opacity: 0.75 }}
+                                >
+                                  <td className="admin-bulk-check-cell" />
+                                  {preview.csvHasVariantGroupColumn && (
+                                    <td style={{ textAlign: "center", fontSize: 12, color: "var(--text-muted)" }}>
+                                      {p.variantGroupOrder != null ? p.variantGroupOrder + 1 : "—"}
+                                    </td>
+                                  )}
+                                  <td style={{ fontSize: 12, fontFamily: "monospace" }}>
+                                    {p.externalRef ?? "—"}
+                                  </td>
+                                  <td
+                                    colSpan={
+                                      bulkPreviewTableColSpan - (preview.csvHasVariantGroupColumn ? 3 : 2)
+                                    }
+                                  >
+                                    <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
+                                      {p.name} — solo en tienda (no está en este CSV)
+                                    </span>
+                                  </td>
+                                </tr>
+                              )),
+                            ];
+                          }),
+                          ...(previewRowsByBarcodeGroup.secondaryUngrouped.length > 0
+                            ? [
+                                <tr key="sec-ungrouped-h" style={{ background: "var(--lavender-light)" }}>
+                                  <td
+                                    colSpan={bulkPreviewTableColSpan}
+                                    style={{
+                                      padding: "10px 14px",
+                                      fontSize: 13,
+                                      fontWeight: 600,
+                                      color: "var(--text-muted)",
+                                    }}
+                                  >
+                                    Sin código de barras / otros casos
+                                  </td>
+                                </tr>,
+                                ...previewRowsByBarcodeGroup.secondaryUngrouped.map((r) =>
+                                  renderBulkPreviewDataRow(r)
+                                ),
+                              ]
+                            : []),
+                        ]
+                      : secondaryFlatRows.map((r) => renderBulkPreviewDataRow(r))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
 
@@ -5261,114 +5407,6 @@ function AdminBulkTab({
                 }}
               >
                 Quedarme aquí
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      {showFullMatchesModal && preview ? (
-        <div
-          className="admin-modal-overlay open"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowFullMatchesModal(false);
-          }}
-          role="presentation"
-        >
-          <div
-            className="admin-modal"
-            style={{ maxWidth: "min(1200px, 96vw)", maxHeight: "92vh", display: "flex", flexDirection: "column" }}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Coincidencias completas"
-          >
-            <button type="button" className="modal-close" onClick={() => setShowFullMatchesModal(false)}>
-              ✕
-            </button>
-            <h3 style={{ margin: "0 0 8px", fontSize: 20 }}>Coincidencias completas</h3>
-            <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
-              Todas las filas del match, incluidas las ya registradas y agrupadas en la tienda.
-            </p>
-            <div className="admin-bulk-scroll" style={{ flex: 1, minHeight: 0, border: "1px solid var(--line, #e7d9d4)", borderRadius: 8 }}>
-              <table className="admin-table admin-bulk-matched-table" style={{ minWidth: 720, margin: 0 }}>
-                <thead>
-                  <tr>
-                    {preview.csvHasVariantGroupColumn && <th style={{ width: 36, textAlign: "center" }}>#</th>}
-                    <th>Código</th>
-                    <th>Nombre</th>
-                    <th>Descripción</th>
-                    {hasTintesInBatch && (
-                      <>
-                        <th>Familia</th>
-                        <th>Nivel</th>
-                        <th>Grupo</th>
-                      </>
-                    )}
-                    <th>Categoría</th>
-                    <th>Subcategoría</th>
-                    <th>Precio</th>
-                    <th>Stock</th>
-                    <th>Imágenes</th>
-                    <th>Estado</th>
-                    <th>Barras / grupo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {previewTableRows.map((r) => {
-                    const st = rowStatusOf(r);
-                    return (
-                      <tr
-                        key={`full-${r.previewRowId}`}
-                        style={{
-                          background: r.alreadyVariantGrouped
-                            ? "rgba(107,114,128,0.08)"
-                            : r.errors.length
-                              ? "rgba(255,84,84,0.10)"
-                              : undefined,
-                        }}
-                      >
-                        {preview.csvHasVariantGroupColumn && (
-                          <td style={{ textAlign: "center", fontSize: 12, color: "var(--text-muted)" }}>
-                            {r.variantGroupOrder != null ? r.variantGroupOrder + 1 : "—"}
-                          </td>
-                        )}
-                        <td style={{ fontSize: 12, fontFamily: "monospace" }}>{r.codeValue ?? "—"}</td>
-                        <td>{r.nameValue ?? "—"}</td>
-                        <td style={{ fontSize: 12, maxWidth: 180 }} title={r.descriptionValue ?? undefined}>
-                          {r.descriptionValue?.trim() ? r.descriptionValue : "—"}
-                        </td>
-                        {hasTintesInBatch && (
-                          <>
-                            <td style={{ fontSize: 12 }}>{r.isTintesRow ? (r.tintFamilyValue ?? "—") : "—"}</td>
-                            <td style={{ fontSize: 12, fontFamily: "monospace" }}>
-                              {r.isTintesRow ? (r.tintLevelValue ?? "—") : "—"}
-                            </td>
-                            <td style={{ fontSize: 12 }}>{r.isTintesRow ? (r.tintGroupValue ?? "—") : "—"}</td>
-                          </>
-                        )}
-                        <td>{r.categorySlug ? categoryDisplayName(r.categorySlug, categories) : "—"}</td>
-                        <td>{r.subcategoryValue ?? "—"}</td>
-                        <td>{r.priceValue != null ? formatPrice(r.priceValue) : "—"}</td>
-                        <td>{r.stockValue ?? "—"}</td>
-                        <td style={{ fontSize: 11 }}>
-                          {r.matchedImages.length
-                            ? r.matchedImages.map((m) => m.imageFilename).join(", ")
-                            : "—"}
-                        </td>
-                        <td style={{ fontSize: 12 }} title={st.hint}>
-                          {st.label}
-                        </td>
-                        <td style={{ fontSize: 11, fontFamily: "monospace" }}>
-                          {r.barcodeRaw ?? r.existingVariantGroupCode ?? "—"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
-              <button type="button" className="btn btn-primary" onClick={() => setShowFullMatchesModal(false)}>
-                Cerrar
               </button>
             </div>
           </div>
