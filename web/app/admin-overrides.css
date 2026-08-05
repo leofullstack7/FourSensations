@@ -370,9 +370,27 @@
 .admin-bulk-scroll {
   width: 100%;
   max-width: 100%;
-  overflow-x: auto;
+  max-height: min(70vh, 740px);
+  overflow: auto;
   -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--dusty-rose);
+  border-radius: var(--radius-md);
+  background: #fff;
 }
+
+.admin-bulk-matched-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.admin-bulk-matched-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #fff8f6;
+  box-shadow: 0 1px 0 rgba(200, 168, 162, 0.45);
+}
+
 .admin-bulk-matched-table tbody tr {
   cursor: default;
 }

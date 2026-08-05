@@ -2420,6 +2420,13 @@ function AdminBulkTab({
   const rowImageFilesRef = useRef<Record<string, File>>({});
   const bulkProgress = useBufferedProgress(93);
   const [bulkProgressLabel, setBulkProgressLabel] = useState("");
+  /** false = solo filas listas para importar/agrupar; true = también el resto del análisis. */
+  const [showSecondaryMatchRows, setShowSecondaryMatchRows] = useState(false);
+  const [bulkSuccessModal, setBulkSuccessModal] = useState<{
+    imported: number;
+    variantsAssigned: number;
+    keepWorking: boolean;
+  } | null>(null);
 
   const sortedCats = useMemo(
     () => [...categories].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -2484,6 +2491,8 @@ function AdminBulkTab({
     setOptimizeImageRowIds([]);
     setUploadingImageRowId(null);
     setRowImageTargetId(null);
+    setShowSecondaryMatchRows(false);
+    setBulkSuccessModal(null);
     bulkProgress.reset();
     setFileInputKey((k) => k + 1);
   };
@@ -2540,6 +2549,8 @@ function AdminBulkTab({
       setOptimizeImageRowIds([]);
       setUploadingImageRowId(null);
       setRowImageTargetId(null);
+      setShowSecondaryMatchRows(false);
+      setBulkSuccessModal(null);
       setJobId(null);
       setPreview(null);
       setExpiresAt(null);
@@ -2565,6 +2576,8 @@ function AdminBulkTab({
       setIncidentFocusIndex(0);
       setOmittedIncidentIds([]);
       setOptimizeImageRowIds([]);
+      setShowSecondaryMatchRows(false);
+      setBulkSuccessModal(null);
       const hintN = res.preview.taxonomyRehomeHints?.length ?? 0;
       const newN = res.preview.newCategories?.length ?? 0;
       if (hintN > 0) {
@@ -2857,6 +2870,45 @@ function AdminBulkTab({
 
   const completedGroupKeySet = useMemo(() => new Set(completedGroupKeys), [completedGroupKeys]);
 
+  const isPrimaryMatchRow = useCallback(
+    (r: {
+      alreadyVariantGrouped: boolean;
+      readyForVariantGroup: boolean;
+      hasExisting: boolean;
+      hasImageMatch: boolean;
+      errors: string[];
+      warnings: string[];
+      barcodeRaw: string | null;
+      nameValue: string | null;
+      categorySlug: string | null;
+      subcategoryValue: string | null;
+      priceValue: number | null;
+    }) => {
+      if (r.alreadyVariantGrouped) return false;
+      if (r.readyForVariantGroup) return true;
+      if (r.hasExisting) return false;
+      if (!r.hasImageMatch || r.errors.length > 0) return false;
+      const tone = describeBulkRowStatus(
+        {
+          errors: r.errors,
+          warnings: r.warnings,
+          hasExisting: r.hasExisting,
+          readyForVariantGroup: r.readyForVariantGroup,
+          alreadyVariantGrouped: r.alreadyVariantGrouped,
+          hasImageMatch: r.hasImageMatch,
+          barcodeRaw: r.barcodeRaw,
+          nameValue: r.nameValue,
+          categorySlug: r.categorySlug,
+          subcategoryValue: r.subcategoryValue,
+          priceValue: r.priceValue,
+        },
+        existingPolicy
+      ).tone;
+      return tone === "ok";
+    },
+    [existingPolicy]
+  );
+
   const previewRowsByBarcodeGroup = useMemo(() => {
     if (!preview?.csvHasVariantGroupColumn) return null;
     const byKey = new Map<string, typeof previewTableRows>();
@@ -2888,28 +2940,50 @@ function AdminBulkTab({
     const actionGroups = allGroups
       .map((g) => {
         const actionableRows = g.rows.filter((r) => !r.alreadyVariantGrouped);
+        const primaryRows = actionableRows.filter((r) => isPrimaryMatchRow(r));
+        const secondaryRows = actionableRows.filter((r) => !isPrimaryMatchRow(r));
         const isLocallyCompleted = completedGroupKeySet.has(g.meta.groupKey);
         return {
           ...g,
           actionableRows,
-          displayRows: isLocallyCompleted ? g.rows : actionableRows,
+          primaryRows,
+          secondaryRows,
+          displayRows: isLocallyCompleted
+            ? g.rows
+            : showSecondaryMatchRows
+              ? actionableRows
+              : primaryRows,
           isLocallyCompleted,
           joinsExistingGroup: g.dbVariants.length > 0,
         };
       })
-      .filter((g) => g.isLocallyCompleted || g.actionableRows.length > 0);
+      .filter((g) => {
+        if (g.isLocallyCompleted) return true;
+        if (showSecondaryMatchRows) return g.actionableRows.length > 0;
+        return g.primaryRows.length > 0;
+      });
 
     const actionUngrouped = ungrouped.filter((r) => {
       if (r.alreadyVariantGrouped) return false;
       if (r.hasExisting && !r.readyForVariantGroup) return false;
       return true;
     });
+    const primaryUngrouped = actionUngrouped.filter((r) => isPrimaryMatchRow(r));
+    const secondaryUngrouped = actionUngrouped.filter((r) => !isPrimaryMatchRow(r));
 
-    return { groups: actionGroups, ungrouped: actionUngrouped, allGroups, allUngrouped: ungrouped };
-  }, [preview, previewTableRows, completedGroupKeySet]);
+    return {
+      groups: actionGroups,
+      ungrouped: showSecondaryMatchRows ? actionUngrouped : primaryUngrouped,
+      actionUngrouped,
+      secondaryUngrouped,
+      secondaryGroupRowCount: actionGroups.reduce((n, g) => n + g.secondaryRows.length, 0),
+      allGroups,
+      allUngrouped: ungrouped,
+    };
+  }, [preview, previewTableRows, completedGroupKeySet, showSecondaryMatchRows, isPrimaryMatchRow]);
 
   /** Filas sin barras (o sin columna): solo acción pendiente en la tabla principal. */
-  const actionPreviewTableRows = useMemo(() => {
+  const allPendingPreviewRows = useMemo(() => {
     if (preview?.csvHasVariantGroupColumn) return previewTableRows;
     return previewTableRows.filter((r) => {
       if (r.alreadyVariantGrouped) return false;
@@ -2917,6 +2991,26 @@ function AdminBulkTab({
       return true;
     });
   }, [preview, previewTableRows]);
+
+  const actionPreviewTableRows = useMemo(() => {
+    if (showSecondaryMatchRows) return allPendingPreviewRows;
+    return allPendingPreviewRows.filter((r) => isPrimaryMatchRow(r));
+  }, [allPendingPreviewRows, showSecondaryMatchRows, isPrimaryMatchRow]);
+
+  const secondaryMatchCount = useMemo(() => {
+    if (!preview) return 0;
+    if (preview.csvHasVariantGroupColumn && previewRowsByBarcodeGroup) {
+      return (
+        (previewRowsByBarcodeGroup.secondaryGroupRowCount ?? 0) +
+        (previewRowsByBarcodeGroup.secondaryUngrouped?.length ?? 0)
+      );
+    }
+    return previewTableRows.filter((r) => {
+      if (r.alreadyVariantGrouped) return false;
+      if (r.hasExisting && !r.readyForVariantGroup) return false;
+      return !isPrimaryMatchRow(r);
+    }).length;
+  }, [preview, previewTableRows, previewRowsByBarcodeGroup, isPrimaryMatchRow]);
 
   const hiddenMatchCount = useMemo(() => {
     if (!preview) return 0;
@@ -2942,10 +3036,10 @@ function AdminBulkTab({
   const incidentRows = useMemo(() => {
     const source = previewRowsByBarcodeGroup
       ? [
-          ...previewRowsByBarcodeGroup.groups.flatMap((g) => g.displayRows),
-          ...previewRowsByBarcodeGroup.ungrouped,
+          ...previewRowsByBarcodeGroup.groups.flatMap((g) => g.actionableRows),
+          ...(previewRowsByBarcodeGroup.actionUngrouped ?? []),
         ]
-      : actionPreviewTableRows;
+      : allPendingPreviewRows;
     return source.filter((r) => {
       if (omittedIncidentIdSet.has(r.previewRowId)) return false;
       if (r.alreadyVariantGrouped) return false;
@@ -2967,13 +3061,12 @@ function AdminBulkTab({
         existingPolicy
       ).tone;
       if (tone === "ok") return false;
-      // Errores, sin foto, avisos bloqueantes, existentes sin poder agrupar, etc.
       if (r.errors.length > 0) return true;
       if (!r.hasExisting && !r.hasImageMatch) return true;
       if (tone === "warn" || tone === "error") return true;
       return false;
     });
-  }, [previewRowsByBarcodeGroup, actionPreviewTableRows, omittedIncidentIdSet, existingPolicy]);
+  }, [previewRowsByBarcodeGroup, allPendingPreviewRows, omittedIncidentIdSet, existingPolicy]);
 
   const incidentFocusRow = incidentRows[incidentFocusIndex] ?? incidentRows[0] ?? null;
 
@@ -2990,6 +3083,7 @@ function AdminBulkTab({
         showToast("No hay filas con error para revisar.", "default", "ℹ️");
         return;
       }
+      setShowSecondaryMatchRows(true);
       const idx = startId ? Math.max(0, list.findIndex((r) => r.previewRowId === startId)) : 0;
       const safeIdx = idx >= 0 ? idx : 0;
       setIncidentFocusIndex(safeIdx);
@@ -2997,7 +3091,7 @@ function AdminBulkTab({
       window.setTimeout(() => {
         const id = list[safeIdx]?.previewRowId;
         if (id) scrollToBulkRow(id);
-      }, 60);
+      }, 80);
       showToast(
         `Hay ${list.length} incidencia(s) que impiden importar. Revísalas o omítelas.`,
         "default",
@@ -3180,6 +3274,42 @@ function AdminBulkTab({
     []
   );
 
+  const openBulkSuccessModal = useCallback(
+    (res: {
+      imported?: number;
+      variantGroupsAssigned?: number;
+    }, keepWorking: boolean) => {
+      const imported = res.imported ?? 0;
+      const variantsAssigned = res.variantGroupsAssigned ?? 0;
+      if (imported <= 0 && variantsAssigned <= 0) return false;
+      setBulkSuccessModal({ imported, variantsAssigned, keepWorking });
+      setIncidentNavOpen(false);
+      return true;
+    },
+    []
+  );
+
+  const cancelBulkSession = useCallback(() => {
+    const id = jobId;
+    resetSession();
+    if (id) {
+      void deleteBulkImportJob(id).catch(() => {
+        /* ignore */
+      });
+    }
+    showToast("Carga masiva cancelada. Puedes subir un nuevo CSV y ZIP.", "default", "🗑️");
+  }, [jobId, showToast]);
+
+  const exitBulkSessionQuiet = useCallback(() => {
+    const id = jobId;
+    resetSession();
+    if (id) {
+      void deleteBulkImportJob(id).catch(() => {
+        /* ignore */
+      });
+    }
+  }, [jobId]);
+
   const commitGroupAsVariants = useCallback(
     async (groupKey: string, rowIds: string[]) => {
       if (!jobId || rowIds.length === 0) return;
@@ -3192,15 +3322,15 @@ function AdminBulkTab({
         applyPartialCommitResult(res, rowIds);
         setCompletedGroupKeys((prev) => (prev.includes(groupKey) ? prev : [...prev, groupKey]));
         const grouped = res.variantGroupsAssigned ?? 0;
-        if (grouped > 0) {
-          showToast(`${grouped} producto(s) agrupados como variantes.`, "success", "📦");
-        } else {
-          showToast("No se aplicó el grupo. Revisa las filas.", "default", "ℹ️");
-        }
         if (res.failed > 0) {
           showToast(`${res.failed} error(es) al agrupar.`, "danger", "⚠️");
         }
         await onImported();
+        if (!openBulkSuccessModal(res, true) && grouped > 0) {
+          showToast(`${grouped} producto(s) agrupados como variantes.`, "success", "📦");
+        } else if (grouped === 0) {
+          showToast("No se aplicó el grupo. Revisa las filas.", "default", "ℹ️");
+        }
       } catch (e) {
         bulkProgress.reset();
         showToast(e instanceof Error ? e.message : "Error al agrupar", "danger", "⚠️");
@@ -3208,7 +3338,7 @@ function AdminBulkTab({
         setMutation(null);
       }
     },
-    [jobId, bulkProgress, applyPartialCommitResult, showToast, onImported, setMutation]
+    [jobId, bulkProgress, applyPartialCommitResult, openBulkSuccessModal, showToast, onImported, setMutation]
   );
 
   const commitSingleNewProduct = useCallback(
@@ -3221,18 +3351,13 @@ function AdminBulkTab({
         const res = await postBulkImportCommit(jobId, [rowId], existingPolicy, { keepJob: true });
         bulkProgress.finish();
         applyPartialCommitResult(res, [rowId]);
-        const created = Math.max(0, res.imported - (res.variantGroupsAssigned ?? 0));
-        if (created > 0) {
-          showToast("Producto nuevo subido.", "success", "🎉");
-        } else if ((res.variantGroupsAssigned ?? 0) > 0) {
-          showToast("Producto vinculado al grupo de variantes.", "success", "📦");
-        } else {
-          showToast("Sin cambios en este producto.", "default", "ℹ️");
-        }
         if (res.failed > 0) {
           showToast(`${res.failed} error(es).`, "danger", "⚠️");
         }
         await onImported();
+        if (!openBulkSuccessModal(res, true)) {
+          showToast("Sin cambios en este producto.", "default", "ℹ️");
+        }
       } catch (e) {
         bulkProgress.reset();
         showToast(e instanceof Error ? e.message : "Error al subir producto", "danger", "⚠️");
@@ -3240,7 +3365,7 @@ function AdminBulkTab({
         setMutation(null);
       }
     },
-    [jobId, existingPolicy, bulkProgress, applyPartialCommitResult, showToast, onImported, setMutation]
+    [jobId, existingPolicy, bulkProgress, applyPartialCommitResult, openBulkSuccessModal, showToast, onImported, setMutation]
   );
 
   const commitSingleAsVariant = useCallback(
@@ -3256,13 +3381,10 @@ function AdminBulkTab({
         if (groupKey) {
           setCompletedGroupKeys((prev) => (prev.includes(groupKey) ? prev : [...prev, groupKey]));
         }
-        const grouped = res.variantGroupsAssigned ?? 0;
-        if (grouped > 0) {
-          showToast("Producto agrupado como variante.", "success", "📦");
-        } else {
+        await onImported();
+        if (!openBulkSuccessModal(res, true)) {
           showToast("No se pudo agrupar este producto.", "default", "ℹ️");
         }
-        await onImported();
       } catch (e) {
         bulkProgress.reset();
         showToast(e instanceof Error ? e.message : "Error al agrupar", "danger", "⚠️");
@@ -3270,7 +3392,7 @@ function AdminBulkTab({
         setMutation(null);
       }
     },
-    [jobId, bulkProgress, applyPartialCommitResult, showToast, onImported, setMutation]
+    [jobId, bulkProgress, applyPartialCommitResult, openBulkSuccessModal, showToast, onImported, setMutation]
   );
 
   const uploadRowImage = useCallback(
@@ -4255,9 +4377,13 @@ function AdminBulkTab({
             </div>
           )}
 
-          <div
+            <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
+              Primero ves solo lo listo para <strong>importar</strong> (nuevos con foto) o{" "}
+              <strong>agrupar</strong>. Lo que no hizo match de imagen u otros estados está en «Ver demás…».
+            </p>
+            <div
             className="admin-bulk-scroll"
-            style={{ marginBottom: 16, border: "1px solid var(--dusty-rose)", borderRadius: "var(--radius-md)" }}
+            style={{ marginBottom: 12 }}
           >
             <table className="admin-table admin-bulk-matched-table" style={{ minWidth: 720, margin: 0 }}>
               <thead>
@@ -4588,6 +4714,47 @@ function AdminBulkTab({
             </table>
           </div>
 
+          {!showSecondaryMatchRows && secondaryMatchCount > 0 ? (
+            <div style={{ marginBottom: 16, display: "flex", justifyContent: "center" }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => setShowSecondaryMatchRows(true)}
+              >
+                Ver demás productos de este análisis y su estado ({secondaryMatchCount})
+              </button>
+            </div>
+          ) : null}
+          {showSecondaryMatchRows && secondaryMatchCount > 0 ? (
+            <div
+              style={{
+                marginBottom: 16,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 10,
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "10px 12px",
+                borderRadius: "var(--radius-md)",
+                background: "#f8f6f5",
+                border: "1px solid var(--line, #e7d9d4)",
+                fontSize: 13,
+                color: "var(--text-muted)",
+              }}
+            >
+              <span>
+                Mostrando también filas sin match de imagen, con errores u otros estados.
+              </span>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => setShowSecondaryMatchRows(false)}
+              >
+                Solo ver listos para importar/agrupar
+              </button>
+            </div>
+          ) : null}
+
           <div
             style={{
               marginBottom: 12,
@@ -4768,35 +4935,39 @@ function AdminBulkTab({
                     const res = await postBulkImportCommit(
                       jobId,
                       [...selectedVariantGroupRowIds].sort(),
-                      "skip"
+                      "skip",
+                      { keepJob: true }
                     );
                     bulkProgress.finish();
+                    setIncidentNavOpen(false);
+                    applyPartialCommitResult(res, selectedVariantGroupRowIds);
                     const grouped = res.variantGroupsAssigned ?? 0;
                     const merged = res.variantGroupsWithMultipleMembers ?? 0;
-                    if (grouped > 0 && merged > 0) {
-                      showToast(
-                        `${grouped} producto(s) agrupados en ${merged} grupo(s) con variantes. Revisa la columna «Variantes» en la lista.`,
-                        "success",
-                        "📦"
-                      );
-                    } else if (grouped > 0) {
-                      showToast(
-                        `Se asignó código Barras a ${grouped} producto(s), pero ninguno quedó unido con otro (cada uno tiene un código Barras distinto en el CSV). Repite el mismo valor en «Barras» para las filas que deben ser variantes del mismo producto.`,
-                        "default",
-                        "ℹ️"
-                      );
-                    } else {
-                      showToast(
-                        "No se aplicó ningún grupo. Verifica que las filas tengan columna Barras y código registrado.",
-                        "default",
-                        "ℹ️"
-                      );
-                    }
                     if (res.failed > 0) {
                       showToast(`${res.failed} error(es). Revisa consola o mensajes.`, "danger", "⚠️");
                     }
                     await onImported();
-                    resetSession();
+                    if (!openBulkSuccessModal(res, true)) {
+                      if (grouped > 0 && merged > 0) {
+                        showToast(
+                          `${grouped} producto(s) agrupados en ${merged} grupo(s) con variantes.`,
+                          "success",
+                          "📦"
+                        );
+                      } else if (grouped > 0) {
+                        showToast(
+                          `Se asignó código Barras a ${grouped} producto(s), pero ninguno quedó unido con otro.`,
+                          "default",
+                          "ℹ️"
+                        );
+                      } else {
+                        showToast(
+                          "No se aplicó ningún grupo. Verifica que las filas tengan columna Barras y código registrado.",
+                          "default",
+                          "ℹ️"
+                        );
+                      }
+                    }
                   } catch (e) {
                     bulkProgress.reset();
                     showToast(e instanceof Error ? e.message : "Error al agrupar variantes", "danger", "⚠️");
@@ -4850,22 +5021,12 @@ function AdminBulkTab({
                     const res = await postBulkImportCommit(
                       jobId,
                       [...selectedOkNewProductRowIds].sort(),
-                      existingPolicy
+                      existingPolicy,
+                      { keepJob: true }
                     );
                     bulkProgress.finish();
                     setIncidentNavOpen(false);
-                    const grouped = res.variantGroupsAssigned ?? 0;
-                    if (grouped > 0) {
-                      showToast(
-                        `Grupos de variantes aplicados a ${grouped} producto(s).`,
-                        "success",
-                        "📦"
-                      );
-                    }
-                    const created = res.imported - grouped;
-                    if (created > 0) {
-                      showToast(`Importados ${created} producto(s) nuevo(s)`, "success", "🎉");
-                    }
+                    applyPartialCommitResult(res, selectedOkNewProductRowIds);
                     const skipped = res.skippedExistingDuplicates ?? 0;
                     if (skipped > 0) {
                       showToast(
@@ -4876,18 +5037,17 @@ function AdminBulkTab({
                         "⏭️"
                       );
                     }
-                    if (res.imported === 0 && grouped === 0 && skipped === 0 && res.failed === 0) {
+                    if (res.failed > 0) {
+                      showToast(`${res.failed} error(es). Revisa consola o mensajes.`, "danger", "⚠️");
+                    }
+                    await onImported();
+                    if (!openBulkSuccessModal(res, true)) {
                       showToast(
                         "No se aplicaron cambios. Selecciona filas nuevas con estado «✓ OK».",
                         "default",
                         "ℹ️"
                       );
                     }
-                    if (res.failed > 0) {
-                      showToast(`${res.failed} error(es). Revisa consola o mensajes.`, "danger", "⚠️");
-                    }
-                    await onImported();
-                    resetSession();
                   } catch (e) {
                     bulkProgress.reset();
                     const msg = e instanceof Error ? e.message : "Error al importar";
@@ -4965,28 +5125,12 @@ function AdminBulkTab({
                     const combinedIds = Array.from(
                       new Set([...selectedVariantGroupRowIds, ...selectedOkNewProductRowIds])
                     ).sort();
-                    const res = await postBulkImportCommit(jobId, combinedIds, existingPolicy);
+                    const res = await postBulkImportCommit(jobId, combinedIds, existingPolicy, {
+                      keepJob: true,
+                    });
                     bulkProgress.finish();
                     setIncidentNavOpen(false);
-                    const grouped = res.variantGroupsAssigned ?? 0;
-                    const merged = res.variantGroupsWithMultipleMembers ?? 0;
-                    const created = Math.max(0, res.imported - grouped);
-                    if (created > 0) {
-                      showToast(`Importados ${created} producto(s) nuevo(s)`, "success", "🎉");
-                    }
-                    if (grouped > 0 && merged > 0) {
-                      showToast(
-                        `${grouped} producto(s) agrupados en ${merged} grupo(s) con variantes.`,
-                        "success",
-                        "📦"
-                      );
-                    } else if (grouped > 0) {
-                      showToast(
-                        `Se asignó código Barras a ${grouped} producto(s).`,
-                        "success",
-                        "📦"
-                      );
-                    }
+                    applyPartialCommitResult(res, combinedIds);
                     const skipped = res.skippedExistingDuplicates ?? 0;
                     if (skipped > 0) {
                       showToast(
@@ -5001,7 +5145,9 @@ function AdminBulkTab({
                       showToast(`${res.failed} error(es). Revisa consola o mensajes.`, "danger", "⚠️");
                     }
                     await onImported();
-                    resetSession();
+                    if (!openBulkSuccessModal(res, true)) {
+                      showToast("No se aplicaron cambios en esta acción.", "default", "ℹ️");
+                    }
                   } catch (e) {
                     bulkProgress.reset();
                     showToast(
@@ -5026,6 +5172,16 @@ function AdminBulkTab({
               ) : (
                 `✨ Importar ${selectedOkNewProductRowIds.length} y agrupar ${selectedVariantGroupRowIds.length}`
               )}
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-outline"
+              disabled={saving}
+              onClick={cancelBulkSession}
+              style={{ borderColor: "rgba(120,120,120,0.35)", color: "var(--text-muted)" }}
+            >
+              Cancelar
             </button>
           </div>
           {taxonomyRehomeHints.length > 0 && (
@@ -5060,6 +5216,56 @@ function AdminBulkTab({
         }}
         onSave={saveBulkRowEdits}
       />
+      {bulkSuccessModal ? (
+        <div
+          className="admin-modal-overlay open"
+          style={{ backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", background: "rgba(30, 22, 20, 0.45)" }}
+          role="presentation"
+        >
+          <div
+            className="admin-modal"
+            style={{ maxWidth: 440, textAlign: "center", padding: "28px 24px 22px" }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Resultado de la carga"
+          >
+            <div style={{ fontSize: 42, marginBottom: 10 }} aria-hidden>
+              ✨
+            </div>
+            <h3 style={{ margin: "0 0 10px", fontSize: 22, color: "var(--dark)" }}>Todo salió bien</h3>
+            <p style={{ margin: "0 0 22px", fontSize: 15, lineHeight: 1.55, color: "var(--text)" }}>
+              {bulkSuccessModal.imported > 0 && bulkSuccessModal.variantsAssigned > 0
+                ? `Se importaron ${bulkSuccessModal.imported} producto(s) y se añadieron ${bulkSuccessModal.variantsAssigned} variante(s).`
+                : bulkSuccessModal.imported > 0
+                  ? `Se importaron ${bulkSuccessModal.imported} producto(s).`
+                  : `Se añadieron ${bulkSuccessModal.variantsAssigned} variante(s).`}
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center" }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setBulkSuccessModal(null);
+                  exitBulkSessionQuiet();
+                }}
+              >
+                Ok, salir
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => {
+                  const keep = bulkSuccessModal.keepWorking;
+                  setBulkSuccessModal(null);
+                  if (!keep) exitBulkSessionQuiet();
+                }}
+              >
+                Quedarme aquí
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {showFullMatchesModal && preview ? (
         <div
           className="admin-modal-overlay open"
