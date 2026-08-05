@@ -28,6 +28,7 @@ import {
   deleteBulkImportZip,
   resolveBulkImportZipBuffer,
 } from "@/lib/server/bulk-import-zip-store";
+import { enrichBulkPreviewFromDatabase } from "@/lib/server/bulk-import-mark-existing";
 import {
   CatalogActions,
   CatalogEntities,
@@ -49,6 +50,8 @@ const commitSchema = z
     rowIds: z.array(z.string().min(1)).optional(),
     rowIndexes: z.array(z.number().int().min(0)).optional(),
     existingPolicy: z.enum(["skip", "replace", "omit"]).optional().default("skip"),
+    /** Si true, no cierra la sesión: re-enriquece el preview y conserva ZIP para seguir trabajando. */
+    keepJob: z.boolean().optional().default(false),
   })
   .refine((v) => (v.rowIds?.length ?? 0) > 0 || (v.rowIndexes?.length ?? 0) > 0, {
     message: "Selecciona al menos una fila",
@@ -159,6 +162,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
 
   const existingPolicy = parsed.data.existingPolicy ?? "skip";
+  const keepJob = parsed.data.keepJob === true;
 
   if (preview.tintSelectionResolved === false) {
     const idSetEarly = new Set(parsed.data.rowIds ?? []);
@@ -528,6 +532,37 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       errors,
     };
 
+    if (keepJob) {
+      await enrichBulkPreviewFromDatabase(prisma, preview);
+      await prisma.bulkImportJob.update({
+        where: { id: jobId },
+        data: {
+          status: BulkImportStatus.PREVIEW,
+          errorMessage: errors.length ? errors.join("\n").slice(0, 2000) : null,
+          stats: {
+            ...(typeof preview.stats === "object" && preview.stats ? preview.stats : {}),
+            lastPartialCommit: finalStats,
+          } as unknown as object,
+          previewPayload: preview as unknown as object,
+        },
+      });
+
+      return noStoreJson({
+        ok: true,
+        imported: createdProducts.length,
+        failed: errors.length,
+        errors,
+        products: createdProducts,
+        skippedExistingDuplicates,
+        variantGroupsAssigned,
+        variantGroupsWithMultipleMembers,
+        variantGroupsSingleton,
+        keepJob: true,
+        preview,
+        expiresAt: job.expiresAt.toISOString(),
+      });
+    }
+
     /** Tras commit: no conservar CSV/ZIP ni preview completo en DB (solo resumen para diagnÃ³stico). */
     const minimalPayload = {
       purgedAt: new Date().toISOString(),
@@ -565,6 +600,17 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error en importaciÃ³n";
+    if (keepJob) {
+      await prisma.bulkImportJob.update({
+        where: { id: jobId },
+        data: {
+          status: BulkImportStatus.PREVIEW,
+          errorMessage: msg.slice(0, 2000),
+        },
+      });
+      console.error("[POST commit bulk keepJob]", e);
+      return noStoreJson({ error: msg }, { status: 500 });
+    }
     await prisma.bulkImportJob.update({
       where: { id: jobId },
       data: {

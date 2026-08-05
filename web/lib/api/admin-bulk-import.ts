@@ -136,18 +136,26 @@ export type BulkCommitResponse = {
   variantGroupsSingleton?: number;
   errors: string[];
   products: AdminProduct[];
+  keepJob?: boolean;
+  preview?: BulkPreviewResult;
+  expiresAt?: string;
 };
 
 export async function postBulkImportCommit(
   jobId: string,
   rowIds: string[],
-  existingPolicy: "skip" | "replace" | "omit"
+  existingPolicy: "skip" | "replace" | "omit",
+  opts?: { keepJob?: boolean }
 ): Promise<BulkCommitResponse> {
   const res = await fetch(`/api/admin/import/bulk/${jobId}/commit`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ rowIds, existingPolicy }),
+    body: JSON.stringify({
+      rowIds,
+      existingPolicy,
+      ...(opts?.keepJob ? { keepJob: true } : {}),
+    }),
   });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as BulkCommitResponse;

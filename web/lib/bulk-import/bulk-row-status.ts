@@ -12,6 +12,8 @@ type StatusRowInput = {
   warnings: string[];
   hasExisting: boolean;
   readyForVariantGroup: boolean;
+  /** Ya tiene en tienda el mismo código Barras del CSV. */
+  alreadyVariantGrouped?: boolean;
   hasImageMatch: boolean;
   barcodeRaw: string | null;
   nameValue: string | null;
@@ -49,10 +51,18 @@ export function describeBulkRowStatus(
     };
   }
 
+  if (r.alreadyVariantGrouped) {
+    return {
+      label: "✓ Ya agrupado",
+      hint: "Este producto ya está en la tienda y pertenece al mismo grupo de barras del CSV. No hace falta volver a importarlo ni agruparlo; aparece en «Ver coincidencias completas».",
+      tone: "existing",
+    };
+  }
+
   if (r.readyForVariantGroup) {
     return {
       label: "📦 Listo para agrupar",
-      hint: "El producto ya está en la tienda y tiene código de barras (o color) para unirlo como variante. Márcalo y usa «Agrupar como variantes» o «Importar y agrupar». No se vuelve a crear el producto.",
+      hint: "El producto ya está en la tienda y tiene código de barras (o color) para unirlo como variante. Usa «Agrupar» en el grupo o «Agrupar como variantes» abajo. No se vuelve a crear el producto.",
       tone: "group",
     };
   }
@@ -156,4 +166,10 @@ export function variantGroupColorAt(index: number) {
   return VARIANT_GROUP_COLORS[index % VARIANT_GROUP_COLORS.length]!;
 }
 
-export type VariantGroupColor = (typeof VARIANT_GROUP_COLORS)[number];
+export type VariantGroupColor = {
+  name: string;
+  headerBg: string;
+  headerBorder: string;
+  headerText: string;
+  rowBg: string;
+};

@@ -6,6 +6,7 @@ export type BulkPreviewDbVariant = {
   name: string;
   externalRef: string | null;
   variantGroupOrder: number | null;
+  imageUrl: string | null;
 };
 
 export type BulkPreviewVariantGroup = {
@@ -83,6 +84,7 @@ export function dbVariantsByGroupFromProducts(
     externalRef: string | null;
     variantGroupCode: string | null;
     variantGroupOrder: number | null;
+    imageUrl?: string | null;
   }>
 ): Map<string, BulkPreviewDbVariant[]> {
   const map = new Map<string, BulkPreviewDbVariant[]>();
@@ -95,6 +97,7 @@ export function dbVariantsByGroupFromProducts(
       name: p.name,
       externalRef: p.externalRef,
       variantGroupOrder: p.variantGroupOrder,
+      imageUrl: p.imageUrl ?? null,
     });
   }
   for (const list of map.values()) {

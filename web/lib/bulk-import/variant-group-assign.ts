@@ -1,8 +1,15 @@
 import type { BulkPreviewRow } from "./build-preview";
 import { normalizeColorHex } from "@/lib/product-color";
+import { variantGroupCodesMatch } from "./variant-group-code";
 
 /** Política para filas cuyo código ya existe en tienda. */
 export type BulkExistingPolicy = "skip" | "replace" | "omit";
+
+/** Producto ya en tienda y con el mismo código Barras del CSV (nada que agrupar). */
+export function bulkRowIsAlreadyVariantGrouped(row: BulkPreviewRow): boolean {
+  if (!row.isExistingProduct) return false;
+  return variantGroupCodesMatch(row.mapped.variantGroupCode, row.existingVariantGroupCode);
+}
 
 /** Fila existente en tienda a la que solo se asignará código de barras / orden de variante. */
 export function bulkRowIsVariantGroupAssign(
@@ -78,5 +85,6 @@ export function bulkRowIsReadyForVariantGroupAssign(
   row: BulkPreviewRow,
   existingPolicy: BulkExistingPolicy
 ): boolean {
+  if (bulkRowIsAlreadyVariantGrouped(row)) return false;
   return bulkRowIsVariantGroupAssign(row, existingPolicy) && bulkRowBlockingIssues(row, existingPolicy).length === 0;
 }

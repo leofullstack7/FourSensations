@@ -44,6 +44,7 @@ export async function enrichBulkPreviewFromDatabase(
       externalRef: true,
       variantGroupCode: true,
       variantGroupOrder: true,
+      imageUrl: true,
     },
   });
 
@@ -110,6 +111,7 @@ export async function enrichBulkPreviewFromDatabase(
         externalRef: true,
         variantGroupCode: true,
         variantGroupOrder: true,
+        imageUrl: true,
       },
     });
     const filtered = inGroups.filter((p) => {
