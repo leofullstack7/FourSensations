@@ -101,6 +101,26 @@ export async function postAdminProductsBulkDelete(
   return (await res.json()) as { deleted: number };
 }
 
+export async function postAdminProductsBulkPatch(body: {
+  ids: string[];
+  brand?: string;
+  stock?: number;
+  stockById?: Record<string, number>;
+}): Promise<{ updated: number; products: AdminProduct[] }> {
+  const res = await fetch("/api/admin/products/bulk-patch", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = (await res.json()) as { updated: number; products?: AdminProduct[] };
+  return {
+    updated: data.updated,
+    products: Array.isArray(data.products) ? data.products.map(normalizeAdminProduct) : [],
+  };
+}
+
 export async function postAdminProductsMerge(body: {
   survivorId: string;
   absorbedIds: string[];

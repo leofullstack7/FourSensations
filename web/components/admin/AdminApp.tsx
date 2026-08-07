@@ -57,6 +57,11 @@ import {
 } from "@/components/admin/AdminBulkMissingPriceModal";
 import { BulkDiffCell, BulkModePicker } from "@/components/admin/AdminBulkModeUi";
 import { AdminBulkMatchedImages } from "@/components/admin/AdminBulkMatchedImages";
+import {
+  AdminZeroPriceBrandModal,
+  AdminZeroPriceStockPanel,
+  productsWithZeroPrice,
+} from "@/components/admin/AdminZeroPriceTools";
 import { AdminProductAiDetailPanel, AdminProductDescriptionBlock } from "@/components/admin/AdminProductAiUi";
 import { computeBulkRowFieldDiffs, bulkRowHasUpdatableDiffs } from "@/lib/bulk-import/bulk-field-diff";
 import type { BulkFieldDiff } from "@/lib/bulk-import/bulk-field-diff";
@@ -265,7 +270,8 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   const [stockSavingId, setStockSavingId] = useState<string | null>(null);
   const [onlineSales, setOnlineSales] = useState<AdminSale[]>([]);
   const [manualSales, setManualSales] = useState<AdminSale[]>([]);
-  const [productTab, setProductTab] = useState<"list" | "add" | "bulk">("list");
+  const [productTab, setProductTab] = useState<"list" | "add" | "bulk" | "zero-stock">("list");
+  const [zeroPriceBrandModalOpen, setZeroPriceBrandModalOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [productFilterBrand, setProductFilterBrand] = useState("");
   const [productFilterCategorySlug, setProductFilterCategorySlug] = useState("");
@@ -497,6 +503,11 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
     out.sort((a, b) => a.localeCompare(b, "es"));
     return out;
   }, [products]);
+
+  const zeroPriceProductCount = useMemo(
+    () => productsWithZeroPrice(products).length,
+    [products]
+  );
 
   const productFilterSubcategoryOptions = useMemo(() => {
     const pool = productFilterCategorySlug
@@ -1357,6 +1368,42 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                         type="button"
                         role="menuitem"
                         className="btn btn-outline btn-sm"
+                        disabled={productBulkDeleting || productAiBusy || zeroPriceProductCount === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        title={
+                          zeroPriceProductCount === 0
+                            ? "No hay productos con precio 0"
+                            : `Afecta ${zeroPriceProductCount} producto(s) con precio 0`
+                        }
+                        onClick={() => {
+                          setProductBulkMenuOpen(false);
+                          setZeroPriceBrandModalOpen(true);
+                        }}
+                      >
+                        Cambiar familia / marca (precio 0) ({zeroPriceProductCount})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={productBulkDeleting || productAiBusy || zeroPriceProductCount === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        title={
+                          zeroPriceProductCount === 0
+                            ? "No hay productos con precio 0"
+                            : `Editar stock de ${zeroPriceProductCount} producto(s)`
+                        }
+                        onClick={() => {
+                          setProductBulkMenuOpen(false);
+                          setProductTab("zero-stock");
+                        }}
+                      >
+                        Asignar stock (precio 0) ({zeroPriceProductCount})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
                         disabled={
                           productBulkDeleting ||
                           productMergeBusy ||
@@ -1509,6 +1556,14 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                   }}
                 />
               )}
+              {productTab === "zero-stock" && (
+                <AdminZeroPriceStockPanel
+                  products={products}
+                  onBack={() => setProductTab("list")}
+                  onApplied={loadProducts}
+                  showToast={showToast}
+                />
+              )}
             </div>
 
             <div className={`admin-page ${page === "category-products" ? "active" : ""}`} style={{ display: page === "category-products" ? "block" : "none" }}>
@@ -1659,6 +1714,18 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
         }}
         showToast={showToast}
       />
+
+      {zeroPriceBrandModalOpen ? (
+        <AdminZeroPriceBrandModal
+          open={zeroPriceBrandModalOpen}
+          products={products}
+          brandOptions={productFilterBrandOptions}
+          saving={productBulkDeleting}
+          onClose={() => setZeroPriceBrandModalOpen(false)}
+          onApplied={loadProducts}
+          showToast={showToast}
+        />
+      ) : null}
 
       {productMergeOpen ? (
         <div
