@@ -106,7 +106,9 @@ export async function postAdminProductsBulkPatch(body: {
   brand?: string;
   stock?: number;
   stockById?: Record<string, number>;
-}): Promise<{ updated: number; products: AdminProduct[] }> {
+  recordVersion?: boolean;
+  versionLabel?: string;
+}): Promise<{ updated: number; requested: number }> {
   const res = await fetch("/api/admin/products/bulk-patch", {
     method: "POST",
     credentials: "include",
@@ -114,10 +116,10 @@ export async function postAdminProductsBulkPatch(body: {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(await parseError(res));
-  const data = (await res.json()) as { updated: number; products?: AdminProduct[] };
+  const data = (await res.json()) as { updated: number; requested?: number };
   return {
     updated: data.updated,
-    products: Array.isArray(data.products) ? data.products.map(normalizeAdminProduct) : [],
+    requested: data.requested ?? body.ids.length,
   };
 }
 

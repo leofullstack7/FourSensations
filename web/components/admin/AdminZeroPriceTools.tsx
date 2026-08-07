@@ -5,10 +5,117 @@ import type { AdminProduct } from "@/lib/types/admin";
 import { formatPrice } from "@/lib/format";
 import { postAdminProductsBulkPatch } from "@/lib/api/admin-products";
 
+const CHUNK_SIZE = 40;
+
 export function productsWithZeroPrice(products: AdminProduct[]): AdminProduct[] {
   return products
     .filter((p) => Number(p.price) === 0)
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
+
+async function runChunkedBulkPatch(
+  opts: {
+    ids: string[];
+    brand?: string;
+    stock?: number;
+    stockById?: Record<string, number>;
+    versionLabel: string;
+    onProgress: (done: number, total: number) => void;
+  }
+): Promise<number> {
+  const { ids, brand, stock, stockById, versionLabel, onProgress } = opts;
+  const total = ids.length;
+  let updated = 0;
+  onProgress(0, total);
+
+  for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+    const chunkIds = ids.slice(i, i + CHUNK_SIZE);
+    const isLast = i + CHUNK_SIZE >= ids.length;
+    const chunkStockById =
+      stockById != null
+        ? Object.fromEntries(
+            chunkIds
+              .filter((id) => stockById[id] != null)
+              .map((id) => [id, stockById[id]!])
+          )
+        : undefined;
+
+    const res = await postAdminProductsBulkPatch({
+      ids: chunkIds,
+      ...(brand !== undefined ? { brand } : {}),
+      ...(stock !== undefined ? { stock } : {}),
+      ...(chunkStockById && Object.keys(chunkStockById).length > 0 ? { stockById: chunkStockById } : {}),
+      recordVersion: isLast,
+      versionLabel: isLast ? versionLabel : undefined,
+    });
+    updated += res.updated;
+    onProgress(Math.min(i + chunkIds.length, total), total);
+  }
+
+  return updated;
+}
+
+function BulkProgressBar({
+  done,
+  total,
+  label,
+}: {
+  done: number;
+  total: number;
+  label: string;
+}) {
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        marginTop: 12,
+        padding: "12px 14px",
+        borderRadius: 10,
+        border: "1px solid var(--dusty-rose)",
+        background: "linear-gradient(135deg, #fffafc 0%, #f3e8ff 100%)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 8,
+          fontSize: 13,
+          fontWeight: 600,
+          marginBottom: 8,
+          color: "#7a2f5a",
+        }}
+      >
+        <span>
+          <span className="admin-inline-spinner" aria-hidden style={{ marginRight: 8 }} />
+          {label}
+        </span>
+        <span>
+          {done} / {total} ({pct}%)
+        </span>
+      </div>
+      <div
+        style={{
+          height: 10,
+          borderRadius: 999,
+          background: "rgba(200,145,139,0.2)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            height: "100%",
+            width: `${pct}%`,
+            borderRadius: 999,
+            background: "linear-gradient(90deg, var(--rose, #c8918b), #8b5cf6)",
+            transition: "width 0.25s ease",
+          }}
+        />
+      </div>
+    </div>
+  );
 }
 
 /** Modal: asignar la misma familia/marca a todos los productos con precio 0. */
@@ -34,18 +141,20 @@ export function AdminZeroPriceBrandModal({
   const [pickedBrand, setPickedBrand] = useState("");
   const [customBrand, setCustomBrand] = useState("");
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setMode(brandOptions.length > 0 ? "pick" : "custom");
     setPickedBrand(brandOptions[0] ?? "");
     setCustomBrand("");
+    setProgress(null);
+    setBusy(false);
   }, [open, brandOptions]);
 
   if (!open) return null;
 
-  const brand =
-    mode === "custom" ? customBrand.trim() : pickedBrand.trim();
+  const brand = mode === "custom" ? customBrand.trim() : pickedBrand.trim();
 
   const submit = () => {
     if (!brand) {
@@ -58,13 +167,16 @@ export function AdminZeroPriceBrandModal({
     }
     void (async () => {
       setBusy(true);
+      setProgress({ done: 0, total: zeroPrice.length });
       try {
-        const res = await postAdminProductsBulkPatch({
+        const updated = await runChunkedBulkPatch({
           ids: zeroPrice.map((p) => p.id),
           brand,
+          versionLabel: `Familia/marca «${brand}» en ${zeroPrice.length} producto(s) con precio 0`,
+          onProgress: (done, total) => setProgress({ done, total }),
         });
         showToast(
-          `Familia/marca «${brand}» aplicada a ${res.updated} producto(s) con precio 0.`,
+          `Familia/marca «${brand}» aplicada a ${updated} producto(s) con precio 0.`,
           "success",
           "✅"
         );
@@ -74,6 +186,7 @@ export function AdminZeroPriceBrandModal({
         showToast(e instanceof Error ? e.message : "No se pudo actualizar", "danger", "⚠️");
       } finally {
         setBusy(false);
+        setProgress(null);
       }
     })();
   };
@@ -106,7 +219,7 @@ export function AdminZeroPriceBrandModal({
               type="radio"
               name="zero-brand-mode"
               checked={mode === "pick"}
-              disabled={brandOptions.length === 0}
+              disabled={brandOptions.length === 0 || busy}
               onChange={() => setMode("pick")}
             />
             Elegir una existente
@@ -133,6 +246,7 @@ export function AdminZeroPriceBrandModal({
               type="radio"
               name="zero-brand-mode"
               checked={mode === "custom"}
+              disabled={busy}
               onChange={() => setMode("custom")}
             />
             Escribir otra familia / marca
@@ -147,7 +261,15 @@ export function AdminZeroPriceBrandModal({
           />
         </div>
 
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+        {progress ? (
+          <BulkProgressBar
+            done={progress.done}
+            total={progress.total}
+            label={`Aplicando «${brand}»…`}
+          />
+        ) : null}
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" className="btn btn-outline" disabled={busy} onClick={onClose}>
             Cancelar
           </button>
@@ -160,7 +282,7 @@ export function AdminZeroPriceBrandModal({
             {busy ? (
               <>
                 <span className="admin-inline-spinner" aria-hidden />
-                Aplicando…
+                {progress ? `${progress.done}/${progress.total}` : "Aplicando…"}
               </>
             ) : (
               `Aplicar a ${zeroPrice.length}`
@@ -189,6 +311,7 @@ export function AdminZeroPriceStockPanel({
   const [batchStock, setBatchStock] = useState("");
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   useEffect(() => {
     const next: Record<string, string> = {};
@@ -245,14 +368,21 @@ export function AdminZeroPriceStockPanel({
     }
     void (async () => {
       setBusy(true);
+      setProgress({ done: 0, total: ids.length });
       try {
-        const res = await postAdminProductsBulkPatch({ ids, stockById });
-        showToast(`Stock actualizado en ${res.updated} producto(s).`, "success", "✅");
+        const updated = await runChunkedBulkPatch({
+          ids,
+          stockById,
+          versionLabel: `Stock actualizado en ${ids.length} producto(s) con precio 0`,
+          onProgress: (done, total) => setProgress({ done, total }),
+        });
+        showToast(`Stock actualizado en ${updated} producto(s).`, "success", "✅");
         await onApplied();
       } catch (e) {
         showToast(e instanceof Error ? e.message : "No se pudo guardar", "danger", "⚠️");
       } finally {
         setBusy(false);
+        setProgress(null);
       }
     })();
   };
@@ -283,13 +413,23 @@ export function AdminZeroPriceStockPanel({
           {busy ? (
             <>
               <span className="admin-inline-spinner" aria-hidden />
-              Guardando…
+              {progress ? `${progress.done}/${progress.total}` : "Guardando…"}
             </>
           ) : (
             "Guardar cambios de stock"
           )}
         </button>
       </div>
+
+      {progress ? (
+        <div style={{ marginBottom: 14 }}>
+          <BulkProgressBar
+            done={progress.done}
+            total={progress.total}
+            label="Guardando stock…"
+          />
+        </div>
+      ) : null}
 
       <div
         style={{
