@@ -101,6 +101,27 @@ export async function postAdminProductsBulkDelete(
   return (await res.json()) as { deleted: number };
 }
 
+export async function postAdminProductsMerge(body: {
+  survivorId: string;
+  absorbedIds: string[];
+  name: string;
+}): Promise<{ ok: boolean; mergedCount: number; imageCount: number; product: AdminProduct }> {
+  const res = await fetch("/api/admin/products/merge", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = (await res.json()) as {
+    ok: boolean;
+    mergedCount: number;
+    imageCount: number;
+    product: AdminProduct;
+  };
+  return { ...data, product: normalizeAdminProduct(data.product) };
+}
+
 /** Asigna a cada producto la etiqueta de menú (`Subcategory.menuTag`) de su subcategoría. */
 export async function postSyncProductTagsFromMenu(): Promise<{ updated: number; total: number }> {
   const res = await fetch("/api/admin/products/sync-menu-tags", {

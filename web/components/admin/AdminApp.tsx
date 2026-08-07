@@ -22,6 +22,7 @@ import {
   fetchAdminProducts,
   postAdminProductsAiCompleteOne,
   postAdminProductsBulkDelete,
+  postAdminProductsMerge,
   postAdminProductsAiClear,
   updateAdminProduct,
 } from "@/lib/api/admin-products";
@@ -269,6 +270,11 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   const [productListSelectedIds, setProductListSelectedIds] = useState<Set<string>>(() => new Set());
   const [productBulkMenuOpen, setProductBulkMenuOpen] = useState(false);
   const [productBulkDeleting, setProductBulkDeleting] = useState(false);
+  const [productMergeOpen, setProductMergeOpen] = useState(false);
+  const [productMergeBusy, setProductMergeBusy] = useState(false);
+  const [productMergeNameMode, setProductMergeNameMode] = useState<"pick" | "custom">("pick");
+  const [productMergePickedId, setProductMergePickedId] = useState("");
+  const [productMergeCustomName, setProductMergeCustomName] = useState("");
   const [productAiBusy, setProductAiBusy] = useState(false);
   const [aiBulkModalOpen, setAiBulkModalOpen] = useState(false);
   const [aiBulkPhase, setAiBulkPhase] = useState<"intro" | "running" | "done">("intro");
@@ -621,6 +627,66 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
       setProductBulkDeleting(false);
     }
   }, [productListSelectedIds, showToast, loadProducts, clearProductListSelection]);
+
+  const selectedProductsForMerge = useMemo(() => {
+    return products.filter((p) => productListSelectedIds.has(p.id));
+  }, [products, productListSelectedIds]);
+
+  const openProductMergeModal = useCallback(() => {
+    if (selectedProductsForMerge.length < 2) {
+      showToast("Selecciona al menos 2 productos para unirlos", "default", "ℹ️");
+      return;
+    }
+    setProductBulkMenuOpen(false);
+    setProductMergePickedId(selectedProductsForMerge[0]!.id);
+    setProductMergeCustomName("");
+    setProductMergeNameMode("pick");
+    setProductMergeOpen(true);
+  }, [selectedProductsForMerge, showToast]);
+
+  const confirmProductMerge = useCallback(() => {
+    if (selectedProductsForMerge.length < 2) return;
+    const picked = selectedProductsForMerge.find((p) => p.id === productMergePickedId);
+    const name =
+      productMergeNameMode === "custom"
+        ? productMergeCustomName.trim()
+        : (picked?.name ?? "").trim();
+    if (!name) {
+      showToast("Elige o escribe el nombre del producto unificado", "default", "ℹ️");
+      return;
+    }
+    const survivorId =
+      productMergeNameMode === "pick" && productMergePickedId
+        ? productMergePickedId
+        : selectedProductsForMerge[0]!.id;
+    const absorbedIds = selectedProductsForMerge.map((p) => p.id).filter((id) => id !== survivorId);
+    void (async () => {
+      setProductMergeBusy(true);
+      try {
+        const res = await postAdminProductsMerge({ survivorId, absorbedIds, name });
+        setProductMergeOpen(false);
+        clearProductListSelection();
+        await loadProducts();
+        showToast(
+          `Unidos ${res.mergedCount} productos en «${res.product.name}» (${res.imageCount} imagen(es)).`,
+          "success",
+          "🔗"
+        );
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "No se pudieron unir", "danger", "⚠️");
+      } finally {
+        setProductMergeBusy(false);
+      }
+    })();
+  }, [
+    selectedProductsForMerge,
+    productMergePickedId,
+    productMergeNameMode,
+    productMergeCustomName,
+    showToast,
+    clearProductListSelection,
+    loadProducts,
+  ]);
 
   const handleBulkAiComplete = useCallback(() => {
     const ids = Array.from(productListSelectedIds);
@@ -1296,6 +1362,20 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                         type="button"
                         role="menuitem"
                         className="btn btn-outline btn-sm"
+                        disabled={
+                          productBulkDeleting ||
+                          productMergeBusy ||
+                          productListSelectedIds.size < 2
+                        }
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={openProductMergeModal}
+                      >
+                        Unir seleccionados en uno solo ({productListSelectedIds.size})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
                         disabled={productBulkDeleting || productListSelectedIds.size === 0}
                         style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
                         onClick={() => void handleBulkDeleteSelected()}
@@ -1584,6 +1664,133 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
         }}
         showToast={showToast}
       />
+
+      {productMergeOpen ? (
+        <div
+          className="admin-modal-overlay open"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !productMergeBusy) setProductMergeOpen(false);
+          }}
+        >
+          <div
+            className="admin-modal"
+            style={{ maxWidth: 480, padding: "22px 20px" }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Unir productos"
+          >
+            <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>Unir productos en uno solo</h3>
+            <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
+              Se conservará un producto, se juntarán todas las imágenes y se eliminarán los demás
+              ({selectedProductsForMerge.length} seleccionados).
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14, maxHeight: 320, overflow: "auto" }}>
+              {selectedProductsForMerge.map((p) => {
+                const imgCount = (p.imageUrl ? 1 : 0) + (p.images?.length ?? 0);
+                return (
+                  <label
+                    key={p.id}
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "flex-start",
+                      fontSize: 13,
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      border:
+                        productMergeNameMode === "pick" && productMergePickedId === p.id
+                          ? "1px solid var(--dusty-rose)"
+                          : "1px solid var(--cream)",
+                      background: "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="admin-merge-name"
+                      checked={productMergeNameMode === "pick" && productMergePickedId === p.id}
+                      onChange={() => {
+                        setProductMergeNameMode("pick");
+                        setProductMergePickedId(p.id);
+                      }}
+                    />
+                    <span>
+                      <strong>{p.name}</strong>
+                      <span
+                        style={{
+                          display: "block",
+                          fontFamily: "monospace",
+                          fontSize: 12,
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        {p.externalRef ?? p.id.slice(0, 8)}
+                        {imgCount ? ` · ${imgCount} imagen(es)` : ""}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  fontSize: 13,
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  border:
+                    productMergeNameMode === "custom" ? "1px solid var(--dusty-rose)" : "1px solid var(--cream)",
+                }}
+              >
+                <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="radio"
+                    name="admin-merge-name"
+                    checked={productMergeNameMode === "custom"}
+                    onChange={() => setProductMergeNameMode("custom")}
+                  />
+                  Escribir otro nombre
+                </span>
+                <input
+                  className="form-input"
+                  value={productMergeCustomName}
+                  disabled={productMergeNameMode !== "custom"}
+                  placeholder="Nombre del producto unificado"
+                  onChange={(e) => setProductMergeCustomName(e.target.value)}
+                  onFocus={() => setProductMergeNameMode("custom")}
+                />
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={productMergeBusy}
+                onClick={() => setProductMergeOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={productMergeBusy}
+                onClick={confirmProductMerge}
+              >
+                {productMergeBusy ? (
+                  <>
+                    <span className="admin-inline-spinner" aria-hidden />
+                    Uniendo…
+                  </>
+                ) : (
+                  "Unir y juntar imágenes"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <AdminAiBulkProgressModal
         open={aiBulkModalOpen}
