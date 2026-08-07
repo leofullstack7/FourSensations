@@ -227,9 +227,9 @@ export function StoreHomeClient({
 
       <BeautyAiAdvisor />
 
-      <CategoryShowcaseStrip categoryPath={categoryPath} />
-
       {tintItems.length > 0 && <TintHomePreview items={tintItems} />}
+
+      <CategoryShowcaseStrip categoryPath={categoryPath} />
 
       <GinnaInnovationStrip />
 

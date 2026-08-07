@@ -233,19 +233,32 @@ export function StorefrontShell({
 
   const cartCount = useMemo(() => cart.reduce((s, i) => s + i.qty, 0), [cart]);
 
+  const productsRef = useRef(products);
+  productsRef.current = products;
+
   const addToCart = useCallback(
-    (productId: string) => {
-      const product = products.find((p) => p.id === productId);
-      if (!product) return;
-      const existing = cart.find((i) => i.id === productId);
-      if (existing) {
-        persistCart(cart.map((i) => (i.id === productId ? { ...i, qty: i.qty + 1 } : i)));
-      } else {
-        persistCart([...cart, { ...product, qty: 1 }]);
+    (productId: string, productSnapshot?: StoreProduct) => {
+      const product =
+        productsRef.current.find((p) => p.id === productId) ?? productSnapshot ?? null;
+      if (!product) {
+        showToast("No se pudo agregar al carrito. Abre el producto e inténtalo de nuevo.", "danger", "⚠️");
+        return;
       }
+      if (productSnapshot) {
+        mergeCatalogProducts([product]);
+      }
+      setCart((prev) => {
+        const existing = prev.find((i) => i.id === productId);
+        const next = existing
+          ? prev.map((i) => (i.id === productId ? { ...i, qty: i.qty + 1 } : i))
+          : [...prev, { ...product, qty: 1, comboId: undefined, comboItems: undefined }];
+        saveCart(next);
+        return next;
+      });
       showToast(`${product.name} agregado al carrito`, "success", "🛒");
+      setCartOpen(true);
     },
-    [cart, persistCart, products, showToast],
+    [mergeCatalogProducts, showToast],
   );
 
   const addComboToCart = useCallback(
@@ -279,15 +292,18 @@ export function StorefrontShell({
           emoji: i.product.emoji ?? undefined,
         })),
       };
-      const existing = cart.find((i) => i.id === lineId);
-      if (existing) {
-        persistCart(cart.map((i) => (i.id === lineId ? { ...i, qty: i.qty + 1 } : i)));
-      } else {
-        persistCart([...cart, line]);
-      }
+      setCart((prev) => {
+        const existing = prev.find((i) => i.id === lineId);
+        const next = existing
+          ? prev.map((i) => (i.id === lineId ? { ...i, qty: i.qty + 1 } : i))
+          : [...prev, line];
+        saveCart(next);
+        return next;
+      });
       showToast(`Combo «${combo.name}» agregado al carrito`, "success", "🎁");
+      setCartOpen(true);
     },
-    [cart, persistCart, showToast],
+    [showToast],
   );
 
   const removeFromCart = useCallback(
@@ -1044,7 +1060,7 @@ export function StorefrontShell({
                       className="btn btn-primary btn-glow"
                       style={{ flex: 1, justifyContent: "center" }}
                       onClick={() => {
-                        addToCart(selectedProduct.id);
+                        addToCart(selectedProduct.id, selectedProduct);
                         closeProductModal();
                       }}
                     >
@@ -1128,7 +1144,7 @@ export function StorefrontShell({
                             </p>
                           </div>
                           <div className="gb-wish-row-actions">
-                            <button type="button" onClick={() => addToCart(p.id)}>
+                            <button type="button" onClick={() => addToCart(p.id, p)}>
                               Al carrito
                             </button>
                             <button type="button" className="gb-wish-remove" onClick={() => toggleFavorite(p.id)}>

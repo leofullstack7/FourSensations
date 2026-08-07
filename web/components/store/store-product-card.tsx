@@ -19,7 +19,7 @@ export function StoreProductCard({
   isFav: boolean;
   onOpen: (id: string) => void;
   onToggleFav: (id: string) => void;
-  onAddCart: (id: string) => void;
+  onAddCart: (id: string, product?: StoreProduct) => void;
   imagePriority?: boolean;
   compact?: boolean;
 }) {
@@ -136,7 +136,7 @@ export function StoreProductCard({
             title="Agregar al carrito"
             onClick={(e) => {
               e.stopPropagation();
-              onAddCart(product.id);
+              onAddCart(product.id, product);
             }}
           >
             +

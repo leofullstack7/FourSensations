@@ -3,6 +3,9 @@
 import { Suspense } from "react";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { formatPrice } from "@/lib/format";
+import { TINTES_CATEGORY_SLUG } from "@/lib/bulk-import/tintes";
+import type { TintBubbleItem } from "@/lib/tints";
+import type { StoreProduct } from "@/lib/types/product";
 import { TintCategoryPageClient } from "./TintCategoryPageClient";
 
 type TintCategoryPageBridgeProps = {
@@ -11,12 +14,41 @@ type TintCategoryPageBridgeProps = {
   defaultSub?: string;
 };
 
+function tintBubbleToStoreProduct(item: TintBubbleItem): StoreProduct {
+  const gallery = [item.mainImageUrl, item.colorImageUrl].filter(Boolean);
+  return {
+    id: item.id,
+    name: item.name,
+    brand: item.family?.trim() || "GinnaBeauty",
+    category: TINTES_CATEGORY_SLUG,
+    subcategory: item.subcategory?.trim() || "",
+    tags: [],
+    price: item.price,
+    originalPrice: null,
+    rating: 5,
+    reviews: 0,
+    badge: null,
+    description: [item.level && `Nivel ${item.level}`, item.type, item.family]
+      .filter(Boolean)
+      .join(" · "),
+    img: item.mainImageUrl || item.colorImageUrl || "",
+    emoji: "🎨",
+    isNew: false,
+    featuredInHome: false,
+    gallery,
+    tintLevel: item.level ?? undefined,
+    tintGroup: item.group ?? undefined,
+    tintFamily: item.family ?? undefined,
+    tintType: item.type ?? undefined,
+  };
+}
+
 function TintCategoryPageInner({
   categoryLabel,
   categoryIcon,
   defaultSub,
 }: TintCategoryPageBridgeProps) {
-  const { addToCart, showToast } = useStorefrontUi();
+  const { addToCart } = useStorefrontUi();
 
   return (
     <TintCategoryPageClient
@@ -25,8 +57,7 @@ function TintCategoryPageInner({
       defaultSub={defaultSub}
       formatPrice={formatPrice}
       addToCart={(item) => {
-        addToCart(item.id);
-        showToast(`${item.name} agregado al carrito`, "success", "🛒");
+        addToCart(item.id, tintBubbleToStoreProduct(item));
       }}
     />
   );

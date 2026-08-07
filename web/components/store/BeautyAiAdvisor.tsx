@@ -255,9 +255,8 @@ export function BeautyAiAdvisor() {
             type="button"
             className="gb-ai-msg-action"
             onClick={() => {
-              addToCart(action.productId!);
               const p = productMap.get(action.productId!);
-              showToast(p ? `${p.name} agregado al carrito` : "Agregado al carrito", "success", "🛒");
+              addToCart(action.productId!, p);
             }}
           >
             {action.label}
@@ -374,8 +373,7 @@ export function BeautyAiAdvisor() {
                                 className="gb-ai-product-pick-btn gb-ai-product-pick-btn--cart"
                                 title="Agregar al carrito"
                                 onClick={() => {
-                                  addToCart(id);
-                                  showToast(`${p.name} agregado al carrito`, "success", "🛒");
+                                  addToCart(id, p);
                                 }}
                               >
                                 🛒 Carrito
