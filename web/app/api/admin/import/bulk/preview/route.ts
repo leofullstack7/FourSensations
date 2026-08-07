@@ -34,23 +34,33 @@ export async function POST(req: NextRequest) {
     const form = await req.formData();
     const csvFile = form.get("csv");
     const zipFile = form.get("zip");
+    const modeRaw = String(form.get("mode") ?? "new").toLowerCase();
+    const isUpdateMode = modeRaw === "update";
 
     if (!(csvFile instanceof Blob)) {
       return noStoreJson({ error: "Falta archivo CSV (campo csv)" }, { status: 400 });
     }
-    if (!(zipFile instanceof Blob)) {
+    if (!(zipFile instanceof Blob) && !isUpdateMode) {
       return noStoreJson({ error: "Falta archivo ZIP (campo zip)" }, { status: 400 });
     }
 
     if (csvFile.size > BULK_CSV_MAX_BYTES) {
       return noStoreJson({ error: `CSV demasiado grande (máx. ${BULK_CSV_MAX_BYTES / (1024 * 1024)} MB)` }, { status: 400 });
     }
-    if (zipFile.size > BULK_ZIP_MAX_BYTES) {
+    if (zipFile instanceof Blob && zipFile.size > BULK_ZIP_MAX_BYTES) {
       return noStoreJson({ error: `ZIP demasiado grande (máx. ${BULK_ZIP_MAX_BYTES / (1024 * 1024)} MB)` }, { status: 400 });
     }
 
     const csvBuf = Buffer.from(await csvFile.arrayBuffer());
-    const zipBuf = Buffer.from(await zipFile.arrayBuffer());
+    /** ZIP vacío válido (EOCD) cuando en modo actualizar no se envían imágenes. */
+    const emptyZipBuf = Buffer.from([
+      0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ]);
+    const zipBuf =
+      zipFile instanceof Blob && zipFile.size > 0
+        ? Buffer.from(await zipFile.arrayBuffer())
+        : emptyZipBuf;
     const csvText = csvBuf.toString("utf8");
 
     const { delimiter, headers, rows } = parseCsv(csvText);

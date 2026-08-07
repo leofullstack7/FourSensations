@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { BulkPreviewResult } from "@/lib/bulk-import/build-preview";
 import { buildPreviewNewTaxonomyItems } from "@/lib/bulk-import/build-preview";
+import type { BulkExistingSnapshot } from "@/lib/bulk-import/bulk-field-diff";
 import type { BulkPreviewDbVariant } from "@/lib/bulk-import/variant-groups-preview";
 import {
   applyVariantGroupsToPreview,
@@ -15,7 +16,7 @@ import {
 import { fetchCategoryTreeForImport } from "@/lib/server/admin-category-tree";
 
 /**
- * Marca filas existentes por `externalRef`, enriquece grupos de barras y compara con DB.
+ * Marca filas existentes por `externalRef`, enriquece grupos de barras y snapshot para diff.
  */
 export async function enrichBulkPreviewFromDatabase(
   prisma: Pick<PrismaClient, "product">,
@@ -24,6 +25,7 @@ export async function enrichBulkPreviewFromDatabase(
   const codes = new Set<string>();
   const groupKeys = new Set<string>();
   for (const r of preview.rows) {
+    r.existingSnapshot = null;
     if (r.normalizedCode) codes.add(r.normalizedCode);
     const gk = normalizedVariantGroupKey(r.mapped.variantGroupCode);
     if (gk) groupKeys.add(gk);
@@ -35,16 +37,25 @@ export async function enrichBulkPreviewFromDatabase(
     return;
   }
 
-  const codeList = Array.from(codes);
   const existingByRef = await prisma.product.findMany({
     where: { externalRef: { not: null } },
     select: {
       id: true,
       name: true,
+      brand: true,
+      description: true,
+      price: true,
+      originalPrice: true,
+      stock: true,
+      category: true,
+      subcategory: true,
+      tags: true,
       externalRef: true,
       variantGroupCode: true,
       variantGroupOrder: true,
       imageUrl: true,
+      colorHex: true,
+      colorName: true,
     },
   });
 
@@ -55,6 +66,7 @@ export async function enrichBulkPreviewFromDatabase(
       name: string;
       variantGroupCode: string | null;
       variantGroupOrder: number | null;
+      snapshot: BulkExistingSnapshot;
     }
   >();
   for (const p of existingByRef) {
@@ -65,6 +77,21 @@ export async function enrichBulkPreviewFromDatabase(
       name: p.name,
       variantGroupCode: p.variantGroupCode,
       variantGroupOrder: p.variantGroupOrder,
+      snapshot: {
+        name: p.name,
+        brand: p.brand,
+        description: p.description,
+        price: p.price,
+        originalPrice: p.originalPrice,
+        stock: p.stock,
+        category: p.category,
+        subcategory: p.subcategory,
+        tags: p.tags ?? [],
+        imageUrl: p.imageUrl,
+        variantGroupCode: p.variantGroupCode,
+        colorHex: p.colorHex,
+        colorName: p.colorName,
+      },
     });
   }
 
@@ -72,6 +99,7 @@ export async function enrichBulkPreviewFromDatabase(
   for (const row of preview.rows) {
     row.existingVariantGroupCode = null;
     row.existingVariantGroupOrder = null;
+    row.existingSnapshot = null;
 
     const ref = row.normalizedCode;
     if (!ref) continue;
@@ -83,6 +111,7 @@ export async function enrichBulkPreviewFromDatabase(
     row.existingProductName = hit.name;
     row.existingVariantGroupCode = hit.variantGroupCode;
     row.existingVariantGroupOrder = hit.variantGroupOrder;
+    row.existingSnapshot = hit.snapshot;
 
     if (!row.issues.includes("Producto ya registrado")) {
       row.issues.push("Producto ya registrado");

@@ -40,6 +40,7 @@ import {
 } from "./tintes";
 import type { TintCatalogEntry, CsvTintTypeOption, CsvTintFamilyOption } from "./tint-catalog";
 import { bestFuzzyCodeMatches } from "./code-similarity";
+import type { BulkExistingSnapshot } from "./bulk-field-diff";
 
 export type TintMatchScope = {
   typeKey: string;
@@ -120,6 +121,8 @@ export type BulkPreviewRow = {
   /** Grupo de barras ya persistido en DB (si el producto existe). */
   existingVariantGroupCode: string | null;
   existingVariantGroupOrder: number | null;
+  /** Datos actuales en tienda (modo actualizar / diff). */
+  existingSnapshot: BulkExistingSnapshot | null;
   issues: string[];
   selected: boolean;
   /** Resolución antes de aplicar override manual (CSV + inferencia). */
@@ -603,6 +606,7 @@ export function buildBulkPreview(params: {
       existingProductName: null,
       existingVariantGroupCode: null,
       existingVariantGroupOrder: null,
+      existingSnapshot: null,
       issues,
       selected: false,
       taxonomyBeforeOverride,

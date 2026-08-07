@@ -53,7 +53,10 @@ import {
   AdminBulkMissingPriceModal,
   BULK_INVALID_PRICE_BATCH_THRESHOLD,
 } from "@/components/admin/AdminBulkMissingPriceModal";
+import { BulkDiffCell, BulkModePicker } from "@/components/admin/AdminBulkModeUi";
 import { AdminProductAiDetailPanel, AdminProductDescriptionBlock } from "@/components/admin/AdminProductAiUi";
+import { computeBulkRowFieldDiffs, bulkRowHasUpdatableDiffs } from "@/lib/bulk-import/bulk-field-diff";
+import type { BulkFieldDiff } from "@/lib/bulk-import/bulk-field-diff";
 import { menuTagForProduct, productOwnTags, tagsToInputValue } from "@/lib/product-tags";
 import { fetchAdminPaidOrders } from "@/lib/api/admin-orders";
 import {
@@ -2307,7 +2310,7 @@ function AdminAddProductForm({
   );
 }
 
-/** Selección automática tras analizar: listas para agrupar + productos nuevos con estado «✓ OK». */
+/** Selección automática tras analizar (modo nuevos): solo productos nuevos con estado «✓ OK». */
 function collectBulkAutoSelectIds(
   preview: BulkPreviewResult,
   existingPolicy: BulkExistingPolicy
@@ -2315,11 +2318,8 @@ function collectBulkAutoSelectIds(
   const source = preview.csvHasVariantGroupColumn ? preview.rows ?? [] : preview.matchedRows ?? [];
   const ids: string[] = [];
   for (const r of source) {
-    if (bulkRowIsReadyForVariantGroupAssign(r, "skip")) {
-      ids.push(bulkImportStableRowId(r));
-      continue;
-    }
     if (r.isExistingProduct) continue;
+    if (bulkRowIsAlreadyVariantGrouped(r)) continue;
     const hasImageMatch = r.imageMatches.some(
       (m) =>
         m.matchedBy === "exact" ||
@@ -2356,6 +2356,13 @@ function collectBulkAutoSelectIds(
   return Array.from(new Set(ids));
 }
 
+/** Selección automática (modo actualizar): existentes con al menos un campo distinto. */
+function collectBulkUpdateSelectIds(preview: BulkPreviewResult): string[] {
+  return (preview.rows ?? [])
+    .filter((r) => r.isExistingProduct && bulkRowHasUpdatableDiffs(r))
+    .map((r) => bulkImportStableRowId(r));
+}
+
 function AdminBulkTab({
   categories,
   categoriesLoading,
@@ -2383,6 +2390,8 @@ function AdminBulkTab({
   const [preview, setPreview] = useState<BulkPreviewResult | null>(null);
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const [existingPolicy, setExistingPolicy] = useState<"skip" | "replace" | "omit">("skip");
+  /** null = elegir tipo de carga; new = productos nuevos; update = actualizar existentes. */
+  const [bulkLoadMode, setBulkLoadMode] = useState<"new" | "update" | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [showBulkTemplateModal, setShowBulkTemplateModal] = useState(false);
   const [showNewCategoriesModal, setShowNewCategoriesModal] = useState(false);
@@ -2432,25 +2441,30 @@ function AdminBulkTab({
     [categories]
   );
 
-  /** Tras un PATCH del preview, conserva la intersección o re-selecciona filas OK / listas para agrupar. */
+  /** Tras un PATCH del preview, conserva la intersección o re-selecciona según el modo. */
   useEffect(() => {
     if (!preview || !jobId) {
       setSelectedRowIds([]);
       return;
     }
-    const sourceRows = preview.csvHasVariantGroupColumn
-      ? preview.rows ?? []
-      : preview.matchedRows ?? [];
+    const sourceRows =
+      bulkLoadMode === "update"
+        ? preview.rows ?? []
+        : preview.csvHasVariantGroupColumn
+          ? preview.rows ?? []
+          : preview.matchedRows ?? [];
     const available = new Set(sourceRows.map(bulkImportStableRowId));
     setSelectedRowIds((prev) => {
       const kept = prev.filter((id) => available.has(id));
       if (kept.length > 0) return kept;
       if (prev.length > 0) {
-        return collectBulkAutoSelectIds(preview, existingPolicy);
+        return bulkLoadMode === "update"
+          ? collectBulkUpdateSelectIds(preview)
+          : collectBulkAutoSelectIds(preview, existingPolicy);
       }
       return prev;
     });
-  }, [preview, jobId, existingPolicy]);
+  }, [preview, jobId, existingPolicy, bulkLoadMode]);
 
   const resetSession = () => {
     setJobId(null);
@@ -2463,7 +2477,7 @@ function AdminBulkTab({
     setZipOptimizing(false);
     setZipOptimized(false);
     setSelectedRowIds([]);
-    setExistingPolicy("skip");
+    setExistingPolicy(bulkLoadMode === "update" ? "replace" : "skip");
     setShowNewCategoriesModal(false);
     setApplyingNewCategories(false);
     setNewCategoriesModalAcknowledged(false);
@@ -2566,7 +2580,11 @@ function AdminBulkTab({
       setJobId(res.jobId);
       setPreview(res.preview);
       setExpiresAt(res.expiresAt);
-      setSelectedRowIds(collectBulkAutoSelectIds(res.preview, existingPolicy));
+      setSelectedRowIds(
+        bulkLoadMode === "update"
+          ? collectBulkUpdateSelectIds(res.preview)
+          : collectBulkAutoSelectIds(res.preview, existingPolicy)
+      );
       setCompletedGroupKeys([]);
       setShowAllCases(false);
       setBulkSuccessModal(null);
@@ -2576,13 +2594,13 @@ function AdminBulkTab({
       setOptimizeImageRowIds([]);
       const hintN = res.preview.taxonomyRehomeHints?.length ?? 0;
       const newN = res.preview.newCategories?.length ?? 0;
-      if (hintN > 0) {
+      if (bulkLoadMode !== "update" && hintN > 0) {
         showToast(
           `Hay ${hintN} sugerencia(s) de reubicación de categoría/subcategoría. Revísalas en el modal.`,
           "default",
           "💡"
         );
-      } else if (newN > 0) {
+      } else if (bulkLoadMode !== "update" && newN > 0) {
         showToast(
           newN > 0
             ? "Hay productos nuevos que necesitan categorías en el sistema. Revisa el modal."
@@ -2594,7 +2612,7 @@ function AdminBulkTab({
         showToast("Vista previa lista. Revisa columnas y filas.", "success", "🔍");
       }
     },
-    [showToast, existingPolicy]
+    [showToast, existingPolicy, bulkLoadMode]
   );
 
   const pendingLowMatchBreakdown = useMemo(
@@ -2754,9 +2772,22 @@ function AdminBulkTab({
   const selectedRowIdSet = useMemo(() => new Set(selectedRowIds), [selectedRowIds]);
 
   const previewTableRows = useMemo(() => {
-    const sourceRows = preview?.csvHasVariantGroupColumn
-      ? preview.rows ?? []
-      : preview?.matchedRows ?? [];
+    const sourceRows =
+      bulkLoadMode === "update"
+        ? preview?.rows ?? []
+        : preview?.csvHasVariantGroupColumn
+          ? preview.rows ?? []
+          : preview?.matchedRows ?? [];
+    const rowsByGroup = new Map<string, typeof sourceRows>();
+    for (const r of sourceRows) {
+      const gk = r.mapped.variantGroupCode?.trim()
+        ? canonicalVariantGroupCode(r.mapped.variantGroupCode)
+        : null;
+      if (!gk) continue;
+      const list = rowsByGroup.get(gk) ?? [];
+      list.push(r);
+      rowsByGroup.set(gk, list);
+    }
     return sourceRows.map((r) => {
         const previewRowId = bulkImportStableRowId(r);
         const variantGroupAssign = bulkRowIsVariantGroupAssign(r, existingPolicy);
@@ -2774,12 +2805,39 @@ function AdminBulkTab({
           ? categoryDisplayName(r.mapped.categorySlug, categories)
           : null;
         const barcodeRaw = r.mapped.variantGroupCode?.trim() || null;
+        const barcodeGroupKey = barcodeRaw ? canonicalVariantGroupCode(barcodeRaw) : null;
+        let variantHint: string | null = null;
+        if (barcodeGroupKey && barcodeRaw) {
+          const dbVars = preview?.dbVariantsByGroup?.[barcodeGroupKey] ?? [];
+          const groupRows = rowsByGroup.get(barcodeGroupKey) ?? [];
+          const existingSibling = groupRows.find(
+            (x) => x.isExistingProduct && bulkImportStableRowId(x) !== previewRowId
+          );
+          const anchorName =
+            dbVars[0]?.name ??
+            existingSibling?.existingProductName ??
+            existingSibling?.mapped.name ??
+            null;
+          if (anchorName) {
+            variantHint = `Este producto es una variante de «${anchorName}» con código de barras ${barcodeRaw}`;
+          } else {
+            const newSiblings = groupRows.filter((x) => !x.isExistingProduct);
+            if (newSiblings.length > 1) {
+              variantHint = `Pertenece al grupo de variantes con barras ${barcodeRaw} (${newSiblings.length} productos nuevos)`;
+            } else {
+              variantHint = `Código de barras ${barcodeRaw}`;
+            }
+          }
+        }
+        const fieldDiffs: BulkFieldDiff[] = hasExisting
+          ? computeBulkRowFieldDiffs(r, (slug) => categoryDisplayName(slug, categories))
+          : [];
         return {
           previewRowId,
           csvRowIndex: r.rowIndex,
           codeValue: r.codeRaw,
           barcodeRaw,
-          barcodeGroupKey: barcodeRaw ? canonicalVariantGroupCode(barcodeRaw) : null,
+          barcodeGroupKey,
           variantGroupOrder: r.variantGroupOrder,
           categoryCsv: r.mapped.category,
           subcategoryCsv: r.mapped.subcategory,
@@ -2816,10 +2874,21 @@ function AdminBulkTab({
           alreadyVariantGrouped: bulkRowIsAlreadyVariantGrouped(r),
           existingProductName: r.existingProductName,
           existingVariantGroupCode: r.existingVariantGroupCode,
+          variantHint,
+          fieldDiffs,
         };
       });
-  }, [preview, selectedRowIdSet, categories, existingPolicy]);
+  }, [preview, selectedRowIdSet, categories, existingPolicy, bulkLoadMode]);
 
+  const updateDiffRows = useMemo(
+    () => previewTableRows.filter((r) => r.hasExisting && r.fieldDiffs.length > 0),
+    [previewTableRows]
+  );
+
+  const selectedUpdateRowIds = useMemo(
+    () => updateDiffRows.filter((r) => r.selected).map((r) => r.previewRowId),
+    [updateDiffRows]
+  );
   const selectedVariantGroupRowIds = useMemo(() => {
     if (!preview) return [];
     const source = preview.csvHasVariantGroupColumn ? preview.rows ?? [] : preview.matchedRows ?? [];
@@ -2861,8 +2930,7 @@ function AdminBulkTab({
 
   const selectedNewProductRowIds = selectedOkNewProductRowIds;
 
-  const canImportAndGroup =
-    selectedVariantGroupRowIds.length > 0 && selectedOkNewProductRowIds.length > 0;
+  const canImportAndGroup = selectedOkNewProductRowIds.length > 0;
 
   const completedGroupKeySet = useMemo(() => new Set(completedGroupKeys), [completedGroupKeys]);
 
@@ -2881,8 +2949,7 @@ function AdminBulkTab({
       priceValue: number | null;
     }) => {
       if (r.alreadyVariantGrouped) return false;
-      if (r.readyForVariantGroup) return true;
-      if (r.hasExisting) return false;
+      if (r.hasExisting || r.readyForVariantGroup) return false;
       if (!r.hasImageMatch || r.errors.length > 0) return false;
       const tone = describeBulkRowStatus(
         {
@@ -2952,8 +3019,8 @@ function AdminBulkTab({
       .filter((g) => g.isLocallyCompleted || g.primaryRows.length > 0)
       .map((g) => ({
         ...g,
-        // Si hay OK/agrupar en el grupo, también se muestran hermanas con incidencia (Omitir).
-        displayRows: g.isLocallyCompleted ? g.rows : g.actionableRows,
+        // Solo filas OK nuevas; el resto del grupo se resume en el aviso de variante.
+        displayRows: g.isLocallyCompleted ? g.rows : g.primaryRows,
       }));
 
     const secondaryGroups = enriched
@@ -3531,7 +3598,9 @@ function AdminBulkTab({
           </td>
         )}
         <td style={{ fontSize: 12, fontFamily: "monospace" }}>{r.codeValue ?? "—"}</td>
-        <td>{r.nameValue ?? "—"}</td>
+        <td>{r.nameValue ?? "—"}
+          {r.variantHint ? <span className="admin-bulk-variant-hint">{r.variantHint}</span> : null}
+        </td>
         <td style={{ fontSize: 12, maxWidth: 200 }} title={r.descriptionValue ?? undefined}>
           {r.descriptionValue?.trim() ? r.descriptionValue : "—"}
         </td>
@@ -3711,21 +3780,25 @@ function AdminBulkTab({
         }}
       />
       <div className="admin-card-title" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span>📦 Carga masiva CSV + ZIP</span>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: "0.04em",
-            color: "var(--dusty-rose)",
-            border: "1px solid var(--dusty-rose)",
-            borderRadius: 999,
-            padding: "4px 10px",
-          }}
-        >
-          Fase 2 — Preview en servidor
-        </span>
+        <span>📦 Carga masiva</span>
+        {bulkLoadMode === "new" ? (
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Productos nuevos</span>
+        ) : bulkLoadMode === "update" ? (
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Actualizar existentes</span>
+        ) : null}
+        {bulkLoadMode ? (
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            disabled={saving || isAnalyzing}
+            onClick={() => {
+              resetSession();
+              setBulkLoadMode(null);
+            }}
+          >
+            ← Cambiar tipo
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn btn-outline btn-sm"
@@ -3736,24 +3809,39 @@ function AdminBulkTab({
         </button>
       </div>
 
+      {!bulkLoadMode ? (
+        <BulkModePicker
+          onPick={(mode) => {
+            setBulkLoadMode(mode);
+            setExistingPolicy(mode === "update" ? "replace" : "skip");
+          }}
+        />
+      ) : (
+        <>
       <div
         style={{
           background: "linear-gradient(135deg, var(--lavender-light) 0%, #fff5f8 100%)",
           border: "1px solid var(--dusty-rose)",
           borderRadius: "var(--radius-md)",
-          padding: "16px 18px",
-          marginBottom: 22,
+          padding: "14px 16px",
+          marginBottom: 18,
           fontSize: 13,
           color: "var(--text)",
           lineHeight: 1.5,
         }}
       >
-        <strong>Flujo:</strong> sube un <strong>CSV</strong> (encabezados en la primera fila) y un <strong>ZIP</strong> con fotos cuyo{" "}
-        <strong>nombre de archivo</strong> (sin extensión) coincide con la <strong>columna de código</strong> del CSV. Si incluyes una columna de{" "}
-        <strong>código de barras</strong> (p. ej. «Barras», «Código de barras»), las filas con el mismo valor se agrupan como{" "}
-        <strong>variantes del mismo producto</strong>. Si los productos <strong>ya están registrados</strong>, usa{" "}
-        <strong>«Agrupar productos como variantes»</strong> (no hace falta volver a importarlos). Pulsa <strong>Analizar</strong> para ver el
-        resumen; <strong>Importar productos nuevos</strong> solo crea filas que aún no existen en tienda. Máx. 500 filas y 2&nbsp;MB CSV / 50&nbsp;MB ZIP.
+        {bulkLoadMode === "update" ? (
+          <>
+            <strong>Actualizar existentes:</strong> CSV con códigos ya en tienda (ZIP opcional). Tras el
+            match solo verás campos que cambian: valor anterior en rojo y nuevo en verde.
+          </>
+        ) : (
+          <>
+            <strong>Productos nuevos:</strong> CSV + ZIP. Solo se listan filas <strong>✓ OK</strong>{" "}
+            (checkbox marcado). Si es variante, un aviso breve — sin filas hermanas ni productos ya
+            registrados.
+          </>
+        )}
       </div>
 
       <div
@@ -3797,7 +3885,9 @@ function AdminBulkTab({
             border: "2px dashed var(--dusty-rose)",
           }}
         >
-          <label className="form-label">2. Archivo ZIP (imágenes)</label>
+          <label className="form-label">
+            2. Archivo ZIP (imágenes){bulkLoadMode === "update" ? " — opcional" : ""}
+          </label>
           <input
             key={`zip-${fileInputKey}`}
             type="file"
@@ -3941,32 +4031,51 @@ function AdminBulkTab({
         <button
           type="button"
           className="btn btn-rose"
-          disabled={isAnalyzing || saving || !csvFile || !zipFile || sortedCats.length === 0}
+          disabled={
+            isAnalyzing ||
+            saving ||
+            !csvFile ||
+            (bulkLoadMode === "new" && !zipFile) ||
+            sortedCats.length === 0
+          }
           onClick={() => {
             void (async () => {
-              if (!csvFile || !zipFile || isAnalyzing) return;
+              if (!csvFile || isAnalyzing) return;
+              if (bulkLoadMode === "new" && !zipFile) return;
               const previousJobId = jobId;
               prepareForNewAnalyze(previousJobId);
               setIsAnalyzing(true);
               setMutation("bulk");
-              setBulkProgressLabel("Analizando CSV y ZIP en el servidor…");
+              setBulkProgressLabel(
+                bulkLoadMode === "update"
+                  ? "Analizando CSV y comparando con tienda…"
+                  : "Analizando CSV y ZIP en el servidor…"
+              );
               bulkProgress.start("analyze");
               try {
                 const fd = new FormData();
                 fd.append("csv", csvFile);
-                fd.append("zip", zipFile);
+                fd.append("mode", bulkLoadMode === "update" ? "update" : "new");
+                if (zipFile) fd.append("zip", zipFile);
                 const res = await postBulkImportPreview(fd);
                 bulkProgress.finish();
                 // Tintes: el match por «Nivel» solo se activa tras elegir tipo+familia.
                 // Un match bajo en el primer analyze es esperado; no bloquear con el modal.
-                if (res.preview.hasTintesRows === true && isBulkCsvZipMatchRateTooLow(res.preview.stats)) {
+                if (
+                  bulkLoadMode !== "update" &&
+                  res.preview.hasTintesRows === true &&
+                  isBulkCsvZipMatchRateTooLow(res.preview.stats)
+                ) {
                   applyAnalyzeResult(res);
                   showToast(
                     "Análisis listo. Elige tipo y familia de Tintes para emparejar las imágenes por nivel.",
                     "default",
                     "🎨"
                   );
-                } else if (isBulkCsvZipMatchRateTooLow(res.preview.stats)) {
+                } else if (
+                  bulkLoadMode !== "update" &&
+                  isBulkCsvZipMatchRateTooLow(res.preview.stats)
+                ) {
                   setPendingAnalyzeResult(res);
                   setShowLowMatchModal(true);
                   showToast(
@@ -3992,6 +4101,8 @@ function AdminBulkTab({
               <span className="admin-inline-spinner" aria-hidden />
               Analizando…
             </>
+          ) : bulkLoadMode === "update" ? (
+            "🔍 Analizar CSV"
           ) : (
             "🔍 Analizar CSV y ZIP"
           )}
@@ -4026,72 +4137,173 @@ function AdminBulkTab({
             </p>
           )}
 
-          {matchSummary && (
-            <div
-              style={{
-                marginBottom: 18,
-                padding: "16px 18px",
-                borderRadius: "var(--radius-md)",
-                background: "linear-gradient(135deg, #f7faf7 0%, #fff8f6 100%)",
-                border: "1px solid var(--line, #e7d9d4)",
-              }}
-            >
-              <div style={{ fontSize: 14, fontWeight: 700, color: "var(--dark)", marginBottom: 8 }}>
-                Resumen del match
-              </div>
-              <ul style={{ margin: "0 0 12px", paddingLeft: 18, fontSize: 13, lineHeight: 1.55, color: "var(--text)" }}>
-                {matchSummary.phrases.map((p) => (
-                  <li key={p} style={{ marginBottom: 4 }}>
-                    {p}
-                  </li>
-                ))}
-              </ul>
-              <div style={{ fontSize: 12, fontWeight: 650, color: "var(--text-muted)", marginBottom: 6 }}>
-                Qué puedes hacer
-              </div>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.5, color: "var(--text)" }}>
-                {matchSummary.tips.map((t) => (
-                  <li key={t} style={{ marginBottom: 3 }}>
-                    {t}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
-            {(
-              [
-                ["Filas CSV", preview.stats.totalRows],
-                ["Imágenes en ZIP", preview.stats.zipImageFiles],
-                ["Filas con match", preview.stats.matchedRows],
-                ["Filas sin match", preview.stats.unmatchedRows],
-                ["Con errores", preview.stats.rowsWithErrors],
-                ["Ya en tienda (código)", preview.stats.existingProductRows ?? 0],
-                ...(preview.csvHasVariantGroupColumn
-                  ? ([
-                      ["Grupos de barras", preview.stats.variantGroupCount ?? 0],
-                      ["Variantes ya en tienda", preview.stats.existingInVariantGroups ?? 0],
-                    ] as const)
-                  : []),
-              ] as const
-            ).map(([label, n]) => (
-              <div
-                key={label}
-                style={{
-                  minWidth: 120,
-                  padding: "12px 16px",
-                  borderRadius: "var(--radius-md)",
-                  background: "var(--lavender-light)",
-                  border: "1px solid rgba(199, 165, 178, 0.45)",
-                }}
-              >
-                <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>{label}</div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: "var(--dark)" }}>{n}</div>
-              </div>
-            ))}
+          <div className="admin-bulk-summary-strip">
+            {bulkLoadMode === "update" ? (
+              <>
+                <span>
+                  <strong>{updateDiffRows.length}</strong> con cambios
+                </span>
+                <span>
+                  <strong>{preview.stats.existingProductRows ?? 0}</strong> ya en tienda
+                </span>
+                <span>
+                  <strong>{selectedUpdateRowIds.length}</strong> seleccionados
+                </span>
+              </>
+            ) : (
+              <>
+                <span>
+                  <strong>{selectedOkNewProductRowIds.length}</strong> OK listos
+                </span>
+                <span>
+                  <strong>{preview.stats.matchedRows}</strong> con foto
+                </span>
+                <span>
+                  <strong>{preview.stats.existingProductRows ?? 0}</strong> ya registrados (ocultos)
+                </span>
+                {secondaryMatchCount > 0 ? (
+                  <span style={{ color: "#b45309" }}>
+                    <strong>{secondaryMatchCount}</strong> con incidencia
+                  </span>
+                ) : null}
+              </>
+            )}
           </div>
 
+          {bulkLoadMode === "update" ? (
+            <>
+              <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
+                Rojo = valor en tienda · Verde = valor del CSV. Desmarca lo que no quieras aplicar.
+              </p>
+              <div className="admin-bulk-scroll" style={{ marginBottom: 14 }}>
+                <table className="admin-table admin-bulk-matched-table" style={{ minWidth: 640, margin: 0 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 44 }} className="admin-bulk-check-cell">
+                        Sel.
+                      </th>
+                      <th>Código</th>
+                      <th>Producto</th>
+                      <th>Cambios</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {updateDiffRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>
+                          No hay diferencias entre el CSV y los productos de la tienda.
+                        </td>
+                      </tr>
+                    ) : (
+                      updateDiffRows.map((r) => (
+                        <tr
+                          key={r.previewRowId}
+                          onClick={(e) => {
+                            const el = e.target as HTMLElement;
+                            if (el.closest("input, button, a, label")) return;
+                            toggleRow(r.previewRowId);
+                          }}
+                        >
+                          <td className="admin-bulk-check-cell">
+                            <input
+                              type="checkbox"
+                              checked={r.selected}
+                              onChange={() => toggleRow(r.previewRowId)}
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label={`Seleccionar actualización ${r.codeValue ?? ""}`}
+                            />
+                          </td>
+                          <td style={{ fontFamily: "monospace", fontSize: 12 }}>{r.codeValue ?? "—"}</td>
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{r.existingProductName ?? r.nameValue ?? "—"}</div>
+                          </td>
+                          <td>
+                            <BulkDiffCell diffs={r.fieldDiffs} />
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="admin-bulk-actions-bar" role="toolbar" aria-label="Aplicar actualizaciones">
+                <div className="admin-bulk-actions-bar__meta">
+                  <strong>{selectedUpdateRowIds.length}</strong> actualización(es)
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={saving || selectedUpdateRowIds.length === 0}
+                  onClick={() => {
+                    void (async () => {
+                      setMutation("bulk");
+                      setBulkProgressLabel("Aplicando actualizaciones…");
+                      bulkProgress.start("import");
+                      try {
+                        const res = await postBulkImportCommit(
+                          jobId,
+                          [...selectedUpdateRowIds].sort(),
+                          "replace",
+                          { keepJob: true }
+                        );
+                        bulkProgress.finish();
+                        applyPartialCommitResult(res, selectedUpdateRowIds);
+                        if (res.failed > 0) {
+                          showToast(`${res.failed} error(es) al actualizar.`, "danger", "⚠️");
+                        }
+                        await onImported();
+                        if (!openBulkSuccessModal(res, true)) {
+                          showToast(
+                            res.imported > 0
+                              ? `Se actualizaron ${res.imported} producto(s).`
+                              : "No se aplicaron cambios.",
+                            res.imported > 0 ? "success" : "default",
+                            res.imported > 0 ? "✨" : "ℹ️"
+                          );
+                        }
+                      } catch (e) {
+                        bulkProgress.reset();
+                        showToast(e instanceof Error ? e.message : "Error al actualizar", "danger", "⚠️");
+                      } finally {
+                        setMutation(null);
+                      }
+                    })();
+                  }}
+                >
+                  {saving ? (
+                    <>
+                      <span className="admin-inline-spinner" aria-hidden />
+                      Actualizando…
+                    </>
+                  ) : selectedUpdateRowIds.length === 0 ? (
+                    "Aplicar actualizaciones"
+                  ) : (
+                    `Aplicar ${selectedUpdateRowIds.length} actualización(es)`
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  disabled={saving}
+                  onClick={() => {
+                    void (async () => {
+                      if (jobId) {
+                        try {
+                          await deleteBulkImportJob(jobId);
+                        } catch {
+                          /* ignore */
+                        }
+                      }
+                      resetSession();
+                    })();
+                  }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
           <div className="form-grid" style={{ marginBottom: 16, alignItems: "end" }}>
             <div className="form-group">
               <label className="form-label">Columna de código (match con nombre de archivo)</label>
@@ -4211,100 +4423,6 @@ function AdminBulkTab({
             </span>
           </div>
 
-          {!preview.csvHasVariantGroupColumn && (preview.stats.existingProductRows ?? 0) > 0 && (
-            <div
-              style={{
-                marginBottom: 14,
-                padding: "12px 16px",
-                borderRadius: "var(--radius-md)",
-                background: "#fff8e6",
-                border: "1px solid #e6c84a",
-                fontSize: 13,
-                lineHeight: 1.5,
-              }}
-            >
-              <strong>Productos ya registrados detectados</strong>
-              <p style={{ margin: "6px 0 0" }}>
-                {preview.stats.existingProductRows} fila(s) coinciden con códigos que ya están en tienda. Para agruparlos
-                como variantes, añade una columna <strong>Barras</strong> (o «Código de barras») en el CSV con el mismo
-                valor en las filas que deben unirse, vuelve a analizar y usa{" "}
-                <strong>«Agrupar productos como variantes»</strong>.
-              </p>
-            </div>
-          )}
-
-          {preview.csvHasVariantGroupColumn && (preview.variantGroups?.length ?? 0) > 0 && (
-            <div
-              style={{
-                marginBottom: 14,
-                padding: "12px 16px",
-                borderRadius: "var(--radius-md)",
-                background: "linear-gradient(135deg, #f0f4ff 0%, #fff5f8 100%)",
-                border: "1px solid var(--dusty-rose)",
-                fontSize: 13,
-                lineHeight: 1.5,
-              }}
-            >
-              <strong>Agrupación por variantes (columna Barras)</strong>
-              <p style={{ margin: "6px 0 0" }}>
-                {preview.stats.existingProductRows ?? 0} producto(s) del CSV <strong>ya están en tienda</strong> por su
-                código. Usa <strong>«Agrupar productos como variantes»</strong>: no se vuelven a crear, solo se asigna el
-                código de barras para unirlos en la tienda.
-              </p>
-              <p style={{ margin: "6px 0 0", color: "var(--text-muted)" }}>
-                {preview.stats.variantGroupCount ?? 0} grupo(s) detectado(s) ·{" "}
-                {preview.stats.existingInVariantGroups ?? 0} variante(s) ya registrada(s) en esos grupos.
-              </p>
-              {(preview.variantGroups ?? []).filter((g) => g.rowCount < 2).length > 0 && (
-                <p style={{ margin: "8px 0 0", color: "var(--dusty-rose)" }}>
-                  <strong>Atención:</strong>{" "}
-                  {(preview.variantGroups ?? []).filter((g) => g.rowCount < 2).length} fila(s) tienen un código
-                  Barras <strong>único</strong> en el CSV. Esas filas no se unirán con otras: varias filas deben
-                  compartir exactamente el mismo valor en la columna Barras.
-                </p>
-              )}
-              {previewTableRows.some((r) => r.warnings.some((w) => w.includes("Código de barras distinto"))) && (
-                <span style={{ display: "block", marginTop: 6, color: "var(--dusty-rose)" }}>
-                  Algunas filas tienen un código de barras distinto al guardado; con «Reemplazar» se actualizará al del CSV.
-                </span>
-              )}
-            </div>
-          )}
-
-          <div className="admin-bulk-policy-row">
-            <label className="form-label" style={{ marginBottom: 6, display: "block" }}>
-              Productos ya registrados en tienda
-            </label>
-            <select
-              className="form-select"
-              style={{ width: "100%", maxWidth: 520, minHeight: 40 }}
-              value={existingPolicy}
-              onChange={(e) => setExistingPolicy(e.target.value as "skip" | "replace" | "omit")}
-            >
-              <option value="skip">Solo agrupar como variantes (no modificar datos del producto)</option>
-              <option value="replace">Reemplazar datos del producto ya registrado</option>
-              <option value="omit">No hacer nada con estos productos que ya están registrados en la tienda, omitirlos</option>
-            </select>
-            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "10px 0 0", lineHeight: 1.45 }}>
-              {existingPolicy === "omit" ? (
-                <>
-                  Los productos <strong>ya registrados</strong> se omiten por completo: no se actualizan, no se agrupan
-                  ni se suben imágenes de nuevo. Solo se importan filas nuevas.
-                </>
-              ) : existingPolicy === "replace" ? (
-                <>
-                  «Reemplazar» actualiza nombre, precio e imágenes desde el CSV en los productos que ya existen.
-                </>
-              ) : (
-                <>
-                  Para productos que <strong>ya existen</strong>, usa el botón <strong>«Agrupar productos como variantes»</strong>.
-                  No se vuelven a crear ni se suben imágenes de nuevo: solo se asigna el código de barras del CSV para unirlos
-                  en la tienda.
-                </>
-              )}
-            </p>
-          </div>
-
           {preview?.tintSelectionResolved && preview.activeTintTypeLabel && preview.activeTintFamilyLabel ? (
             <div
               style={{
@@ -4338,17 +4456,8 @@ function AdminBulkTab({
             </div>
           ) : null}
 
-          {hiddenMatchCount > 0 ? (
-            <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
-              Se omiten de esta vista <strong>{hiddenMatchCount}</strong> coincidencia(s) ya registradas
-              {preview.csvHasVariantGroupColumn ? " y agrupadas" : ""} en la tienda (no requieren acción).
-            </p>
-          ) : null}
-
           <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
-            Primero ves lo listo para <strong>importar</strong> (nuevos con foto) o <strong>agrupar</strong>. Si un
-            grupo tiene variantes hermanas con incidencia, también aparecen aquí con <strong>Omitir</strong>. El resto
-            de casos está más abajo.
+            Solo productos nuevos listos (✓ OK). Si es variante, verás un aviso bajo el nombre.
           </p>
           <div className="admin-bulk-scroll" style={{ marginBottom: 12 }}>
             <table className="admin-table admin-bulk-matched-table" style={{ minWidth: 720, margin: 0 }}>
@@ -4524,7 +4633,7 @@ function AdminBulkTab({
                                   </div>
                                 ) : null}
                               </div>
-                              {canAgruparGroup ? (
+                              {false && canAgruparGroup ? (
                                 <button
                                   type="button"
                                   className="btn btn-primary btn-sm"
@@ -5066,161 +5175,6 @@ function AdminBulkTab({
             </div>
             <button
               type="button"
-              className="btn btn-primary"
-              disabled={
-                saving ||
-                selectedVariantGroupRowIds.length === 0 ||
-                taxonomyRehomeHints.length > 0
-              }
-              onClick={() => {
-                void (async () => {
-                  setMutation("bulk");
-                  setBulkProgressLabel("Agrupando productos como variantes…");
-                  bulkProgress.start("import");
-                  try {
-                    const res = await postBulkImportCommit(
-                      jobId,
-                      [...selectedVariantGroupRowIds].sort(),
-                      "skip",
-                      { keepJob: true }
-                    );
-                    bulkProgress.finish();
-                    setIncidentNavOpen(false);
-                    applyPartialCommitResult(res, selectedVariantGroupRowIds);
-                    const grouped = res.variantGroupsAssigned ?? 0;
-                    const merged = res.variantGroupsWithMultipleMembers ?? 0;
-                    if (res.failed > 0) {
-                      showToast(`${res.failed} error(es). Revisa consola o mensajes.`, "danger", "⚠️");
-                    }
-                    await onImported();
-                    if (!openBulkSuccessModal(res, true)) {
-                      if (grouped > 0 && merged > 0) {
-                        showToast(
-                          `${grouped} producto(s) agrupados en ${merged} grupo(s) con variantes.`,
-                          "success",
-                          "📦"
-                        );
-                      } else if (grouped > 0) {
-                        showToast(
-                          `Se asignó código Barras a ${grouped} producto(s), pero ninguno quedó unido con otro.`,
-                          "default",
-                          "ℹ️"
-                        );
-                      } else {
-                        showToast(
-                          "No se aplicó ningún grupo. Verifica que las filas tengan columna Barras y código registrado.",
-                          "default",
-                          "ℹ️"
-                        );
-                      }
-                    }
-                  } catch (e) {
-                    bulkProgress.reset();
-                    showToast(e instanceof Error ? e.message : "Error al agrupar variantes", "danger", "⚠️");
-                  } finally {
-                    setMutation(null);
-                  }
-                })();
-              }}
-            >
-              {saving ? (
-                <>
-                  <span className="admin-inline-spinner" aria-hidden />
-                  Agrupando...
-                </>
-              ) : selectedVariantGroupRowIds.length === 0 ? (
-                "📦 Agrupar productos como variantes"
-              ) : selectedVariantGroupRowIds.length === 1 ? (
-                "📦 Agrupar 1 producto como variante"
-              ) : (
-                `📦 Agrupar ${selectedVariantGroupRowIds.length} productos como variantes`
-              )}
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-outline"
-              disabled={
-                saving ||
-                (needsTintSelection && !tintsExplicitlySkipped) ||
-                (pendingNewCategories.length > 0 && !newCategoriesModalAcknowledged) ||
-                taxonomyRehomeHints.length > 0
-              }
-              onClick={() => {
-                if (selectedOkNewProductRowIds.length === 0) {
-                  if (incidentRows.length > 0) {
-                    openIncidentNav();
-                  } else {
-                    showToast(
-                      "No hay productos nuevos con estado «✓ OK» para importar.",
-                      "default",
-                      "ℹ️"
-                    );
-                  }
-                  return;
-                }
-                void (async () => {
-                  setMutation("bulk");
-                  setBulkProgressLabel("Importando productos nuevos y subiendo imágenes…");
-                  bulkProgress.start("import");
-                  try {
-                    const res = await postBulkImportCommit(
-                      jobId,
-                      [...selectedOkNewProductRowIds].sort(),
-                      existingPolicy,
-                      { keepJob: true }
-                    );
-                    bulkProgress.finish();
-                    setIncidentNavOpen(false);
-                    applyPartialCommitResult(res, selectedOkNewProductRowIds);
-                    const skipped = res.skippedExistingDuplicates ?? 0;
-                    if (skipped > 0) {
-                      showToast(
-                        existingPolicy === "omit"
-                          ? `${skipped} producto(s) ya registrados omitidos (sin cambios).`
-                          : `${skipped} fila(s) omitida(s): ya registradas y sin código de barras en el CSV.`,
-                        "default",
-                        "⏭️"
-                      );
-                    }
-                    if (res.failed > 0) {
-                      showToast(`${res.failed} error(es). Revisa consola o mensajes.`, "danger", "⚠️");
-                    }
-                    await onImported();
-                    if (!openBulkSuccessModal(res, true)) {
-                      showToast(
-                        "No se aplicaron cambios. Selecciona filas nuevas con estado «✓ OK».",
-                        "default",
-                        "ℹ️"
-                      );
-                    }
-                  } catch (e) {
-                    bulkProgress.reset();
-                    const msg = e instanceof Error ? e.message : "Error al importar";
-                    showToast(msg, "danger", "⚠️");
-                    if (incidentRows.length > 0) openIncidentNav();
-                  } finally {
-                    setMutation(null);
-                  }
-                })();
-              }}
-            >
-              {saving ? (
-                <>
-                  <span className="admin-inline-spinner" aria-hidden />
-                  Importando...
-                </>
-              ) : selectedOkNewProductRowIds.length === 0 ? (
-                "⬆️ Importar productos nuevos"
-              ) : selectedOkNewProductRowIds.length === 1 ? (
-                "⬆️ Importar 1 producto nuevo"
-              ) : (
-                `⬆️ Importar ${selectedOkNewProductRowIds.length} productos nuevos`
-              )}
-            </button>
-
-            <button
-              type="button"
               className="btn btn-outline"
               disabled={
                 saving ||
@@ -5229,35 +5183,18 @@ function AdminBulkTab({
                 taxonomyRehomeHints.length > 0
               }
               title={
-                canImportAndGroup
-                  ? "Importa los productos nuevos OK y agrupa los ya registrados como variantes"
-                  : "Necesitas productos OK y/o listos para agrupar"
+                selectedOkNewProductRowIds.length > 0
+                  ? "Importa los productos nuevos OK (con barras se agrupan al crear)"
+                  : "Selecciona productos con estado ✓ OK"
               }
               onClick={() => {
-                if (!canImportAndGroup) {
+                if (selectedOkNewProductRowIds.length === 0) {
                   if (incidentRows.length > 0) {
                     openIncidentNav();
                     return;
                   }
-                  if (selectedOkNewProductRowIds.length === 0 && selectedVariantGroupRowIds.length === 0) {
-                    showToast(
-                      "No hay productos OK para importar ni listos para agrupar. Revisa el match.",
-                      "default",
-                      "ℹ️"
-                    );
-                    return;
-                  }
-                  if (selectedOkNewProductRowIds.length === 0) {
-                    showToast(
-                      "Faltan productos nuevos OK (por ejemplo sin foto o con error). Te llevo a esas filas.",
-                      "default",
-                      "⚠️"
-                    );
-                    openIncidentNav();
-                    return;
-                  }
                   showToast(
-                    "Faltan productos listos para agrupar. Marca filas «📦 Listo para agrupar» o añade barras en el CSV.",
+                    "No hay productos nuevos con estado «✓ OK» seleccionados.",
                     "default",
                     "ℹ️"
                   );
@@ -5265,28 +5202,16 @@ function AdminBulkTab({
                 }
                 void (async () => {
                   setMutation("bulk");
-                  setBulkProgressLabel("Importando productos nuevos y agrupando variantes…");
+                  setBulkProgressLabel("Importando y agrupando productos…");
                   bulkProgress.start("import");
                   try {
-                    const combinedIds = Array.from(
-                      new Set([...selectedVariantGroupRowIds, ...selectedOkNewProductRowIds])
-                    ).sort();
-                    const res = await postBulkImportCommit(jobId, combinedIds, existingPolicy, {
+                    const combinedIds = [...selectedOkNewProductRowIds].sort();
+                    const res = await postBulkImportCommit(jobId, combinedIds, "skip", {
                       keepJob: true,
                     });
                     bulkProgress.finish();
                     setIncidentNavOpen(false);
                     applyPartialCommitResult(res, combinedIds);
-                    const skipped = res.skippedExistingDuplicates ?? 0;
-                    if (skipped > 0) {
-                      showToast(
-                        existingPolicy === "omit"
-                          ? `${skipped} producto(s) ya registrados omitidos (sin cambios).`
-                          : `${skipped} fila(s) omitida(s): ya registradas y sin código de barras en el CSV.`,
-                        "default",
-                        "⏭️"
-                      );
-                    }
                     if (res.failed > 0) {
                       showToast(`${res.failed} error(es). Revisa consola o mensajes.`, "danger", "⚠️");
                     }
@@ -5311,12 +5236,12 @@ function AdminBulkTab({
               {saving ? (
                 <>
                   <span className="admin-inline-spinner" aria-hidden />
-                  Importando y agrupando...
+                  Importando…
                 </>
-              ) : !canImportAndGroup ? (
-                "✨ Importar y agrupar por variantes"
+              ) : selectedOkNewProductRowIds.length === 0 ? (
+                "✨ Importar y agrupar"
               ) : (
-                `✨ Importar ${selectedOkNewProductRowIds.length} y agrupar ${selectedVariantGroupRowIds.length}`
+                `✨ Importar y agrupar (${selectedOkNewProductRowIds.length})`
               )}
             </button>
 
@@ -5349,6 +5274,8 @@ function AdminBulkTab({
               modal o pulsa «Continuar sin crear» si solo quieres agrupar variantes de productos ya registrados.
             </p>
           )}
+            </>
+          )}
         </>
       )}
       <AdminBulkRowEditModal
@@ -5362,6 +5289,7 @@ function AdminBulkTab({
         }}
         onSave={saveBulkRowEdits}
       />
+
       {bulkSuccessModal ? (
         <div
           className="admin-modal-overlay open"
@@ -5850,6 +5778,8 @@ function AdminBulkTab({
         }}
       />
       <AdminBulkTemplateModal open={showBulkTemplateModal} onClose={() => setShowBulkTemplateModal(false)} />
+        </>
+      )}
       </div>
     </div>
   );

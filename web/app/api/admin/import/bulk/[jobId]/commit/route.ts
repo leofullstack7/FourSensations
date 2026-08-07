@@ -408,14 +408,18 @@ export async function POST(req: NextRequest, { params }: Ctx) {
                 variantGroupOrder,
                 colorHex,
                 colorName,
-                imageUrl: mainUrl,
+                ...(mainUrl
+                  ? {
+                      imageUrl: mainUrl,
+                      images: {
+                        deleteMany: {},
+                        ...(galleryUrls.length > 0 && {
+                          create: galleryUrls.map((url, i) => ({ url, sortOrder: i })),
+                        }),
+                      },
+                    }
+                  : {}),
                 active: true,
-                images: {
-                  deleteMany: {},
-                  ...(galleryUrls.length > 0 && {
-                    create: galleryUrls.map((url, i) => ({ url, sortOrder: i })),
-                  }),
-                },
               },
               include: { images: true },
             })

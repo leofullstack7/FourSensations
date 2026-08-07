@@ -70,6 +70,22 @@ export function isIssueIgnorableForOmit(
   return true;
 }
 
+/** Con «reemplazar» / actualizar, el aviso de ya registrado no bloquea. */
+export function isIssueIgnorableForReplace(
+  issue: string,
+  row: BulkPreviewRow,
+  existingPolicy: BulkExistingPolicy
+): boolean {
+  if (existingPolicy !== "replace" || row.isExistingProduct !== true) return false;
+  return (
+    issue === "Producto ya registrado" ||
+    issue === "Sin imagen en ZIP para este código" ||
+    issue === "Sin imagen en ZIP para este nivel" ||
+    issue === "Código de barras distinto al registrado en tienda" ||
+    issue.startsWith("Aviso:")
+  );
+}
+
 export function bulkRowBlockingIssues(
   row: BulkPreviewRow,
   existingPolicy: BulkExistingPolicy
@@ -77,7 +93,8 @@ export function bulkRowBlockingIssues(
   return row.issues.filter(
     (issue) =>
       !isIssueIgnorableForVariantGroupAssign(issue, row, existingPolicy) &&
-      !isIssueIgnorableForOmit(issue, row, existingPolicy)
+      !isIssueIgnorableForOmit(issue, row, existingPolicy) &&
+      !isIssueIgnorableForReplace(issue, row, existingPolicy)
   );
 }
 
