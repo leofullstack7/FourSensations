@@ -7803,7 +7803,19 @@ function AdminStockTab({
   onPersistStock: (id: string, stock: number) => Promise<void>;
   stockSavingId: string | null;
 }) {
+  const [stockSearch, setStockSearch] = useState("");
   const { stockNormal: ok, stockLow: low, stockOut: out } = catalogStats;
+
+  const filteredStockProducts = useMemo(() => {
+    const q = stockSearch.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter((p) => {
+      const name = p.name.toLowerCase();
+      const brand = (p.brand ?? "").toLowerCase();
+      return name.includes(q) || brand.includes(q);
+    });
+  }, [products, stockSearch]);
+
   return (
     <>
       <div className="admin-stock-stats" style={{ marginBottom: 24, display: "flex", gap: 16 }}>
@@ -7829,6 +7841,25 @@ function AdminStockTab({
           </div>
         </div>
       </div>
+      <div className="admin-card" style={{ padding: 14, marginBottom: 14 }}>
+        <label className="form-label" htmlFor="admin-stock-search" style={{ marginBottom: 6 }}>
+          Buscar producto
+        </label>
+        <input
+          id="admin-stock-search"
+          type="search"
+          className="form-input"
+          value={stockSearch}
+          onChange={(e) => setStockSearch(e.target.value)}
+          placeholder="Escribe el nombre o la marca…"
+          autoComplete="off"
+        />
+        {stockSearch.trim() ? (
+          <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--text-muted)" }}>
+            {filteredStockProducts.length} coincidencia{filteredStockProducts.length === 1 ? "" : "s"}
+          </p>
+        ) : null}
+      </div>
       <div className="admin-card admin-table-wrap" style={{ padding: 0 }}>
         <table className="admin-table admin-table--sticky-product">
           <thead>
@@ -7841,7 +7872,14 @@ function AdminStockTab({
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => {
+            {filteredStockProducts.length === 0 ? (
+              <tr>
+                <td colSpan={5} style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>
+                  No hay productos que coincidan con «{stockSearch.trim()}».
+                </td>
+              </tr>
+            ) : (
+              filteredStockProducts.map((p) => {
               let cls = "status-active", lbl = "Normal";
               if (p.stock === 0) { cls = "status-out"; lbl = "Sin stock"; }
               else if (p.stock < 5) { cls = "status-low"; lbl = "Stock bajo"; }
@@ -7893,7 +7931,8 @@ function AdminStockTab({
                   </td>
                 </tr>
               );
-            })}
+            })
+            )}
           </tbody>
         </table>
       </div>

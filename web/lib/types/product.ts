@@ -40,4 +40,16 @@ export type StoreProduct = {
   colorName?: string | null;
 };
 
-export type CartLine = StoreProduct & { qty: number };
+export type CartComboItemPreview = {
+  name: string;
+  quantity: number;
+  img?: string;
+  emoji?: string;
+};
+
+export type CartLine = StoreProduct & {
+  qty: number;
+  /** Si está presente, la línea representa un combo promocional (precio = comboPrice). */
+  comboId?: string;
+  comboItems?: CartComboItemPreview[];
+};

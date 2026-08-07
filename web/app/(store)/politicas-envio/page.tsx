@@ -25,7 +25,7 @@ export default function PoliticasEnvioPage() {
       <LegalRevealSection number={1} title="Cómo funciona nuestro envío" variant="light">
         <div className="legal-card-grid legal-card-grid--4">
           <LegalGlassCard icon="🚚" title="Envío gratis">
-            Envío gratis en compras mayores a <span className="legal-highlight">$150.000</span>.
+            Envío gratis en compras mayores a <span className="legal-highlight">$130.000</span>.
           </LegalGlassCard>
           <LegalGlassCard icon="⚡" title="Bogotá Express">
             Recibe hoy si compras antes de las 12m (lunes a viernes).
@@ -86,7 +86,7 @@ export default function PoliticasEnvioPage() {
                 </td>
               </tr>
               <tr>
-                <td>Compras mayores a $150.000</td>
+                <td>Compras mayores a $130.000</td>
                 <td>
                   <strong>GRATIS</strong> (todas las zonas)
                 </td>

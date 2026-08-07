@@ -160,7 +160,11 @@ export function CheckoutPageClient() {
       const t = line1.trim();
       const c = city.trim();
       return {
-        items: cart.map((x) => ({ productId: x.id, quantity: x.qty })),
+        items: cart.map((x) =>
+          x.comboId
+            ? { comboId: x.comboId, quantity: x.qty }
+            : { productId: x.id, quantity: x.qty },
+        ),
         customerEmail: email.trim(),
         customerName: name.trim(),
         customerPhone: phone.trim().length >= 7 ? phone.trim() : undefined,
@@ -488,7 +492,19 @@ export function CheckoutPageClient() {
                   </div>
                   <div>
                     <div style={{ fontWeight: 600, color: "var(--dark)" }}>{item.name}</div>
-                    <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{item.brand}</div>
+                    <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                      {item.comboId ? "Combo promocional" : item.brand}
+                    </div>
+                    {item.comboItems && item.comboItems.length > 0 ? (
+                      <ul style={{ margin: "6px 0 0", padding: "0 0 0 14px", fontSize: 12, color: "var(--text-muted)" }}>
+                        {item.comboItems.map((ci, idx) => (
+                          <li key={`${item.id}-ck-${idx}`}>
+                            {ci.quantity > 1 ? `${ci.quantity}× ` : ""}
+                            {ci.name}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                     <div className="gb-co-qty">
                       <button type="button" onClick={() => changeQty(item.id, -1)} aria-label="Menos">
                         −

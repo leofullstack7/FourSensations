@@ -1,5 +1,5 @@
 /** Umbral en COP: por encima, envío gratis en todas las zonas (excepto lógica de tarifa base 0 en recogida). */
-export const CHECKOUT_FREE_SHIPPING_THRESHOLD_COP = 150_000;
+export const CHECKOUT_FREE_SHIPPING_THRESHOLD_COP = 130_000;
 
 export const SHIPPING_ZONE_IDS = [
   "bogota",

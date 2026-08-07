@@ -14,6 +14,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { toCategorySlug } from "@/lib/menu-config";
 import type { MenuConfig } from "@/lib/types/admin";
 import type { CartLine, StoreProduct } from "@/lib/types/product";
+import type { StoreCombo } from "@/lib/types/store-combo";
+import { cartComboLineId } from "@/lib/types/store-combo";
 import { getCategoryLabel } from "@/lib/category-labels";
 import { formatPrice } from "@/lib/format";
 import { preloadStorefrontProductImages } from "@/lib/preload-storefront-image";
@@ -246,6 +248,48 @@ export function StorefrontShell({
     [cart, persistCart, products, showToast],
   );
 
+  const addComboToCart = useCallback(
+    (combo: StoreCombo) => {
+      const lineId = cartComboLineId(combo.id);
+      const cover = combo.items.find((i) => isHttpImageUrl(i.product.imageUrl))?.product;
+      const line: CartLine = {
+        id: lineId,
+        name: combo.name,
+        brand: "Combo Ginna",
+        category: "combos",
+        subcategory: "",
+        tags: ["combo"],
+        price: combo.comboPrice,
+        originalPrice: combo.retailTotal > combo.comboPrice ? combo.retailTotal : null,
+        rating: 5,
+        reviews: 0,
+        badge: "sale",
+        description: combo.items.map((i) => `${i.quantity}× ${i.product.name}`).join(" · "),
+        img: cover?.imageUrl && isHttpImageUrl(cover.imageUrl) ? cover.imageUrl : "",
+        emoji: cover?.emoji || "🎁",
+        isNew: true,
+        featuredInHome: false,
+        gallery: [],
+        qty: 1,
+        comboId: combo.id,
+        comboItems: combo.items.map((i) => ({
+          name: i.product.name,
+          quantity: i.quantity,
+          img: i.product.imageUrl ?? undefined,
+          emoji: i.product.emoji ?? undefined,
+        })),
+      };
+      const existing = cart.find((i) => i.id === lineId);
+      if (existing) {
+        persistCart(cart.map((i) => (i.id === lineId ? { ...i, qty: i.qty + 1 } : i)));
+      } else {
+        persistCart([...cart, line]);
+      }
+      showToast(`Combo «${combo.name}» agregado al carrito`, "success", "🎁");
+    },
+    [cart, persistCart, showToast],
+  );
+
   const removeFromCart = useCallback(
     (productId: string) => {
       persistCart(cart.filter((i) => i.id !== productId));
@@ -476,6 +520,7 @@ export function StorefrontShell({
         openSearch,
         openSearchWithQuery,
         addToCart,
+        addComboToCart,
         toggleFavorite,
         favorites,
       }}
@@ -782,7 +827,19 @@ export function StorefrontShell({
                 </div>
                 <div className="cart-item-info" style={{ flex: 1 }}>
                   <div className="cart-item-name">{item.name}</div>
-                  <div className="cart-item-variant">{item.brand}</div>
+                  <div className="cart-item-variant">
+                    {item.comboId ? "Combo promocional" : item.brand}
+                  </div>
+                  {item.comboItems && item.comboItems.length > 0 ? (
+                    <ul style={{ margin: "6px 0 0", padding: "0 0 0 14px", fontSize: 11, color: "var(--text-muted)", lineHeight: 1.35 }}>
+                      {item.comboItems.map((ci, idx) => (
+                        <li key={`${item.id}-ci-${idx}`}>
+                          {ci.quantity > 1 ? `${ci.quantity}× ` : ""}
+                          {ci.name}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                   <div className="cart-item-price">{formatPrice(item.price)}</div>
                   <div className="qty-control">
                     <button type="button" className="qty-btn" onClick={() => changeQty(item.id, -1)}>

@@ -17,6 +17,7 @@ export type StorefrontUiContextValue = {
   openSearch: () => void;
   openSearchWithQuery: (query: string) => void;
   addToCart: (id: string) => void;
+  addComboToCart: (combo: import("@/lib/types/store-combo").StoreCombo) => void;
   toggleFavorite: (id: string) => void;
   favorites: string[];
 };

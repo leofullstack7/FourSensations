@@ -10,10 +10,22 @@ export const shippingAddressSchema = z.object({
   postalCode: z.string().max(20).optional(),
 });
 
-export const checkoutLineSchema = z.object({
-  productId: z.string().min(1),
-  quantity: z.number().int().min(1).max(99),
-});
+export const checkoutLineSchema = z
+  .object({
+    productId: z.string().min(1).optional(),
+    comboId: z.string().min(1).optional(),
+    quantity: z.number().int().min(1).max(99),
+  })
+  .superRefine((v, ctx) => {
+    const hasProduct = Boolean(v.productId?.trim());
+    const hasCombo = Boolean(v.comboId?.trim());
+    if (hasProduct === hasCombo) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Cada línea debe tener productId o comboId (uno solo).",
+      });
+    }
+  });
 
 export const createCheckoutOrderSchema = z
   .object({

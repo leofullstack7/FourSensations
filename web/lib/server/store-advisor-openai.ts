@@ -67,7 +67,7 @@ Mantén el hilo de la conversación. Recomienda SOLO productos del CATÁLOGO (id
 Cuando recomiendes productos, invita naturalmente a agregarlos al carrito o favoritos.
 1-3 frases, español Colombia, tono de empleada de tienda.
 
-Envío gratis desde $150.000 COP · Pagos ePayco/Bold · Calidad profesional GinnaBeauty.
+Envío gratis desde $130.000 COP · Pagos ePayco/Bold · Calidad profesional GinnaBeauty.
 WhatsApp de atención: ${WHATSAPP_BUSINESS_DISPLAY}.
 
 CONVERSACIÓN:

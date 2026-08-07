@@ -1655,3 +1655,267 @@
   }
 }
 
+
+/* ——— Combos home + landing ——— */
+.gb-home-combos {
+  background:
+    radial-gradient(ellipse 70% 50% at 10% 20%, rgba(232, 200, 194, 0.45), transparent 55%),
+    radial-gradient(ellipse 60% 45% at 90% 80%, rgba(196, 181, 214, 0.28), transparent 50%),
+    linear-gradient(165deg, #fffaf7 0%, var(--ivory) 45%, #f3ebe4 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.gb-home-combos-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 28px;
+}
+
+.gb-home-combos-grid {
+  display: grid;
+  gap: 28px;
+}
+
+.gb-home-combos-grid--1 { grid-template-columns: 1fr; max-width: 420px; margin-inline: auto; }
+.gb-home-combos-grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.gb-home-combos-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+@media (max-width: 900px) {
+  .gb-home-combos-grid--2,
+  .gb-home-combos-grid--3 { grid-template-columns: 1fr; }
+}
+
+.gb-combos-page-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 32px 24px;
+}
+
+.gb-combos-empty {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.gb-combo-wave-card {
+  position: relative;
+  isolation: isolate;
+  padding: 10px;
+}
+
+.gb-combo-wave-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 28px;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.gb-combo-wave-orbit {
+  position: absolute;
+  inset: -40%;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  opacity: 0.85;
+  filter: blur(0.2px);
+}
+
+.gb-combo-wave-orbit--a {
+  border-top-color: var(--rose, #c9918b);
+  border-right-color: var(--blush, #e8c8c2);
+  animation: gb-combo-orbit-spin 7s linear infinite;
+}
+
+.gb-combo-wave-orbit--b {
+  inset: -28%;
+  border-bottom-color: var(--lavender, #b8a4d4);
+  border-left-color: var(--sage, #9cbaa8);
+  animation: gb-combo-orbit-spin 11s linear infinite reverse;
+}
+
+.gb-combo-wave-orbit--c {
+  inset: -18%;
+  border-top-color: var(--gold, #c9a86a);
+  border-left-color: var(--dusty-rose, #b87070);
+  animation: gb-combo-orbit-spin 5.5s linear infinite;
+  opacity: 0.7;
+}
+
+@keyframes gb-combo-orbit-spin {
+  to { transform: rotate(360deg); }
+}
+
+.gb-combo-wave-ring::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 24px;
+  background:
+    conic-gradient(
+      from 0deg,
+      rgba(201, 145, 139, 0.55),
+      rgba(232, 200, 194, 0.35),
+      rgba(156, 186, 168, 0.45),
+      rgba(184, 164, 212, 0.4),
+      rgba(201, 168, 106, 0.5),
+      rgba(201, 145, 139, 0.55)
+    );
+  animation: gb-combo-conic 8s linear infinite;
+  filter: blur(10px);
+  opacity: 0.9;
+}
+
+@keyframes gb-combo-conic {
+  to { transform: rotate(360deg); }
+}
+
+.gb-combo-wave-inner {
+  position: relative;
+  z-index: 1;
+  border-radius: 22px;
+  background: rgba(255, 252, 249, 0.96);
+  border: 1px solid rgba(201, 145, 139, 0.28);
+  box-shadow: 0 18px 40px rgba(45, 31, 26, 0.08);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  backdrop-filter: blur(8px);
+}
+
+.gb-combo-wave-cover {
+  position: relative;
+  aspect-ratio: 16 / 11;
+  background: linear-gradient(145deg, var(--cream), var(--blush));
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.gb-combo-wave-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gb-combo-wave-emoji {
+  font-size: 56px;
+}
+
+.gb-combo-wave-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  background: linear-gradient(120deg, var(--dusty-rose), var(--rose));
+  padding: 6px 10px;
+  border-radius: 999px;
+  box-shadow: 0 6px 16px rgba(184, 112, 112, 0.35);
+}
+
+.gb-combo-wave-body {
+  padding: 16px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.gb-combo-wave-eyebrow {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dusty-rose);
+  font-weight: 700;
+}
+
+.gb-combo-wave-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 2vw, 1.55rem);
+  font-weight: 600;
+  color: var(--dark);
+  line-height: 1.2;
+}
+
+.gb-combo-wave-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 140px;
+  overflow: auto;
+}
+
+.gb-combo-wave-items li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.gb-combo-wave-item-thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: var(--cream);
+  border: 1px solid rgba(201, 145, 139, 0.25);
+  font-size: 14px;
+}
+
+.gb-combo-wave-item-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gb-combo-wave-item-name {
+  line-height: 1.3;
+}
+
+.gb-combo-wave-pricing {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.gb-combo-wave-retail {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.gb-combo-wave-price {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--dark);
+}
+
+.gb-combo-wave-cta {
+  width: 100%;
+  justify-content: center;
+}
+
+[data-landing-slug="combos"] .category-landing-hero-copy {
+  max-width: min(560px, 56vw);
+}

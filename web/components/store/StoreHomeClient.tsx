@@ -20,7 +20,9 @@ import {
 } from "@/lib/store/variant-groups";
 import { catKeyFromDisplayName } from "@/lib/category-labels";
 import type { StoreProduct } from "@/lib/types/product";
+import type { StoreCombo } from "@/lib/types/store-combo";
 import type { TintBubbleItem } from "@/lib/tints";
+import { HomeCombosPromo } from "@/components/store/CombosPromo";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const HERO_BANNERS_DESKTOP = [banner2Image.src, "/banner.webp"] as const;
@@ -34,9 +36,14 @@ const MOBILE_FEATURED_BREAKPOINT = 768;
 type StoreHomeClientProps = {
   tintItems?: TintBubbleItem[];
   initialProducts?: StoreProduct[];
+  initialCombos?: StoreCombo[];
 };
 
-export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreHomeClientProps) {
+export function StoreHomeClient({
+  tintItems = [],
+  initialProducts = [],
+  initialCombos = [],
+}: StoreHomeClientProps) {
   const {
     catalogProducts,
     menuConfig,
@@ -205,7 +212,7 @@ export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreH
           <span className="marquee-item">🌿 Skincare natural</span>
           <span className="marquee-item">💅 Uñas que enamoran</span>
           <span className="marquee-item">📦 Mayorista disponible</span>
-          <span className="marquee-item">🚚 Envío gratis +$150K</span>
+          <span className="marquee-item">🚚 Envío gratis +$130K</span>
           <span className="marquee-item">✨ Maquillaje de larga duración</span>
           <span className="marquee-item">💆 Cuidado capilar premium</span>
           <span className="marquee-item">
@@ -214,7 +221,7 @@ export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreH
           <span className="marquee-item">🌿 Skincare natural</span>
           <span className="marquee-item">💅 Uñas que enamoran</span>
           <span className="marquee-item">📦 Mayorista disponible</span>
-          <span className="marquee-item">🚚 Envío gratis +$150K</span>
+          <span className="marquee-item">🚚 Envío gratis +$130K</span>
         </div>
       </div>
 
@@ -233,7 +240,7 @@ export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreH
               <div className="trust-icon">🚚</div>
               <div>
                 <div className="trust-title">Envío a toda Colombia</div>
-                <div className="trust-desc">Gratis en compras superiores a $150.000</div>
+                <div className="trust-desc">Gratis en compras superiores a $130.000</div>
               </div>
             </div>
             <div className="trust-item">
@@ -253,6 +260,8 @@ export function StoreHomeClient({ tintItems = [], initialProducts = [] }: StoreH
           </div>
         </div>
       </section>
+
+      <HomeCombosPromo combos={initialCombos} />
 
       <section className="section-pad" style={{ background: "var(--ivory)" }}>
         <div className="container reveal">

@@ -1,3 +1,4 @@
+import { CHECKOUT_FREE_SHIPPING_THRESHOLD_COP } from "@/lib/checkout/shipping-zones";
 import type { CartLine } from "@/lib/types/product";
 
 export const CART_KEY = "gb_cart";
@@ -20,7 +21,7 @@ export function saveCart(cart: CartLine[]): void {
   localStorage.setItem(CART_KEY, JSON.stringify(cart));
 }
 
-/** Misma regla que el carrito lateral (envío gratis desde cierto subtotal). */
+/** Misma regla que checkout: envío gratis por encima del umbral. */
 export function computeShippingCop(subtotal: number): number {
-  return subtotal >= 150_000 ? 0 : 9_000;
+  return subtotal > CHECKOUT_FREE_SHIPPING_THRESHOLD_COP ? 0 : 9_000;
 }

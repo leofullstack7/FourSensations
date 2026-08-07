@@ -60,7 +60,7 @@ const RETURNS = ["devolucion", "devoluciones", "cambio", "garantia", "reembolso"
 /** Conocimiento fijo de la tienda (no está en columnas de producto). */
 export const STORE_ADVISOR_KNOWLEDGE = {
   shipping:
-    "Enviamos a toda Colombia. Compras desde $150.000 COP tienen envío gratis. El tiempo de entrega depende de tu ciudad; lo confirmas en checkout.",
+    "Enviamos a toda Colombia. Compras desde $130.000 COP tienen envío gratis. El tiempo de entrega depende de tu ciudad; lo confirmas en checkout.",
   payments:
     "Aceptamos pagos seguros en línea (ePayco, Bold y tarjetas). El total final y opciones disponibles aparecen al finalizar la compra.",
   returns: `Para cambios o garantías escríbenos por WhatsApp al ${WHATSAPP_BUSINESS_DISPLAY} con tu número de pedido; el equipo te orienta según el producto.`,
