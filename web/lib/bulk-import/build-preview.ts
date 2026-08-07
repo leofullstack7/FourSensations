@@ -285,6 +285,11 @@ export type BulkPreviewResult = {
   imageMatches: BulkPreviewImageMatch[];
   unmatchedImages: BulkPreviewImageMatch[];
   newCategories: BulkPreviewNewTaxonomyItem[];
+  /**
+   * El admin aceptó crear categorías/subcategorías nuevas al importar
+   * (aún no existen en DB hasta el commit).
+   */
+  taxonomyCreateDeferred?: boolean;
   /** Overrides desde la UI: reubicar (categoría CSV, sub CSV) → slug + sub del sistema. */
   taxonomyOverrides: Record<string, { categorySlug: string; subcategoryName: string }>;
   /** Overrides por fila individual (previewRowId → slug + sub). Tienen prioridad sobre taxonomyOverrides. */
@@ -898,6 +903,7 @@ export function buildBulkPreview(params: {
     imageMatches: imageMatches.sort((a, b) => a.imageFilename.localeCompare(b.imageFilename)),
     unmatchedImages,
     newCategories,
+    taxonomyCreateDeferred: false,
     taxonomyOverrides: { ...taxonomyOverrides },
     rowTaxonomyOverrides: { ...rowTaxonomyOverrides },
     rowFieldOverrides: { ...rowFieldOverrides },

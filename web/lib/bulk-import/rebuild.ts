@@ -7,6 +7,7 @@ import {
   tintMatchScopeFromState,
   type TintCatalogState,
 } from "./tint-catalog";
+import { applyDeferredTaxonomyPlaceholders } from "@/lib/bulk-import/deferred-taxonomy";
 
 export function rebuildBulkPreview(params: {
   headers: string[];
@@ -21,6 +22,7 @@ export function rebuildBulkPreview(params: {
   taxonomyRehomeDismissed?: Record<string, boolean>;
   tintCatalog?: TintCatalogState;
   previousPreview?: BulkPreviewResult | null;
+  taxonomyCreateDeferred?: boolean;
 }): BulkPreviewResult {
   const { entries } = listZipImages(params.zipBuffer, { includeBuffers: false });
   const prevState = params.tintCatalog ?? readTintCatalogStateFromPreview(params.previousPreview ?? null);
@@ -41,5 +43,11 @@ export function rebuildBulkPreview(params: {
     tintMatchScope,
   });
 
-  return applyTintCatalogToPreview(base, prevState);
+  const withTint = applyTintCatalogToPreview(base, prevState);
+  withTint.taxonomyCreateDeferred =
+    params.taxonomyCreateDeferred ?? params.previousPreview?.taxonomyCreateDeferred === true;
+  if (withTint.taxonomyCreateDeferred) {
+    applyDeferredTaxonomyPlaceholders(withTint);
+  }
+  return withTint;
 }

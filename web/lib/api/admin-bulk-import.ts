@@ -93,6 +93,7 @@ export async function patchBulkImportJob(
       { name?: string; description?: string; price?: number | null; stock?: number | null }
     >;
     taxonomyRehomeDismissed?: Record<string, boolean>;
+    taxonomyCreateDeferred?: boolean;
     activeTintTypeCsvKey?: string | null;
     activeTintTypeId?: string | null;
     activeTintFamilyCsvKey?: string | null;

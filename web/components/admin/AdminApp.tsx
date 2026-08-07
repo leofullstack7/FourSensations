@@ -6196,7 +6196,7 @@ function AdminBulkTab({
         open={
           showTintTypeModal &&
           (needsTintSelection ||
-            !!(preview?.hasTintesRows && (!preview?.activeTintTypeId || !preview?.activeTintFamilyId)))
+            !!(preview?.hasTintesRows && (!preview?.activeTintTypeCsvKey || !preview?.activeTintFamilyCsvKey)))
         }
         csvMissingTintType={preview?.csvMissingTintType === true}
         previewRows={preview?.rows ?? []}
@@ -6277,9 +6277,12 @@ function AdminBulkTab({
             setMutation(null);
           }
         }}
-        onCreateCatalog={async ({ newFamilies, newTypes }) => {
-          const res = await postTintResolveCatalog({ newFamilies, newTypes });
-          return res;
+        onCreateCatalog={async () => {
+          // Catálogo diferido al commit: no crear aquí.
+          return {
+            families: preview?.existingTintFamilies ?? [],
+            types: preview?.existingTintTypes ?? [],
+          };
         }}
       />
       <AdminBulkMissingPriceModal
@@ -6401,87 +6404,30 @@ function AdminBulkTab({
         }}
         onConfirm={() => {
           void (async () => {
+            if (!jobId) {
+              showToast("No hay sesión de importación activa.", "danger", "⚠️");
+              return;
+            }
             setApplyingNewCategories(true);
+            setMutation("bulk");
             try {
-              const norm = (v: string) =>
-                v
-                  .trim()
-                  .toLowerCase()
-                  .normalize("NFD")
-                  .replace(/[\u0300-\u036f]/g, "")
-                  .replace(/[_-]/g, " ")
-                  .replace(/\s+/g, " ")
-                  .trim();
-              for (const item of pendingNewCategories) {
-                let tree = await fetchAdminCategories();
-                if (item.kind === "newCategory") {
-                  let parent =
-                    tree.find(
-                      (c) => norm(c.name) === norm(item.categoryName) || norm(c.slug) === norm(item.categoryName)
-                    ) ?? null;
-                  if (!parent) {
-                    const created = await createAdminCategory({
-                      name: normalizeTaxonomyNameForDb(item.categoryName),
-                    });
-                    tree = await fetchAdminCategories();
-                    parent =
-                      tree.find((c) => c.id === created.id) ??
-                      tree.find(
-                        (c) => norm(c.name) === norm(item.categoryName) || norm(c.slug) === norm(item.categoryName)
-                      ) ??
-                      null;
-                    if (!parent) throw new Error(`No se pudo localizar la categoría recién creada "${item.categoryName}".`);
-                  }
-                  for (const subName of item.subcategories) {
-                    tree = await fetchAdminCategories();
-                    const p = tree.find((c) => c.id === parent!.id);
-                    if (!p) throw new Error(`Categoría padre perdida al crear subcategoría "${subName}".`);
-                    const subDbName = normalizeTaxonomyNameForDb(subName);
-                    const existsSub = p.subcategories.some(
-                      (s) =>
-                        normalizeTaxonomyNameForDb(s.name) === subDbName ||
-                        norm(s.slug) === norm(subName)
-                    );
-                    if (!existsSub) await createAdminSubcategory(p.id, { name: subDbName });
-                  }
-                } else {
-                  const parent =
-                    tree.find((c) => c.slug === item.parentCategorySlug) ??
-                    tree.find(
-                      (c) =>
-                        norm(c.slug) === norm(item.parentCategorySlug) ||
-                        norm(c.name) === norm(item.parentCategoryName)
-                    );
-                  if (!parent) {
-                    throw new Error(`No se encontró la categoría "${item.parentCategoryName}" para crear subcategorías.`);
-                  }
-                  for (const subName of item.subcategories) {
-                    const treeFresh = await fetchAdminCategories();
-                    const p = treeFresh.find((c) => c.id === parent.id);
-                    if (!p) throw new Error(`Categoría padre perdida al crear subcategoría "${subName}".`);
-                    const subDbName = normalizeTaxonomyNameForDb(subName);
-                    const existsSub = p.subcategories.some(
-                      (s) =>
-                        normalizeTaxonomyNameForDb(s.name) === subDbName ||
-                        norm(s.slug) === norm(subName)
-                    );
-                    if (!existsSub) await createAdminSubcategory(p.id, { name: subDbName });
-                  }
-                }
-              }
-              await onCategoriesUpdated();
-              if (jobId) {
-                const { preview: refreshed } = await patchBulkImportJob(jobId, {
-                  selectedRowIds,
-                });
-                setPreview(refreshed);
-              }
+              const { preview: refreshed } = await patchBulkImportJob(jobId, {
+                taxonomyCreateDeferred: true,
+                selectedRowIds,
+              });
+              setPreview(refreshed);
               setShowNewCategoriesModal(false);
-              showToast("Taxonomía actualizada y preview recalculada.", "success", "✅");
+              setNewCategoriesModalAcknowledged(true);
+              showToast(
+                "Listo: esas categorías/subcategorías se crearán en el sistema solo al importar los productos.",
+                "success",
+                "✅"
+              );
             } catch (err) {
-              showToast(err instanceof Error ? err.message : "Error creando categorías nuevas", "danger", "⚠️");
+              showToast(err instanceof Error ? err.message : "Error al confirmar taxonomía", "danger", "⚠️");
             } finally {
               setApplyingNewCategories(false);
+              setMutation(null);
             }
           })();
         }}
@@ -6622,9 +6568,9 @@ function AdminBulkTintSetupModal({
   onSkipTints: () => void;
   onConfirm: (plan: {
     typeKey: string;
-    typeId: string;
+    typeId: string | null;
     familyKey: string;
-    familyId: string;
+    familyId: string | null;
     typeLinks: Record<string, string>;
     familyLinks: Record<string, string>;
     defaultTintTypeApplied?: boolean;
@@ -6632,7 +6578,7 @@ function AdminBulkTintSetupModal({
     tintTypeOverrides?: Record<string, string>;
     selectAllTintRows?: boolean;
   }) => void | Promise<void>;
-  onCreateCatalog: (plan: {
+  onCreateCatalog?: (plan: {
     newFamilies: string[];
     newTypes: string[];
   }) => Promise<{ families: { id: string; name: string }[]; types: { id: string; name: string }[] }>;
@@ -6714,8 +6660,8 @@ function AdminBulkTintSetupModal({
 
   const typeNeedsCatalog = selectedType != null && !effectiveTypeId;
   const familyNeedsCatalog = selectedFamily != null && !effectiveFamilyId;
-  const canConfirm =
-    !!selectedTypeKey && !!selectedFamilyKey && !!effectiveTypeId && !!effectiveFamilyId && !catalogBusy;
+  // Se puede confirmar con nombres pendientes: tip/familia se crean al importar.
+  const canConfirm = !!selectedTypeKey && !!selectedFamilyKey && !catalogBusy;
 
   const typeSelectOptions = useMemo(() => {
     const byId = new Map(existingTypes.map((t) => [t.id, t]));
@@ -6747,16 +6693,9 @@ function AdminBulkTintSetupModal({
 
   const handleCreateType = async (name: string) => {
     const key = normalizeTintCatalogName(name);
-    setCatalogBusy(true);
-    try {
-      const res = await onCreateCatalog({ newFamilies: [], newTypes: [key] });
-      const created = res.types.find((t) => normalizeTintCatalogName(t.name) === key);
-      if (!created) throw new Error("No se pudo crear el tipo");
-      setSelectedTypeKey(key);
-      setResolvedTypeId(created.id);
-    } finally {
-      setCatalogBusy(false);
-    }
+    // Diferido: no se crea en DB hasta el commit de importación.
+    setSelectedTypeKey(key);
+    setResolvedTypeId(null);
   };
 
   const handleLinkType = (name: string, linkId: string) => {
@@ -6768,17 +6707,8 @@ function AdminBulkTintSetupModal({
 
   const handleCreateFamily = async () => {
     if (!selectedFamilyKey) return;
-    setCatalogBusy(true);
-    try {
-      const res = await onCreateCatalog({ newFamilies: [selectedFamilyKey], newTypes: [] });
-      const created = res.families.find(
-        (f) => normalizeTintCatalogName(f.name) === normalizeTintCatalogName(selectedFamilyKey)
-      );
-      if (!created) throw new Error("No se pudo crear la familia");
-      setResolvedFamilyId(created.id);
-    } finally {
-      setCatalogBusy(false);
-    }
+    // Diferido: se materializa en el commit.
+    setResolvedFamilyId(null);
   };
 
   const handleLinkFamily = () => {
@@ -6829,41 +6759,20 @@ function AdminBulkTintSetupModal({
 
   const resolveManualTypeOverrides = async (): Promise<Record<string, string>> => {
     const resolved: Record<string, string> = {};
-    const newNames = new Set<string>();
 
     for (const [rowId, typeId] of Object.entries(manualTypeOverrides)) {
       if (typeId === MANUAL_TINT_TYPE_NEW) {
         const raw = manualCustomTypeNames[rowId]?.trim();
-        if (raw) newNames.add(normalizeTintCatalogName(raw));
+        if (!raw) continue;
+        const key = normalizeTintCatalogName(raw);
+        const hit = existingTypes.find((t) => normalizeTintCatalogName(t.name) === key);
+        if (hit) {
+          if (hit.id !== effectiveTypeId) resolved[rowId] = hit.id;
+        } else {
+          resolved[rowId] = `__pending__:${key}`;
+        }
       } else if (typeId !== effectiveTypeId) {
         resolved[rowId] = typeId;
-      }
-    }
-
-    const nameToId = new Map<string, string>();
-    for (const name of newNames) {
-      const hit = existingTypes.find((t) => normalizeTintCatalogName(t.name) === name);
-      if (hit) nameToId.set(name, hit.id);
-    }
-
-    const toCreate = [...newNames].filter((n) => !nameToId.has(n));
-    if (toCreate.length > 0) {
-      setCatalogBusy(true);
-      try {
-        const res = await onCreateCatalog({ newFamilies: [], newTypes: toCreate });
-        for (const t of res.types) {
-          nameToId.set(normalizeTintCatalogName(t.name), t.id);
-        }
-      } finally {
-        setCatalogBusy(false);
-      }
-    }
-
-    for (const [rowId, typeId] of Object.entries(manualTypeOverrides)) {
-      if (typeId === MANUAL_TINT_TYPE_NEW) {
-        const key = normalizeTintCatalogName(manualCustomTypeNames[rowId]?.trim() ?? "");
-        const id = key ? nameToId.get(key) : null;
-        if (id && id !== effectiveTypeId) resolved[rowId] = id;
       }
     }
 
@@ -6871,7 +6780,7 @@ function AdminBulkTintSetupModal({
   };
 
   const finishConfirm = (resolvedOverrides?: Record<string, string>) => {
-    if (!selectedTypeKey || !selectedFamilyKey || !effectiveTypeId || !effectiveFamilyId) return;
+    if (!selectedTypeKey || !selectedFamilyKey) return;
     const overrides: Record<string, string> = resolvedOverrides ?? {};
     if (!resolvedOverrides) {
       for (const [rowId, typeId] of Object.entries(manualTypeOverrides)) {
@@ -7213,6 +7122,9 @@ function AdminBulkTintSetupModal({
                 }}
               >
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>Tipo «{selectedType.name}» no está en catálogo</div>
+                <p style={{ margin: "0 0 8px", fontSize: 12, color: "var(--text-muted)" }}>
+                  Se creará automáticamente al importar los productos.
+                </p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                   <button
                     type="button"
@@ -7220,7 +7132,7 @@ function AdminBulkTintSetupModal({
                     disabled={saving || catalogBusy}
                     onClick={() => void handleCreateType(selectedType.name)}
                   >
-                    Crear tipo
+                    Usar este tipo (crear al importar)
                   </button>
                   <span style={{ fontSize: 12, color: "var(--text-muted)" }}>o vincular a:</span>
                   <select
@@ -7361,6 +7273,9 @@ function AdminBulkTintSetupModal({
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>
                   Familia «{selectedFamily?.name ?? selectedFamilyKey}» no está en catálogo
                 </div>
+                <p style={{ margin: "0 0 8px", fontSize: 12, color: "var(--text-muted)" }}>
+                  Se creará automáticamente al importar los productos.
+                </p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                   <button
                     type="button"
@@ -7368,7 +7283,7 @@ function AdminBulkTintSetupModal({
                     disabled={saving || catalogBusy}
                     onClick={() => void handleCreateFamily()}
                   >
-                    Crear familia
+                    Usar esta familia (crear al importar)
                   </button>
                   <span style={{ fontSize: 12, color: "var(--text-muted)" }}>o vincular a:</span>
                   <select
@@ -7650,8 +7565,9 @@ function AdminBulkNewCategoriesModal({
           </p>
         </div>
         <p style={{ marginTop: 0, marginBottom: 14, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
-          Si confirmas «Crear en el sistema», se añadirán estas entradas al menú para poder importar{" "}
-          <strong>{totalNewRows} producto(s) nuevo(s)</strong>. Los ya registrados no se tocan.
+          Si aceptas, se registrarán para <strong>{totalNewRows} producto(s) nuevo(s)</strong> y se{" "}
+          <strong>crearán en el sistema solo al importar</strong> (al terminar el match y confirmar la subida). Los ya
+          registrados no se tocan.
         </p>
         <div
           style={{
@@ -7711,7 +7627,7 @@ function AdminBulkNewCategoriesModal({
             Continuar sin crear
           </button>
           <button type="button" className="btn btn-primary" disabled={saving} onClick={onConfirm}>
-            {saving ? "Creando…" : "✅ Crear en el sistema"}
+            {saving ? "Guardando…" : "✅ Aceptar (crear al importar)"}
           </button>
         </div>
       </div>

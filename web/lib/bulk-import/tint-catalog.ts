@@ -121,14 +121,15 @@ function countTintFamiliesForType(
 function isTintRowInActiveScope(
   row: BulkPreviewRow,
   activeTypeKey: string | null,
-  activeTypeId: string | null,
+  _activeTypeId: string | null,
   activeFamilyKey: string | null,
-  activeFamilyId: string | null,
+  _activeFamilyId: string | null,
   defaultTypeApplied: boolean,
   defaultFamilyApplied: boolean
 ): boolean {
   if (!bulkPreviewRowIsTintes(row)) return true;
-  if (!activeTypeKey || !activeTypeId || !activeFamilyKey || !activeFamilyId) return false;
+  // Solo se exigen las claves CSV; los IDs pueden crearse en el commit.
+  if (!activeTypeKey || !activeFamilyKey) return false;
   return (
     rowEffectiveTintTypeKey(row, activeTypeKey, defaultTypeApplied) === activeTypeKey &&
     rowEffectiveTintFamilyKey(row, activeFamilyKey, defaultFamilyApplied) === activeFamilyKey
@@ -268,11 +269,7 @@ export function applyTintCatalogToPreview(
     : [];
 
   const tintSelectionResolved =
-    !hasTintesRows ||
-    (!!activeTintTypeCsvKey &&
-      !!activeTintTypeId &&
-      !!activeTintFamilyCsvKey &&
-      !!activeTintFamilyId);
+    !hasTintesRows || (!!activeTintTypeCsvKey && !!activeTintFamilyCsvKey);
 
   const applyToRow = (r: BulkPreviewRow) => {
     if (!bulkPreviewRowIsTintes(r)) {
@@ -322,7 +319,7 @@ export function applyTintCatalogToPreview(
   for (const r of preview.rows) applyToRow(r);
 
   const filtered =
-    activeTintTypeCsvKey && activeTintTypeId && activeTintFamilyCsvKey && activeTintFamilyId
+    activeTintTypeCsvKey && activeTintFamilyCsvKey
       ? filterRowLists(
           preview,
           activeTintTypeCsvKey,

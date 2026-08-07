@@ -64,6 +64,8 @@ const patchSchema = z.object({
   defaultTintFamilyApplied: z.boolean().optional(),
   tintTypeOverrides: z.record(z.string(), z.string()).optional(),
   tintRowSelections: z.record(z.string(), tintRowSelectionEntry).optional(),
+  /** Crear categorías/subcategorías nuevas solo en el commit. */
+  taxonomyCreateDeferred: z.boolean().optional(),
   /** Combinar filas nuevas en un solo producto (fusiona imágenes). */
   combineRows: z
     .object({
@@ -233,6 +235,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     rowFieldOverrides,
     taxonomyRehomeDismissed,
     previousPreview: job.previewPayload as BulkPreviewResult | null,
+    taxonomyCreateDeferred:
+      parsed.data.taxonomyCreateDeferred !== undefined
+        ? parsed.data.taxonomyCreateDeferred
+        : (job.previewPayload as BulkPreviewResult | null)?.taxonomyCreateDeferred === true,
     tintCatalog: {
       existingTintFamilies: tintCatalogDb.families,
       existingTintTypes: tintCatalogDb.types,
@@ -248,6 +254,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     },
   });
   await withPrismaRetry(() => markBulkPreviewExistingByExternalRef(prisma, preview));
+  if (preview.taxonomyCreateDeferred) {
+    const { applyDeferredTaxonomyPlaceholders } = await import("@/lib/bulk-import/deferred-taxonomy");
+    applyDeferredTaxonomyPlaceholders(preview);
+  }
 
   const prevPreview = job.previewPayload as BulkPreviewResult | null;
   let rowCombines: BulkRowCombineSpec[] = Array.isArray(prevPreview?.rowCombines)

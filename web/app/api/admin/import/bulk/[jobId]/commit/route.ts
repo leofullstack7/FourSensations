@@ -32,6 +32,12 @@ import { enrichBulkPreviewFromDatabase } from "@/lib/server/bulk-import-mark-exi
 import {
   applyBulkRowCombines,
 } from "@/lib/bulk-import/bulk-row-combine";
+import { isDeferredTaxonomyIssue } from "@/lib/bulk-import/deferred-taxonomy";
+import {
+  ensureDeferredCategoriesOnCommit,
+  ensureTintCatalogOnCommit,
+  remapRowCategoryAfterDeferredCreate,
+} from "@/lib/server/bulk-import-deferred-taxonomy";
 import {
   CatalogActions,
   CatalogEntities,
@@ -199,7 +205,9 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       idSet.size > 0 ? idSet.has(bulkImportStableRowId(row)) : indexSet.has(row.rowIndex);
     if (!chosen) continue;
     const isVariantAssign = bulkRowIsVariantGroupAssign(row, existingPolicy);
-    const blocking = bulkRowBlockingIssues(row, existingPolicy);
+    const blocking = bulkRowBlockingIssues(row, existingPolicy).filter(
+      (issue) => !(preview.taxonomyCreateDeferred && isDeferredTaxonomyIssue(issue))
+    );
     if (blocking.length > 0) {
       return noStoreJson(
         { error: `Fila ${row.rowIndex + 1}: ${blocking.join("; ")}` },
@@ -234,6 +242,9 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if (toImport.length === 0) {
     return noStoreJson({ error: "Ninguna fila vÃ¡lida para importar" }, { status: 400 });
   }
+
+  const deferredTax = await ensureDeferredCategoriesOnCommit(prisma, preview);
+  const tintResolved = await ensureTintCatalogOnCommit(prisma, preview);
 
   const refsBatch = new Set(toImport.map((r) => r.normalizedCode!).filter(Boolean));
   const existingIds = new Set(
@@ -277,7 +288,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   let skippedExistingDuplicates = 0;
   let variantGroupsAssigned = 0;
   const assignedGroupCodes = new Set<string>();
-  const versionChanges: CatalogChangeInput[] = [];
+  const versionChanges: CatalogChangeInput[] = [...deferredTax.versionChanges];
   let versionCreatedCount = 0;
   let versionUpdatedCount = 0;
 
@@ -359,16 +370,41 @@ export async function POST(req: NextRequest, { params }: Ctx) {
         const tags = (row.mapped.tags ?? []).map((t) => t.trim()).filter(Boolean);
         const applyTags = preview.csvHasTagsColumn === true;
 
+        const remapped = remapRowCategoryAfterDeferredCreate(
+          row,
+          deferredTax.categorySlugByCsvKey
+        );
+        const categorySlug = remapped.categorySlug ?? row.mapped.categorySlug;
+        const subcategoryName =
+          remapped.subcategoryName ??
+          (row.mapped.subcategoryName
+            ? normalizeTaxonomyNameForDb(row.mapped.subcategoryName)
+            : null);
+        if (!categorySlug || !subcategoryName) {
+          errors.push(`Fila ${row.rowIndex + 1} (${ref}): categoría/subcategoría incompleta`);
+          continue;
+        }
+
         let tintFamilyId: string | null = null;
         let tintTypeId: string | null = null;
         let tintLevel: string | null = null;
         let tintGroup: string | null = null;
 
-        if (isTintesCategory(row.mapped.categorySlug)) {
+        if (isTintesCategory(categorySlug)) {
           tintLevel = row.mapped.tintLevel?.trim() || null;
           tintGroup = row.mapped.tintGroup?.trim() || null;
-          tintTypeId = preview.activeTintTypeId ?? row.tintTypeId ?? null;
-          tintFamilyId = preview.activeTintFamilyId ?? row.tintFamilyId ?? null;
+          const overrideType = tintResolved.tintTypeOverrides[bulkImportStableRowId(row)];
+          tintTypeId =
+            overrideType ??
+            tintResolved.activeTintTypeId ??
+            preview.activeTintTypeId ??
+            row.tintTypeId ??
+            null;
+          tintFamilyId =
+            tintResolved.activeTintFamilyId ??
+            preview.activeTintFamilyId ??
+            row.tintFamilyId ??
+            null;
 
           if (row.mapped.tintType?.trim() && !tintTypeId) {
             errors.push(`Fila ${row.rowIndex + 1} (${ref}): Tipo sin resolver`);
@@ -389,7 +425,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
           }
         }
 
-        const tintData = isTintesCategory(row.mapped.categorySlug)
+        const tintData = isTintesCategory(categorySlug)
           ? { tintFamilyId, tintTypeId, tintLevel, tintGroup }
           : {};
 
@@ -401,8 +437,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
               data: {
                 name,
                 brand,
-                category: row.mapped.categorySlug!,
-                subcategory: normalizeTaxonomyNameForDb(row.mapped.subcategoryName!),
+                category: categorySlug,
+                subcategory: subcategoryName,
                 description,
                 price: row.mapped.price!,
                 originalPrice: row.mapped.originalPrice ?? null,
@@ -433,8 +469,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
                 slug,
                 name,
                 brand,
-                category: row.mapped.categorySlug!,
-                subcategory: normalizeTaxonomyNameForDb(row.mapped.subcategoryName!),
+                category: categorySlug,
+                subcategory: subcategoryName,
                 description,
                 price: row.mapped.price!,
                 originalPrice: row.mapped.originalPrice ?? null,
@@ -523,8 +559,14 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
     if (versionChanges.length > 0) {
       const labelParts: string[] = [];
-      if (versionCreatedCount > 0) labelParts.push(`${versionCreatedCount} nuevos`);
-      if (versionUpdatedCount > 0) labelParts.push(`${versionUpdatedCount} actualizados`);
+      if (deferredTax.createdCategories > 0) {
+        labelParts.push(`${deferredTax.createdCategories} categorías`);
+      }
+      if (deferredTax.createdSubcategories > 0) {
+        labelParts.push(`${deferredTax.createdSubcategories} subcategorías`);
+      }
+      if (versionCreatedCount > 0) labelParts.push(`${versionCreatedCount} productos nuevos`);
+      if (versionUpdatedCount > 0) labelParts.push(`${versionUpdatedCount} productos actualizados`);
       await recordCatalogVersionSafe({
         label: `Importación masiva: ${labelParts.join(", ") || `${versionChanges.length} cambios`}`,
         changes: versionChanges,
