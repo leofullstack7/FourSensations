@@ -56,32 +56,29 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const ids = Array.from(new Set(parsed.data.ids));
+  const patch = parsed.data;
+  const ids = Array.from(new Set(patch.ids));
   let updatedCount = 0;
 
   // Marca uniforme: una sola query.
-  if (parsed.data.brand !== undefined && !parsed.data.stockById && parsed.data.stock === undefined) {
+  if (patch.brand !== undefined && !patch.stockById && patch.stock === undefined) {
     const result = await prisma.product.updateMany({
       where: { id: { in: ids } },
-      data: { brand: parsed.data.brand },
+      data: { brand: patch.brand },
     });
     updatedCount = result.count;
-  } else if (
-    parsed.data.stock !== undefined &&
-    parsed.data.brand === undefined &&
-    !parsed.data.stockById
-  ) {
+  } else if (patch.stock !== undefined && patch.brand === undefined && !patch.stockById) {
     const result = await prisma.product.updateMany({
       where: { id: { in: ids } },
-      data: { stock: parsed.data.stock },
+      data: { stock: patch.stock },
     });
     updatedCount = result.count;
-  } else if (parsed.data.stockById && parsed.data.brand === undefined) {
+  } else if (patch.stockById && patch.brand === undefined) {
     // Agrupar por valor de stock → updateMany por grupo (mucho más rápido).
     const byStock = new Map<number, string[]>();
     for (const id of ids) {
-      if (!Object.prototype.hasOwnProperty.call(parsed.data.stockById, id)) continue;
-      const stock = parsed.data.stockById[id]!;
+      if (!Object.prototype.hasOwnProperty.call(patch.stockById, id)) continue;
+      const stock = patch.stockById[id]!;
       const list = byStock.get(stock) ?? [];
       list.push(id);
       byStock.set(stock, list);
@@ -96,6 +93,7 @@ export async function POST(req: NextRequest) {
   } else {
     // brand + stock / stockById mezclado: update por id en paralelo limitado.
     const CONCURRENCY = 12;
+    const { brand, stock, stockById } = patch;
     let cursor = 0;
     let count = 0;
     async function worker() {
@@ -104,11 +102,11 @@ export async function POST(req: NextRequest) {
         if (index >= ids.length) break;
         const id = ids[index]!;
         const data: { brand?: string; stock?: number } = {};
-        if (parsed.data.brand !== undefined) data.brand = parsed.data.brand;
-        if (parsed.data.stockById && Object.prototype.hasOwnProperty.call(parsed.data.stockById, id)) {
-          data.stock = parsed.data.stockById[id];
-        } else if (parsed.data.stock !== undefined) {
-          data.stock = parsed.data.stock;
+        if (brand !== undefined) data.brand = brand;
+        if (stockById && Object.prototype.hasOwnProperty.call(stockById, id)) {
+          data.stock = stockById[id];
+        } else if (stock !== undefined) {
+          data.stock = stock;
         }
         if (Object.keys(data).length === 0) continue;
         await prisma.product.update({ where: { id }, data });
@@ -123,12 +121,12 @@ export async function POST(req: NextRequest) {
 
   if (updatedCount > 0) {
     revalidateStorefrontProducts();
-    if (parsed.data.recordVersion !== false) {
+    if (patch.recordVersion !== false) {
       const parts: string[] = [];
-      if (parsed.data.brand !== undefined) parts.push(`marca «${parsed.data.brand}»`);
-      if (parsed.data.stock !== undefined || parsed.data.stockById) parts.push("stock");
+      if (patch.brand !== undefined) parts.push(`marca «${patch.brand}»`);
+      if (patch.stock !== undefined || patch.stockById) parts.push("stock");
       const label =
-        parsed.data.versionLabel?.trim() ||
+        patch.versionLabel?.trim() ||
         `Actualización en lote (${updatedCount}): ${parts.join(" · ") || "campos"}`;
       await recordCatalogVersionSafe({
         label,
@@ -143,9 +141,9 @@ export async function POST(req: NextRequest) {
             afterData: {
               bulk: true,
               updatedCount,
-              brand: parsed.data.brand ?? null,
-              stock: parsed.data.stock ?? null,
-              stockByIdCount: parsed.data.stockById ? Object.keys(parsed.data.stockById).length : 0,
+              brand: patch.brand ?? null,
+              stock: patch.stock ?? null,
+              stockByIdCount: patch.stockById ? Object.keys(patch.stockById).length : 0,
               sampleIds: ids.slice(0, 12),
             },
           },
