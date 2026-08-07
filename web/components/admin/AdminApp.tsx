@@ -78,7 +78,6 @@ import {
   postBulkImportPreview,
   postBulkImportRowImage,
   postBulkZipOptimize,
-  postTintResolveCatalog,
   type BulkPreviewResponse,
 } from "@/lib/api/admin-bulk-import";
 import { bulkImportStableRowId } from "@/lib/bulk-import/bulk-import-row-id";
