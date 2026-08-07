@@ -63,13 +63,17 @@ import {
   productsWithZeroPrice,
 } from "@/components/admin/AdminZeroPriceTools";
 import { AdminProductAiDetailPanel, AdminProductDescriptionBlock } from "@/components/admin/AdminProductAiUi";
+import {
+  AdminCreatableSelect,
+  AdminTagsCreatableField,
+} from "@/components/admin/AdminCreatableSelect";
 import { computeBulkRowFieldDiffs, bulkRowHasUpdatableDiffs } from "@/lib/bulk-import/bulk-field-diff";
 import type { BulkFieldDiff } from "@/lib/bulk-import/bulk-field-diff";
 import { validateBulkRowCombine } from "@/lib/bulk-import/bulk-row-combine";
 import { BulkZipImageUrlCache } from "@/lib/bulk-import/zip-image-cache";
 import { suggestNameCombineGroups, type NameCombineSuggestionGroup } from "@/lib/bulk-import/name-similarity";
 import { postAdminAiSpendRecord } from "@/lib/api/admin-ai-spend";
-import { menuTagForProduct, productOwnTags, tagsToInputValue } from "@/lib/product-tags";
+import { menuTagForProduct, productOwnTags } from "@/lib/product-tags";
 import { fetchAdminPaidOrders } from "@/lib/api/admin-orders";
 import {
   addProductGalleryImage,
@@ -1676,6 +1680,9 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
         product={products.find((p) => p.id === detailProductId) ?? null}
         saving={productMutation === "edit"}
         categoryTree={categoriesTree}
+        brandOptions={productFilterBrandOptions}
+        tagOptions={productFilterTagOptions}
+        onReloadCategories={loadCategories}
         onClose={() => {
           setDetailOpen(false);
           setDetailProductId(null);
@@ -8662,6 +8669,9 @@ function AdminProductDetailModal({
   product,
   saving,
   categoryTree,
+  brandOptions,
+  tagOptions,
+  onReloadCategories,
   onClose,
   onSave,
   onDelete,
@@ -8672,6 +8682,9 @@ function AdminProductDetailModal({
   product: AdminProduct | null;
   saving: boolean;
   categoryTree: AdminCategoryTree[];
+  brandOptions: string[];
+  tagOptions: string[];
+  onReloadCategories: () => Promise<void>;
   onClose: () => void;
   onSave: (patch: Record<string, unknown>) => Promise<void>;
   onDelete: (id: string) => void | Promise<void>;
@@ -8686,7 +8699,7 @@ function AdminProductDetailModal({
   const [editBrand, setEditBrand] = useState("");
   const [editCategory, setEditCategory] = useState("");
   const [editSubcategory, setEditSubcategory] = useState("");
-  const [editTagsText, setEditTagsText] = useState("");
+  const [editTags, setEditTags] = useState<string[]>([]);
   const [editPrice, setEditPrice] = useState("");
   const [editOriginalPrice, setEditOriginalPrice] = useState("");
   const [editStock, setEditStock] = useState("");
@@ -8697,13 +8710,12 @@ function AdminProductDetailModal({
   const [editFeatured, setEditFeatured] = useState(false);
   const [descriptionGenerating, setDescriptionGenerating] = useState(false);
 
-  const applyProductToForm = useCallback(
-    (p: AdminProduct) => {
+  const applyProductToForm = useCallback((p: AdminProduct) => {
     setEditName(p.name);
     setEditBrand(p.brand || "");
     setEditCategory(p.category);
     setEditSubcategory(p.subcategory || "");
-    setEditTagsText(tagsToInputValue(productOwnTags(p)));
+    setEditTags(productOwnTags(p));
     setEditPrice(String(p.price));
     setEditOriginalPrice(p.originalPrice != null ? String(p.originalPrice) : "");
     setEditStock(String(p.stock));
@@ -8712,9 +8724,7 @@ function AdminProductDetailModal({
     setEditBadge(p.badge || "");
     setEditActive(p.active);
     setEditFeatured(p.featuredInHome === true);
-    },
-    [categoryTree]
-  );
+  }, []);
 
   useEffect(() => {
     if (!open || !product) return;
@@ -8734,11 +8744,53 @@ function AdminProductDetailModal({
     [categoryTree]
   );
 
+  const brandSelectOptions = useMemo(() => {
+    const seen = new Set(brandOptions.map((b) => b.toLowerCase()));
+    const out = brandOptions.map((b) => ({ value: b, label: b }));
+    const current = editBrand.trim();
+    if (current && !seen.has(current.toLowerCase())) {
+      out.unshift({ value: current, label: current });
+    }
+    return out;
+  }, [brandOptions, editBrand]);
+
+  const categorySelectOptions = useMemo(
+    () =>
+      sortedCats.map((c) => ({
+        value: c.slug,
+        label: `${c.icon ? `${c.icon} ` : ""}${c.name}`,
+      })),
+    [sortedCats]
+  );
+
   const subRowsForEdit = useMemo(() => {
     if (!editCategory) return [];
     const c = categoryTree.find((x) => x.slug === editCategory);
     return c ? [...c.subcategories].sort((a, b) => a.sortOrder - b.sortOrder) : [];
   }, [editCategory, categoryTree]);
+
+  const subcategorySelectOptions = useMemo(() => {
+    const out = subRowsForEdit.map((s) => ({ value: s.name, label: s.name }));
+    if (editSubcategory && !subRowsForEdit.some((s) => s.name === editSubcategory)) {
+      out.unshift({ value: editSubcategory, label: editSubcategory });
+    }
+    return out;
+  }, [subRowsForEdit, editSubcategory]);
+
+  const tagCatalogOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const t of [...tagOptions, ...editTags]) {
+      const trimmed = t.trim();
+      if (!trimmed) continue;
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(trimmed);
+    }
+    out.sort((a, b) => a.localeCompare(b, "es"));
+    return out;
+  }, [tagOptions, editTags]);
 
   const editMenuTagPreview = useMemo(() => {
     if (!product || !editCategory || !editSubcategory) return null;
@@ -8748,6 +8800,48 @@ function AdminProductDetailModal({
     );
   }, [product, editCategory, editSubcategory, categoryTree]);
 
+  const runDescriptionAi = useCallback(() => {
+    if (!product) return;
+    setDescriptionGenerating(true);
+    void (async () => {
+      try {
+        const hasText = Boolean(
+          (editingMode ? editDescription : product.description)?.trim()
+        );
+        const result = await postAdminProductsAiCompleteOne(product.id, {
+          fields: ["description"],
+          forceRegenerate: hasText,
+          rewriteDescriptions: hasText,
+        });
+        if (result.product) {
+          onProductRefresh?.(result.product);
+          setEditDescription(result.product.description || "");
+          if (!editingMode) applyProductToForm(result.product);
+        }
+        if (result.ok && result.filled.includes("description")) {
+          showToast(
+            hasText ? "Descripción reescrita con IA" : "Descripción generada con IA",
+            "success",
+            "📝",
+          );
+        } else {
+          showToast(result.error ?? "No se pudo generar la descripción", "danger", "⚠️");
+        }
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Error de IA", "danger", "⚠️");
+      } finally {
+        setDescriptionGenerating(false);
+      }
+    })();
+  }, [
+    product,
+    editingMode,
+    editDescription,
+    onProductRefresh,
+    applyProductToForm,
+    showToast,
+  ]);
+
   if (!open || !product) return null;
 
   const ownTags = productOwnTags(product);
@@ -8755,6 +8849,7 @@ function AdminProductDetailModal({
 
   const canMutateImages = editingMode && !saving;
   const canToggleFeatured = editingMode && !saving;
+  const editBusy = saving || descriptionGenerating;
 
   return (
     <div className={`admin-modal-overlay${open ? " open" : ""}`} onClick={(e) => e.target === e.currentTarget && onClose()} role="presentation">
@@ -8893,36 +8988,7 @@ function AdminProductDetailModal({
                 <AdminProductDescriptionBlock
                   product={product}
                   generating={descriptionGenerating}
-                  onGenerate={() => {
-                    setDescriptionGenerating(true);
-                    void (async () => {
-                      try {
-                        const hasText = Boolean(product.description?.trim());
-                        const result = await postAdminProductsAiCompleteOne(product.id, {
-                          fields: ["description"],
-                          forceRegenerate: hasText,
-                          rewriteDescriptions: hasText,
-                        });
-                        if (result.product) {
-                          onProductRefresh?.(result.product);
-                          applyProductToForm(result.product);
-                        }
-                        if (result.ok && result.filled.includes("description")) {
-                          showToast(
-                            hasText ? "Descripción reescrita con IA" : "Descripción generada con IA",
-                            "success",
-                            "📝",
-                          );
-                        } else {
-                          showToast(result.error ?? "No se pudo generar la descripción", "danger", "⚠️");
-                        }
-                      } catch (err) {
-                        showToast(err instanceof Error ? err.message : "Error de IA", "danger", "⚠️");
-                      } finally {
-                        setDescriptionGenerating(false);
-                      }
-                    })();
-                  }}
+                  onGenerate={runDescriptionAi}
                 />
 
                 <AdminProductAiDetailPanel product={product} />
@@ -8947,45 +9013,55 @@ function AdminProductDetailModal({
               </>
             ) : (
               <div className="form-grid" style={{ marginBottom: 12 }}>
-                <div className="form-group full-width">
-                  <label className="form-label">Categoría</label>
-                  <select
-                    className="form-select"
-                    value={editCategory}
-                    onChange={(e) => {
-                      const slug = e.target.value;
-                      setEditCategory(slug);
-                      setEditSubcategory("");
-                    }}
-                  >
-                    <option value="">Seleccionar…</option>
-                    {sortedCats.map((c) => (
-                      <option key={c.id} value={c.slug}>
-                        {c.icon ? `${c.icon} ` : ""}
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group full-width">
-                  <label className="form-label">Subcategoría</label>
-                  <select
-                    className="form-select"
-                    value={editSubcategory}
-                    onChange={(e) => setEditSubcategory(e.target.value)}
-                    disabled={!editCategory}
-                  >
-                    <option value="">{editCategory ? "Seleccionar…" : "Elige categoría primero"}</option>
-                    {subRowsForEdit.map((s) => (
-                      <option key={s.id} value={s.name}>
-                        {s.name}
-                      </option>
-                    ))}
-                    {editSubcategory && !subRowsForEdit.some((s) => s.name === editSubcategory) && (
-                      <option value={editSubcategory}>{editSubcategory}</option>
-                    )}
-                  </select>
-                </div>
+                <AdminCreatableSelect
+                  label="Familia / marca"
+                  value={editBrand}
+                  options={brandSelectOptions}
+                  onChange={setEditBrand}
+                  createOptionLabel="➕ Crear familia / marca…"
+                  newPlaceholder="Nombre de la familia o marca…"
+                  disabled={editBusy}
+                  allowEmpty
+                  emptyLabel="Seleccionar…"
+                  hint="Elige una existente o crea una nueva escribiendo el nombre."
+                />
+                <AdminCreatableSelect
+                  label="Categoría"
+                  value={editCategory}
+                  options={categorySelectOptions}
+                  onChange={(slug) => {
+                    setEditCategory(slug);
+                    setEditSubcategory("");
+                  }}
+                  createOptionLabel="➕ Crear categoría…"
+                  newPlaceholder="Nombre de la categoría…"
+                  disabled={editBusy}
+                  emptyLabel="Seleccionar…"
+                  onCreate={async (name) => {
+                    const created = await createAdminCategory({ name });
+                    await onReloadCategories();
+                    showToast(`Categoría «${created.name}» creada`, "success", "✅");
+                    return created.slug;
+                  }}
+                />
+                <AdminCreatableSelect
+                  label="Subcategoría"
+                  value={editSubcategory}
+                  options={subcategorySelectOptions}
+                  onChange={setEditSubcategory}
+                  createOptionLabel="➕ Crear subcategoría…"
+                  newPlaceholder="Nombre de la subcategoría…"
+                  disabled={editBusy || !editCategory}
+                  emptyLabel={editCategory ? "Seleccionar…" : "Elige categoría primero"}
+                  onCreate={async (name) => {
+                    const cat = categoryTree.find((c) => c.slug === editCategory);
+                    if (!cat) throw new Error("Elige una categoría válida primero");
+                    const created = await createAdminSubcategory(cat.id, { name });
+                    await onReloadCategories();
+                    showToast(`Subcategoría «${created.name}» creada`, "success", "✅");
+                    return created.name;
+                  }}
+                />
                 <div className="form-group full-width">
                   <label className="form-label">Etiqueta menú (solo lectura)</label>
                   <input
@@ -8999,42 +9075,65 @@ function AdminProductDetailModal({
                     Se edita en Configuración → Categorías. Agrupa la subcategoría en el mega menú.
                   </p>
                 </div>
-                <div className="form-group full-width">
-                  <label className="form-label">Etiquetas del producto (separadas por coma)</label>
+                <AdminTagsCreatableField
+                  label="Etiquetas del producto"
+                  value={editTags}
+                  catalogOptions={tagCatalogOptions}
+                  onChange={setEditTags}
+                  disabled={editBusy}
+                  hint="Palabras de búsqueda propias del producto. No uses la etiqueta dorada del menú."
+                />
+                <div className="form-group">
+                  <label className="form-label">Nombre</label>
                   <input
                     type="text"
                     className="form-input"
-                    value={editTagsText}
-                    onChange={(e) => setEditTagsText(e.target.value)}
-                    placeholder="hidratante, serum, piel seca"
+                    value={editName}
+                    disabled={editBusy}
+                    onChange={(e) => setEditName(e.target.value)}
                   />
-                  <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
-                    Palabras de búsqueda propias del producto. No uses la etiqueta dorada del menú.
-                  </p>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Nombre</label>
-                  <input type="text" className="form-input" value={editName} onChange={(e) => setEditName(e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Marca</label>
-                  <input type="text" className="form-input" value={editBrand} onChange={(e) => setEditBrand(e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Precio</label>
-                  <input type="number" className="form-input" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} />
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editPrice}
+                    disabled={editBusy}
+                    onChange={(e) => setEditPrice(e.target.value)}
+                  />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Precio original</label>
-                  <input type="number" className="form-input" value={editOriginalPrice} onChange={(e) => setEditOriginalPrice(e.target.value)} placeholder="Opcional" />
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editOriginalPrice}
+                    disabled={editBusy}
+                    onChange={(e) => setEditOriginalPrice(e.target.value)}
+                    placeholder="Opcional"
+                  />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Stock</label>
-                  <input type="number" className="form-input" value={editStock} onChange={(e) => setEditStock(e.target.value)} />
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editStock}
+                    disabled={editBusy}
+                    onChange={(e) => setEditStock(e.target.value)}
+                  />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Emoji</label>
-                  <input type="text" className="form-input" value={editEmoji} onChange={(e) => setEditEmoji(e.target.value)} maxLength={8} />
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={editEmoji}
+                    disabled={editBusy}
+                    onChange={(e) => setEditEmoji(e.target.value)}
+                    maxLength={8}
+                  />
                 </div>
                 <div className="form-group full-width">
                   <label className="form-label">Badge</label>
@@ -9047,7 +9146,13 @@ function AdminProductDetailModal({
                       ["", "Sin badge"],
                     ].map(([v, l]) => (
                       <label key={v || "none"} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13 }}>
-                        <input type="radio" name={`detail-badge-${product.id}`} checked={editBadge === v} onChange={() => setEditBadge(v)} />
+                        <input
+                          type="radio"
+                          name={`detail-badge-${product.id}`}
+                          checked={editBadge === v}
+                          disabled={editBusy}
+                          onChange={() => setEditBadge(v)}
+                        />
                         {l}
                       </label>
                     ))}
@@ -9055,11 +9160,39 @@ function AdminProductDetailModal({
                 </div>
                 <div className="form-group full-width">
                   <label className="form-label">Descripción</label>
-                  <textarea className="form-textarea" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={4} />
+                  <textarea
+                    className="form-textarea"
+                    value={editDescription}
+                    disabled={editBusy}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    rows={4}
+                  />
+                  <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      disabled={editBusy}
+                      onClick={runDescriptionAi}
+                    >
+                      {descriptionGenerating
+                        ? "Generando descripción…"
+                        : editDescription.trim()
+                          ? "✨ Reescribir descripción comercial (IA)"
+                          : "✦ Generar descripción con IA"}
+                    </button>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                      La IA guarda la descripción en el producto al instante; puedes seguir editándola antes de Guardar.
+                    </span>
+                  </div>
                 </div>
                 <div className="form-group">
                   <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
-                    <input type="checkbox" checked={editActive} onChange={(e) => setEditActive(e.target.checked)} />
+                    <input
+                      type="checkbox"
+                      checked={editActive}
+                      disabled={editBusy}
+                      onChange={(e) => setEditActive(e.target.checked)}
+                    />
                     Producto activo en tienda
                   </label>
                 </div>
@@ -9208,7 +9341,7 @@ function AdminProductDetailModal({
                         brand: editBrand.trim() || "GinnaBeauty",
                         category: editCategory.trim(),
                         subcategory: editSubcategory.trim(),
-                        tags: parseTagsInput(editTagsText),
+                        tags: editTags,
                         price: Number(editPrice),
                         originalPrice: editOriginalPrice.trim() ? Number(editOriginalPrice) : null,
                         stock: Number(editStock),
