@@ -1919,3 +1919,45 @@
 [data-landing-slug="combos"] .category-landing-hero-copy {
   max-width: min(560px, 56vw);
 }
+
+/* —— Home: fila de 5 productos bajo categorías —— */
+.gb-home-preview-products {
+  padding-top: 8px;
+  padding-bottom: 28px;
+  background: linear-gradient(180deg, rgba(253, 248, 243, 0.4) 0%, var(--ivory, #fdf8f3) 100%);
+}
+
+.gb-home-preview-products__grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.gb-home-preview-products__cta {
+  display: flex;
+  justify-content: center;
+  margin-top: 28px;
+}
+
+.gb-home-preview-products__cta .btn {
+  min-width: min(280px, 100%);
+  justify-content: center;
+  box-shadow: 0 12px 28px rgba(184, 112, 112, 0.28);
+}
+
+@media (max-width: 1100px) {
+  .gb-home-preview-products__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .gb-home-preview-products__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .gb-home-preview-products {
+    padding-bottom: 20px;
+  }
+}

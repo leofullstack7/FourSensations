@@ -126,6 +126,31 @@ export function StoreHomeClient({
     setManualSub(null);
   }, []);
 
+  const scrollToFeaturedProducts = useCallback(() => {
+    document.getElementById("featured")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  const [previewProducts, setPreviewProducts] = useState<StoreProduct[]>([]);
+
+  useEffect(() => {
+    const pool = enrichStorefrontDisplayProducts(
+      resolveStorefrontDisplayAfterFilter(sortProductsForHomeDisplay(products), products),
+      products,
+    ).filter((p) => p.price > 0);
+    if (pool.length === 0) {
+      setPreviewProducts([]);
+      return;
+    }
+    const copy = [...pool];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = copy[i]!;
+      copy[i] = copy[j]!;
+      copy[j] = tmp;
+    }
+    setPreviewProducts(copy.slice(0, 5));
+  }, [products]);
+
   return (
     <>
       <section className="hero-section">
@@ -226,6 +251,32 @@ export function StoreHomeClient({
       </div>
 
       <CategoryShowcaseStrip categoryPath={categoryPath} />
+
+      {previewProducts.length > 0 ? (
+        <section className="gb-home-preview-products section-pad" aria-label="Productos destacados rápidos">
+          <div className="container">
+            <div className="gb-home-preview-products__grid">
+              {previewProducts.map((p, i) => (
+                <StoreProductCard
+                  key={p.id}
+                  product={p}
+                  isFav={favorites.includes(p.id)}
+                  onOpen={openProductModal}
+                  onToggleFav={toggleFavorite}
+                  onAddCart={addToCart}
+                  imagePriority={i < 2}
+                  compact
+                />
+              ))}
+            </div>
+            <div className="gb-home-preview-products__cta">
+              <button type="button" className="btn btn-primary btn-lg" onClick={scrollToFeaturedProducts}>
+                Ver Más Productos
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <BeautyAiAdvisor />
 
