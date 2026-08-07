@@ -8,6 +8,7 @@ import {
   type AiCompleteFieldOptions,
 } from "@/lib/product-ai-fields";
 import { generateProductAiSuggestions } from "@/lib/server/product-ai-openai";
+import { recordAiUsageEvent } from "@/lib/server/ai-spend";
 import { filterOutMenuTags } from "@/lib/product-tags";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { adminProductAiCompleteSchema } from "@/lib/validation/admin-product-ai";
@@ -180,6 +181,17 @@ export async function POST(req: NextRequest) {
 
     const workers = Math.min(ROUTE_CONCURRENCY, uniqueIds.length);
     await Promise.all(Array.from({ length: workers }, () => worker()));
+
+    const descriptionCharges = results.filter((r) => r.ok && r.filled.includes("description"));
+    await Promise.all(
+      descriptionCharges.map((r) =>
+        recordAiUsageEvent({
+          kind: "PRODUCT_DESCRIPTION",
+          note: r.name,
+          meta: { productId: r.id },
+        }).catch(() => null)
+      )
+    );
 
     const succeeded = results.filter((r) => r.ok && r.filled.length > 0).length;
     return NextResponse.json({

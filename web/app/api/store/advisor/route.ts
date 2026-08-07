@@ -3,6 +3,7 @@ import { buildAdvisorReply, type AdvisorHistoryTurn } from "@/lib/ai-advisor";
 import { ADVISOR_MAX_TURNS } from "@/lib/ai-advisor-context";
 import { getStorefrontProducts } from "@/lib/products";
 import { generateStoreAdvisorReply } from "@/lib/server/store-advisor-openai";
+import { recordAiUsageEvent } from "@/lib/server/ai-spend";
 import { noStoreJson } from "@/lib/server/no-store-json";
 
 export const dynamic = "force-dynamic";
@@ -54,10 +55,18 @@ export async function POST(req: NextRequest) {
 
     try {
       const reply = await generateStoreAdvisorReply({ message, history, products });
+      await recordAiUsageEvent({
+        kind: "CHAT",
+        note: message.slice(0, 120),
+      }).catch(() => {});
       return noStoreJson(reply);
     } catch (llmErr) {
       console.warn("[POST /api/store/advisor] LLM fallback:", llmErr);
       const fallback = buildAdvisorReply(message, products, { historyTurns: history, engine: "rules" });
+      await recordAiUsageEvent({
+        kind: "CHAT",
+        note: message.slice(0, 120),
+      }).catch(() => {});
       return noStoreJson(fallback);
     }
   } catch (e) {

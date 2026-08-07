@@ -100,6 +100,13 @@ export type SiteMenuVersionSnapshot = {
   data: unknown;
 };
 
+export type AiSpendVersionSnapshot = {
+  id: string;
+  adjustmentCop: number;
+  eventsTotalCop: number;
+  displayTotalCop: number;
+};
+
 type Tx = Prisma.TransactionClient;
 
 function asJson(value: unknown): Prisma.InputJsonValue {
@@ -551,6 +558,14 @@ async function applySiteMenuSnapshot(tx: Tx, snap: SiteMenuVersionSnapshot) {
   });
 }
 
+async function applyAiSpendSnapshot(tx: Tx, snap: AiSpendVersionSnapshot) {
+  await tx.aiSpendMeta.upsert({
+    where: { id: 1 },
+    create: { id: 1, adjustmentCop: snap.adjustmentCop },
+    update: { adjustmentCop: snap.adjustmentCop },
+  });
+}
+
 async function deleteEntity(tx: Tx, entityType: CatalogEntityType, entityId: string) {
   switch (entityType) {
     case "PRODUCT":
@@ -567,6 +582,9 @@ async function deleteEntity(tx: Tx, entityType: CatalogEntityType, entityId: str
       break;
     case "SITE_MENU":
       await tx.siteMenu.deleteMany({ where: { id: entityId } });
+      break;
+    case "AI_SPEND":
+      // No se elimina el singleton; al revertir se restaura el ajuste.
       break;
     default:
       break;
@@ -601,6 +619,9 @@ async function applyChangeForward(
         break;
       case "SITE_MENU":
         await applySiteMenuSnapshot(tx, data as SiteMenuVersionSnapshot);
+        break;
+      case "AI_SPEND":
+        await applyAiSpendSnapshot(tx, data as AiSpendVersionSnapshot);
         break;
       default:
         break;
@@ -646,6 +667,9 @@ async function applyChangeReverse(
         break;
       case "SITE_MENU":
         await applySiteMenuSnapshot(tx, data as SiteMenuVersionSnapshot);
+        break;
+      case "AI_SPEND":
+        await applyAiSpendSnapshot(tx, data as AiSpendVersionSnapshot);
         break;
       default:
         break;

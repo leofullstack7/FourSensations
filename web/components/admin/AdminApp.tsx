@@ -42,6 +42,7 @@ import { compactChartAmount, computeSemesterSalesChart } from "@/lib/admin/sales
 import { AdminCategoryStorefrontPanel } from "@/components/admin/AdminCategoryStorefrontPanel";
 import { AdminCustomersPanel } from "@/components/admin/AdminCustomersPanel";
 import { AdminVersionsPanel } from "@/components/admin/AdminVersionsPanel";
+import { AdminAiSpendStatCard } from "@/components/admin/AdminAiSpendStatCard";
 import {
   AdminAiBulkProgressModal,
   type AiBulkProgressItem,
@@ -61,6 +62,8 @@ import { computeBulkRowFieldDiffs, bulkRowHasUpdatableDiffs } from "@/lib/bulk-i
 import type { BulkFieldDiff } from "@/lib/bulk-import/bulk-field-diff";
 import { validateBulkRowCombine } from "@/lib/bulk-import/bulk-row-combine";
 import { BulkZipImageUrlCache } from "@/lib/bulk-import/zip-image-cache";
+import { suggestNameCombineGroups, type NameCombineSuggestionGroup } from "@/lib/bulk-import/name-similarity";
+import { postAdminAiSpendRecord } from "@/lib/api/admin-ai-spend";
 import { menuTagForProduct, productOwnTags, tagsToInputValue } from "@/lib/product-tags";
 import { fetchAdminPaidOrders } from "@/lib/api/admin-orders";
 import {
@@ -1006,16 +1009,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                 : `✓ ${catalogStats.totalProducts} en catálogo`}
             </div>
           </div>
-          <div className="stat-card stat-card--tech">
-            <div className="stat-icon">📋</div>
-            <div className="stat-num">{catalogStats.totalProducts}</div>
-            <div className="stat-label">Productos en el sistema</div>
-            <div className={`stat-trend ${catalogStats.stockOut > 0 ? "down" : "up"}`}>
-              {catalogStats.stockOut > 0
-                ? `↓ ${catalogStats.stockOut} sin stock`
-                : "✓ Inventario disponible"}
-            </div>
-          </div>
+          <AdminAiSpendStatCard showToast={showToast} />
         </div>
         <div className="charts-row">
           <div className="admin-card admin-card--tech">
@@ -2654,6 +2648,8 @@ function AdminBulkTab({
   /** Modo combinar: checkboxes visuales independientes; selectedRowIds de importación se conservan. */
   const [combineModeActive, setCombineModeActive] = useState(false);
   const [combinePickIds, setCombinePickIds] = useState<string[]>([]);
+  const [aiCombineSuggestions, setAiCombineSuggestions] = useState<NameCombineSuggestionGroup[]>([]);
+  const [aiCombineAnalyzing, setAiCombineAnalyzing] = useState(false);
   const zipImageCacheRef = useRef<BulkZipImageUrlCache | null>(null);
   const [zipImageCache, setZipImageCache] = useState<BulkZipImageUrlCache | null>(null);
   const [bulkSuccessModal, setBulkSuccessModal] = useState<{
@@ -2732,6 +2728,8 @@ function AdminBulkTab({
     setCombineModeActive(false);
     setCombinePickIds([]);
     setCombineModalOpen(false);
+    setAiCombineSuggestions([]);
+    setAiCombineAnalyzing(false);
     bulkProgress.reset();
     setFileInputKey((k) => k + 1);
   };
@@ -3223,6 +3221,7 @@ function AdminBulkTab({
       return;
     }
     setCombinePickIds([]);
+    setAiCombineSuggestions([]);
     setCombineModeActive(true);
     showToast("Marca los productos a unir y pulsa COMBINAR.", "default", "🔗");
   }, [combinableOkRows.length, showToast]);
@@ -3231,7 +3230,84 @@ function AdminBulkTab({
     setCombineModeActive(false);
     setCombinePickIds([]);
     setCombineModalOpen(false);
+    setAiCombineSuggestions([]);
   }, []);
+
+  const runAiCombineAnalysis = useCallback(async () => {
+    if (aiCombineAnalyzing) return;
+    const candidates = combinableOkRows
+      .map((r) => ({
+        id: r.previewRowId,
+        name: (r.nameValue ?? r.codeValue ?? "").trim(),
+      }))
+      .filter((c) => c.name.length >= 4);
+    if (candidates.length < 2) {
+      showToast("No hay suficientes nombres para analizar.", "default", "ℹ️");
+      return;
+    }
+    setAiCombineAnalyzing(true);
+    try {
+      const groups = suggestNameCombineGroups(candidates);
+      setAiCombineSuggestions(groups);
+      const allIds = groups.flatMap((g) => g.members.map((m) => m.id));
+      setCombinePickIds(Array.from(new Set(allIds)));
+      void postAdminAiSpendRecord({
+        kind: "COMBINE_SUGGEST",
+        note: `${groups.length} grupo(s) sugerido(s)`,
+      }).catch(() => {});
+      if (groups.length === 0) {
+        showToast("No encontré nombres casi idénticos para combinar.", "default", "ℹ️");
+      } else {
+        showToast(
+          `Encontré ${groups.length} grupo(s) con nombres muy similares. Revisa y acepta o descarta.`,
+          "success",
+          "🤖"
+        );
+      }
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "No se pudo analizar", "danger", "⚠️");
+    } finally {
+      setAiCombineAnalyzing(false);
+    }
+  }, [aiCombineAnalyzing, combinableOkRows, showToast]);
+
+  const dismissAiCombineGroup = useCallback((groupId: string) => {
+    setAiCombineSuggestions((prev) => {
+      const group = prev.find((g) => g.id === groupId);
+      if (group) {
+        const drop = new Set(group.members.map((m) => m.id));
+        setCombinePickIds((ids) => ids.filter((id) => !drop.has(id)));
+      }
+      return prev.filter((g) => g.id !== groupId);
+    });
+  }, []);
+
+  const acceptAiCombineGroup = useCallback(
+    (group: NameCombineSuggestionGroup) => {
+      if (!preview) return;
+      const memberIds = group.members.map((m) => m.id);
+      const stillChecked = memberIds.filter((id) => combinePickIdSet.has(id));
+      if (stillChecked.length < 2) {
+        showToast("Marca al menos 2 productos de este grupo para combinar.", "default", "ℹ️");
+        return;
+      }
+      const rawRows = stillChecked
+        .map((id) => preview.rows.find((x) => bulkImportStableRowId(x) === id))
+        .filter((r): r is NonNullable<typeof r> => !!r);
+      const check = validateBulkRowCombine(rawRows);
+      if (!check.ok) {
+        showToast(check.reason, "danger", "⚠️");
+        return;
+      }
+      setCombinePickIds(stillChecked);
+      setCombinePickedRowId(stillChecked[0]!);
+      setCombineCustomName("");
+      setCombineNameMode("pick");
+      setCombineModalOpen(true);
+      setAiCombineSuggestions((prev) => prev.filter((g) => g.id !== group.id));
+    },
+    [preview, combinePickIdSet, showToast]
+  );
 
   const openCombineModal = useCallback(() => {
     if (!preview) return;
@@ -3892,6 +3968,10 @@ function AdminBulkTab({
         const optimized = await optimizeImageFileClient(original);
         rowImageFilesRef.current[rowId] = optimized;
         await uploadRowImage(rowId, optimized, { fromOptimize: true });
+        void postAdminAiSpendRecord({
+          kind: "IMAGE_OPTIMIZE",
+          note: `Fila ${rowId}`,
+        }).catch(() => {});
       } catch (e) {
         setUploadingImageRowId(null);
         showToast(e instanceof Error ? e.message : "No se pudo optimizar", "danger", "⚠️");
@@ -4329,6 +4409,10 @@ function AdminBulkTab({
                           bulkProgress.finish();
                           setZipFile(result.file);
                           setZipOptimized(true);
+                          void postAdminAiSpendRecord({
+                            kind: "IMAGE_OPTIMIZE",
+                            note: `${result.stats.imageCount ?? "?"} imagen(es) cliente`,
+                          }).catch(() => {});
                           showToast(
                             `Optimizado: ${formatZipBytes(result.stats.beforeBytes)} → ${formatZipBytes(result.stats.afterBytes)} (−${result.stats.savedPercent}%)`,
                             "success",
@@ -4837,6 +4921,27 @@ function AdminBulkTab({
           {combineModeActive ? (
             <div className="admin-bulk-combine-banner" role="status">
               <div className="admin-bulk-combine-banner__title">Modo combinar activado</div>
+              <button
+                type="button"
+                className="admin-bulk-combine-analyze-btn"
+                disabled={saving || combiningRows || aiCombineAnalyzing}
+                onClick={() => void runAiCombineAnalysis()}
+              >
+                {aiCombineAnalyzing ? (
+                  <>
+                    <span className="admin-inline-spinner" aria-hidden />
+                    Analizando…
+                  </>
+                ) : (
+                  <>
+                    Analizar posibles
+                    <br />
+                    productos iguales
+                    <br />
+                    para combinar
+                  </>
+                )}
+              </button>
               <div className="admin-bulk-combine-banner__actions">
                 <span style={{ fontSize: 13, color: "#7a2f5a", fontWeight: 600 }}>
                   {combinePickIds.length} elegidos
@@ -4874,6 +4979,58 @@ function AdminBulkTab({
               <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
                 Entra al modo combinar, marca los códigos del mismo producto y únelos con todas sus fotos.
               </span>
+            </div>
+          ) : null}
+          {combineModeActive && aiCombineSuggestions.length > 0 ? (
+            <div className="admin-bulk-ai-combine-list">
+              {aiCombineSuggestions.map((group) => (
+                <div key={group.id} className="admin-bulk-ai-combine-card">
+                  <div className="admin-bulk-ai-combine-card__head">
+                    <strong>Posible mismo producto</strong>
+                    <span>
+                      similitud {Math.round(group.score * 100)}% · {group.members.length} filas
+                    </span>
+                  </div>
+                  <ul className="admin-bulk-ai-combine-card__members">
+                    {group.members.map((m) => {
+                      const row = combinableOkRows.find((r) => r.previewRowId === m.id);
+                      return (
+                        <li key={m.id}>
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={combinePickIdSet.has(m.id)}
+                              onChange={() => toggleRow(m.id)}
+                            />
+                            <span>
+                              <strong>{m.name || "Sin nombre"}</strong>
+                              <small>{row?.codeValue ?? m.id}</small>
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <div className="admin-bulk-ai-combine-card__actions">
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={saving || combiningRows}
+                      onClick={() => acceptAiCombineGroup(group)}
+                    >
+                      Aceptar
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      disabled={combiningRows}
+                      onClick={() => dismissAiCombineGroup(group.id)}
+                    >
+                      No combinar
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : null}
           <div className="admin-bulk-scroll" style={{ marginBottom: 12 }}>

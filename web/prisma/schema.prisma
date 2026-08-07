@@ -330,12 +330,42 @@ enum CatalogEntityType {
   SUBCATEGORY
   PRODUCT_COMBO
   SITE_MENU
+  /// Contador de gasto IA del dashboard (ajuste manual versionable).
+  AI_SPEND
 }
 
 enum CatalogChangeAction {
   CREATE
   UPDATE
   DELETE
+}
+
+enum AiUsageKind {
+  CHAT
+  PRODUCT_DESCRIPTION
+  COMBINE_SUGGEST
+  IMAGE_OPTIMIZE
+}
+
+/// Evento de uso cobrado (chat, descripciones, combinar IA, optimizar imágenes).
+model AiUsageEvent {
+  id        String      @id @default(cuid())
+  kind      AiUsageKind
+  amountCop Int
+  label     String?
+  note      String?
+  meta      Json?
+  createdAt DateTime    @default(now())
+
+  @@index([kind, createdAt])
+  @@index([createdAt])
+}
+
+/// Singleton: ajuste manual sobre la suma de eventos (total mostrado = suma + ajuste).
+model AiSpendMeta {
+  id            Int      @id @default(1)
+  adjustmentCop Int      @default(0)
+  updatedAt     DateTime @updatedAt
 }
 
 /// Puntero singleton: versión activa y cabeza del historial.

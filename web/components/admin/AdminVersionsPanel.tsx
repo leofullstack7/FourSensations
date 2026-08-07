@@ -42,6 +42,8 @@ function entityLabel(type: string): string {
       return "Combo";
     case "SITE_MENU":
       return "Menú";
+    case "AI_SPEND":
+      return "Gasto IA";
     default:
       return type;
   }

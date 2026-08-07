@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { BULK_ZIP_MAX_BYTES } from "@/lib/bulk-import/constants";
 import { optimizeBulkZipImages } from "@/lib/bulk-import/zip-optimize";
+import { recordAiUsageEvent } from "@/lib/server/ai-spend";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
 
 export const runtime = "nodejs";
@@ -31,6 +32,12 @@ export async function POST(req: NextRequest) {
 
     const zipBuf = Buffer.from(await zipFile.arrayBuffer());
     const { zipBuffer, stats } = await optimizeBulkZipImages(zipBuf);
+
+    await recordAiUsageEvent({
+      kind: "IMAGE_OPTIMIZE",
+      note: `${stats.imageCount} imagen(es)`,
+      meta: { imageCount: stats.imageCount, savedBytes: stats.savedBytes },
+    }).catch(() => null);
 
     const originalName =
       zipFile instanceof File && zipFile.name.trim()
