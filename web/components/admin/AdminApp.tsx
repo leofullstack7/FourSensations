@@ -2523,11 +2523,14 @@ function collectBulkAutoSelectIds(
   preview: BulkPreviewResult,
   existingPolicy: BulkExistingPolicy
 ): string[] {
-  const source = preview.csvHasVariantGroupColumn ? preview.rows ?? [] : preview.matchedRows ?? [];
+  const source = preview.csvHasVariantGroupColumn
+    ? preview.rows ?? []
+    : (preview.matchedRows?.length ? preview.matchedRows : preview.rows) ?? [];
   const ids: string[] = [];
   for (const r of source) {
     if (r.isExistingProduct) continue;
     if (bulkRowIsAlreadyVariantGrouped(r)) continue;
+    if (bulkRowIsReadyForVariantGroupAssign(r, "skip")) continue;
     const hasImageMatch = r.imageMatches.some(
       (m) =>
         m.matchedBy === "exact" ||
@@ -2536,7 +2539,9 @@ function collectBulkAutoSelectIds(
         m.matchedBy === "tintLevel" ||
         m.matchedBy === "fuzzy"
     );
+    if (!hasImageMatch) continue;
     const errors = bulkRowBlockingIssues(r, existingPolicy);
+    if (errors.length > 0) continue;
     const warnings = r.issues.filter(
       (x) =>
         x === "Sin imagen en ZIP para este código" ||
@@ -2550,9 +2555,10 @@ function collectBulkAutoSelectIds(
         warnings,
         hasExisting: false,
         readyForVariantGroup: false,
+        alreadyVariantGrouped: false,
         hasImageMatch,
         barcodeRaw: r.mapped.variantGroupCode?.trim() || null,
-        nameValue: r.mapped.name,
+        nameValue: effectiveProductTitle(r.mapped) ?? r.mapped.name,
         categorySlug: r.mapped.categorySlug,
         subcategoryValue: r.mapped.subcategoryName,
         priceValue: r.mapped.price,
@@ -2654,7 +2660,7 @@ function AdminBulkTab({
     [categories]
   );
 
-  /** Tras un PATCH del preview, conserva la intersección o re-selecciona según el modo. */
+  /** Tras un PATCH del preview, conserva la intersección o re-selecciona filas OK si quedó vacío. */
   useEffect(() => {
     if (!preview || !jobId) {
       setSelectedRowIds([]);
@@ -2665,17 +2671,15 @@ function AdminBulkTab({
         ? preview.rows ?? []
         : preview.csvHasVariantGroupColumn
           ? preview.rows ?? []
-          : preview.matchedRows ?? [];
+          : (preview.matchedRows?.length ? preview.matchedRows : preview.rows) ?? [];
     const available = new Set(sourceRows.map(bulkImportStableRowId));
     setSelectedRowIds((prev) => {
       const kept = prev.filter((id) => available.has(id));
       if (kept.length > 0) return kept;
-      if (prev.length > 0) {
-        return bulkLoadMode === "update"
-          ? collectBulkUpdateSelectIds(preview)
-          : collectBulkAutoSelectIds(preview, existingPolicy);
-      }
-      return prev;
+      // Nada válido seleccionado (match fresco o IDs obsoletos): marcar todos los OK / con cambios.
+      return bulkLoadMode === "update"
+        ? collectBulkUpdateSelectIds(preview)
+        : collectBulkAutoSelectIds(preview, existingPolicy);
     });
   }, [preview, jobId, existingPolicy, bulkLoadMode]);
 
