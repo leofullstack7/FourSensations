@@ -5,7 +5,13 @@ import { getWhatsAppHref, WHATSAPP_DEFAULT_MESSAGE } from "@/lib/storefront-cont
 
 const SCROLL_TOP_THRESHOLD = 420;
 
-export function StoreFloatingActions() {
+export function StoreFloatingActions({
+  cartCount = 0,
+  onOpenCart,
+}: {
+  cartCount?: number;
+  onOpenCart?: () => void;
+}) {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const whatsappHref = getWhatsAppHref();
 
@@ -20,6 +26,8 @@ export function StoreFloatingActions() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
+  const countLabel = cartCount > 99 ? "99+" : String(cartCount);
+
   return (
     <div className="gb-floating-actions" aria-label="Acciones rápidas">
       <button
@@ -33,6 +41,42 @@ export function StoreFloatingActions() {
           <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
+
+      {onOpenCart ? (
+        <button
+          type="button"
+          className={`gb-cart-fab${cartCount > 0 ? " gb-cart-fab--filled" : ""}`}
+          onClick={onOpenCart}
+          aria-label={cartCount > 0 ? `Abrir carrito (${cartCount} productos)` : "Abrir carrito"}
+          title="Mi carrito"
+        >
+          <span className="gb-cart-fab__ring gb-cart-fab__ring--1" aria-hidden />
+          <span className="gb-cart-fab__ring gb-cart-fab__ring--2" aria-hidden />
+          <span className="gb-cart-fab__glow" aria-hidden />
+          <span className="gb-cart-fab__sparkles" aria-hidden>
+            <i /><i /><i />
+          </span>
+          <span className="gb-cart-fab__icon" aria-hidden>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M6 6h15l-1.5 9h-12L6 6zm0 0L5 3H2"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle cx="9" cy="20" r="1.4" fill="currentColor" />
+              <circle cx="17" cy="20" r="1.4" fill="currentColor" />
+            </svg>
+          </span>
+          <span className="gb-cart-fab__label">Carrito</span>
+          {cartCount > 0 ? (
+            <span className="gb-cart-fab__badge" aria-hidden>
+              {countLabel}
+            </span>
+          ) : null}
+        </button>
+      ) : null}
 
       {whatsappHref ? (
         <a

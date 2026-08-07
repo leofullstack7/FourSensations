@@ -1354,7 +1354,7 @@ export function StorefrontShell({
         </div>
       ) : null}
 
-      <StoreFloatingActions />
+      <StoreFloatingActions cartCount={cartCount} onOpenCart={openCart} />
 
       <div className="toast-container" id="toast-container">
         {toasts.map((t) => (
