@@ -102,6 +102,11 @@ export async function patchBulkImportJob(
     defaultTintTypeApplied?: boolean;
     defaultTintFamilyApplied?: boolean;
     tintTypeOverrides?: Record<string, string>;
+    combineRows?: {
+      survivorPreviewRowId: string;
+      absorbedPreviewRowIds: string[];
+      name: string;
+    };
   }
 ): Promise<{ preview: BulkPreviewResult }> {
   const res = await fetch(`/api/admin/import/bulk/${jobId}`, {

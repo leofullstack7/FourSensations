@@ -57,6 +57,7 @@ import { BulkDiffCell, BulkModePicker } from "@/components/admin/AdminBulkModeUi
 import { AdminProductAiDetailPanel, AdminProductDescriptionBlock } from "@/components/admin/AdminProductAiUi";
 import { computeBulkRowFieldDiffs, bulkRowHasUpdatableDiffs } from "@/lib/bulk-import/bulk-field-diff";
 import type { BulkFieldDiff } from "@/lib/bulk-import/bulk-field-diff";
+import { validateBulkRowCombine } from "@/lib/bulk-import/bulk-row-combine";
 import { menuTagForProduct, productOwnTags, tagsToInputValue } from "@/lib/product-tags";
 import { fetchAdminPaidOrders } from "@/lib/api/admin-orders";
 import {
@@ -2430,6 +2431,11 @@ function AdminBulkTab({
   const [bulkProgressLabel, setBulkProgressLabel] = useState("");
   /** false = solo grupos con OK/agrupar (+ hermanas); true = también el resto de casos abajo. */
   const [showAllCases, setShowAllCases] = useState(false);
+  const [combineModalOpen, setCombineModalOpen] = useState(false);
+  const [combineNameMode, setCombineNameMode] = useState<"pick" | "custom">("pick");
+  const [combinePickedRowId, setCombinePickedRowId] = useState("");
+  const [combineCustomName, setCombineCustomName] = useState("");
+  const [combiningRows, setCombiningRows] = useState(false);
   const [bulkSuccessModal, setBulkSuccessModal] = useState<{
     imported: number;
     variantsAssigned: number;
@@ -2931,6 +2937,79 @@ function AdminBulkTab({
   const selectedNewProductRowIds = selectedOkNewProductRowIds;
 
   const canImportAndGroup = selectedOkNewProductRowIds.length > 0;
+
+  const selectedOkRowsForCombine = useMemo(() => {
+    const idSet = new Set(selectedOkNewProductRowIds);
+    return previewTableRows.filter((r) => idSet.has(r.previewRowId));
+  }, [previewTableRows, selectedOkNewProductRowIds]);
+
+  const openCombineModal = useCallback(() => {
+    if (!preview) return;
+    const rawRows = selectedOkRowsForCombine
+      .map((r) => preview.rows.find((x) => bulkImportStableRowId(x) === r.previewRowId))
+      .filter((r): r is NonNullable<typeof r> => !!r);
+    const check = validateBulkRowCombine(rawRows);
+    if (!check.ok) {
+      showToast(check.reason, "danger", "⚠️");
+      return;
+    }
+    setCombinePickedRowId(selectedOkRowsForCombine[0]?.previewRowId ?? "");
+    setCombineCustomName("");
+    setCombineNameMode("pick");
+    setCombineModalOpen(true);
+  }, [preview, selectedOkRowsForCombine, showToast]);
+
+  const confirmCombineRows = useCallback(() => {
+    if (!jobId || !preview) return;
+    const picked = selectedOkRowsForCombine.find((r) => r.previewRowId === combinePickedRowId);
+    const name =
+      combineNameMode === "custom"
+        ? combineCustomName.trim()
+        : (picked?.nameValue?.trim() || picked?.codeValue || "").trim();
+    if (!name) {
+      showToast("Elige o escribe un nombre para el producto combinado.", "default", "ℹ️");
+      return;
+    }
+    const ids = selectedOkRowsForCombine.map((r) => r.previewRowId);
+    if (ids.length < 2) return;
+    const survivorPreviewRowId =
+      combineNameMode === "pick" && combinePickedRowId ? combinePickedRowId : ids[0]!;
+    const absorbedPreviewRowIds = ids.filter((id) => id !== survivorPreviewRowId);
+    if (absorbedPreviewRowIds.length === 0) return;
+    void (async () => {
+      setCombiningRows(true);
+      setMutation("bulk");
+      try {
+        const { preview: p } = await patchBulkImportJob(jobId, {
+          combineRows: { survivorPreviewRowId, absorbedPreviewRowIds, name },
+          selectedRowIds: [survivorPreviewRowId],
+          rowFieldOverrides: { [survivorPreviewRowId]: { name } },
+        });
+        setPreview(p);
+        setSelectedRowIds([survivorPreviewRowId]);
+        setCombineModalOpen(false);
+        showToast(
+          `Combinados ${ids.length} códigos en «${name}» con todas sus fotos.`,
+          "success",
+          "🔗"
+        );
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "No se pudo combinar", "danger", "⚠️");
+      } finally {
+        setCombiningRows(false);
+        setMutation(null);
+      }
+    })();
+  }, [
+    jobId,
+    preview,
+    combineNameMode,
+    combineCustomName,
+    combinePickedRowId,
+    selectedOkRowsForCombine,
+    showToast,
+    setMutation,
+  ]);
 
   const completedGroupKeySet = useMemo(() => new Set(completedGroupKeys), [completedGroupKeys]);
 
@@ -4459,6 +4538,21 @@ function AdminBulkTab({
           <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
             Solo productos nuevos listos (✓ OK). Si es variante, verás un aviso bajo el nombre.
           </p>
+          {selectedOkNewProductRowIds.length >= 2 ? (
+            <div style={{ marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={saving || combiningRows}
+                onClick={openCombineModal}
+              >
+                🔗 Combinar productos en uno solo ({selectedOkNewProductRowIds.length})
+              </button>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                Une códigos distintos del mismo producto y junta todas las fotos.
+              </span>
+            </div>
+          ) : null}
           <div className="admin-bulk-scroll" style={{ marginBottom: 12 }}>
             <table className="admin-table admin-bulk-matched-table" style={{ minWidth: 720, margin: 0 }}>
               <thead>
@@ -5289,6 +5383,125 @@ function AdminBulkTab({
         }}
         onSave={saveBulkRowEdits}
       />
+
+      {combineModalOpen ? (
+        <div
+          className="admin-modal-overlay open"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !combiningRows) setCombineModalOpen(false);
+          }}
+        >
+          <div
+            className="admin-modal"
+            style={{ maxWidth: 480, padding: "22px 20px" }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Combinar productos"
+          >
+            <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>Combinar en un solo producto</h3>
+            <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
+              Se unirán {selectedOkRowsForCombine.length} códigos y todas sus fotos en una sola fila. Elige el
+              nombre final.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+              {selectedOkRowsForCombine.map((r) => {
+                const label = r.nameValue?.trim() || r.codeValue || "Producto";
+                return (
+                  <label
+                    key={r.previewRowId}
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "flex-start",
+                      fontSize: 13,
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      border:
+                        combineNameMode === "pick" && combinePickedRowId === r.previewRowId
+                          ? "1px solid var(--dusty-rose)"
+                          : "1px solid var(--cream)",
+                      background: "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="combine-name"
+                      checked={combineNameMode === "pick" && combinePickedRowId === r.previewRowId}
+                      onChange={() => {
+                        setCombineNameMode("pick");
+                        setCombinePickedRowId(r.previewRowId);
+                      }}
+                    />
+                    <span>
+                      <strong>{label}</strong>
+                      <span style={{ display: "block", fontFamily: "monospace", fontSize: 12, color: "var(--text-muted)" }}>
+                        {r.codeValue}
+                        {r.matchedImages.length ? ` · ${r.matchedImages.length} foto(s)` : ""}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  fontSize: 13,
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  border: combineNameMode === "custom" ? "1px solid var(--dusty-rose)" : "1px solid var(--cream)",
+                }}
+              >
+                <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="radio"
+                    name="combine-name"
+                    checked={combineNameMode === "custom"}
+                    onChange={() => setCombineNameMode("custom")}
+                  />
+                  Escribir otro nombre
+                </span>
+                <input
+                  className="form-input"
+                  value={combineCustomName}
+                  disabled={combineNameMode !== "custom"}
+                  placeholder="Nombre del producto combinado"
+                  onChange={(e) => setCombineCustomName(e.target.value)}
+                  onFocus={() => setCombineNameMode("custom")}
+                />
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={combiningRows}
+                onClick={() => setCombineModalOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={combiningRows}
+                onClick={confirmCombineRows}
+              >
+                {combiningRows ? (
+                  <>
+                    <span className="admin-inline-spinner" aria-hidden />
+                    Combinando…
+                  </>
+                ) : (
+                  "Combinar y unir fotos"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {bulkSuccessModal ? (
         <div

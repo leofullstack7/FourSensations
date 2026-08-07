@@ -346,6 +346,12 @@ export type BulkPreviewResult = {
   variantGroups: BulkPreviewVariantGroup[];
   /** Variantes ya en DB indexadas por groupKey normalizado. */
   dbVariantsByGroup: Record<string, BulkPreviewDbVariant[]>;
+  /** Combinaciones de filas nuevas en un solo producto (fotos unidas). */
+  rowCombines: Array<{
+    survivorPreviewRowId: string;
+    absorbedPreviewRowIds: string[];
+    name: string;
+  }>;
 };
 
 function collectBaseRowIssues(
@@ -942,5 +948,6 @@ export function buildBulkPreview(params: {
     csvHasVariantGroupColumn: false,
     variantGroups: [],
     dbVariantsByGroup: {},
+    rowCombines: [],
   };
 }

@@ -15,6 +15,12 @@ import {
   deleteBulkImportZip,
   resolveBulkImportZipBuffer,
 } from "@/lib/server/bulk-import-zip-store";
+import {
+  applyBulkRowCombines,
+  validateBulkRowCombine,
+  type BulkRowCombineSpec,
+} from "@/lib/bulk-import/bulk-row-combine";
+import { effectiveProductTitle } from "@/lib/bulk-import/semantic-map";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -58,6 +64,14 @@ const patchSchema = z.object({
   defaultTintFamilyApplied: z.boolean().optional(),
   tintTypeOverrides: z.record(z.string(), z.string()).optional(),
   tintRowSelections: z.record(z.string(), tintRowSelectionEntry).optional(),
+  /** Combinar filas nuevas en un solo producto (fusiona imágenes). */
+  combineRows: z
+    .object({
+      survivorPreviewRowId: z.string().min(1),
+      absorbedPreviewRowIds: z.array(z.string().min(1)).min(1),
+      name: z.string().min(1),
+    })
+    .optional(),
 });
 
 function readTaxonomyStateFromJob(jobPreview: unknown): {
@@ -234,6 +248,54 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     },
   });
   await withPrismaRetry(() => markBulkPreviewExistingByExternalRef(prisma, preview));
+
+  const prevPreview = job.previewPayload as BulkPreviewResult | null;
+  let rowCombines: BulkRowCombineSpec[] = Array.isArray(prevPreview?.rowCombines)
+    ? [...prevPreview!.rowCombines!]
+    : [];
+
+  if (parsed.data.combineRows) {
+    const spec = parsed.data.combineRows;
+    const byId = new Map(preview.rows.map((r) => [bulkImportStableRowId(r), r]));
+    const survivor = byId.get(spec.survivorPreviewRowId);
+    const absorbed = spec.absorbedPreviewRowIds
+      .map((id) => byId.get(id))
+      .filter((r): r is NonNullable<typeof r> => !!r);
+    if (!survivor || absorbed.length === 0) {
+      return noStoreJson({ error: "No se encontraron las filas a combinar" }, { status: 400 });
+    }
+    const check = validateBulkRowCombine([survivor, ...absorbed]);
+    if (!check.ok) {
+      return noStoreJson({ error: check.reason }, { status: 400 });
+    }
+    const name =
+      spec.name.trim() ||
+      effectiveProductTitle(survivor.mapped) ||
+      survivor.mapped.name ||
+      "Producto";
+    // Quitar absorbs previos que se reabsorben
+    const absorbSet = new Set(spec.absorbedPreviewRowIds);
+    rowCombines = rowCombines
+      .map((c) => ({
+        ...c,
+        absorbedPreviewRowIds: c.absorbedPreviewRowIds.filter((id) => !absorbSet.has(id)),
+      }))
+      .filter((c) => c.absorbedPreviewRowIds.length > 0 || c.survivorPreviewRowId === spec.survivorPreviewRowId);
+    rowCombines = rowCombines.filter((c) => c.survivorPreviewRowId !== spec.survivorPreviewRowId);
+    rowCombines.push({
+      survivorPreviewRowId: spec.survivorPreviewRowId,
+      absorbedPreviewRowIds: [...new Set(spec.absorbedPreviewRowIds)],
+      name,
+    });
+    // Nombre en override para que rebuilds posteriores lo conserven
+    rowFieldOverrides[spec.survivorPreviewRowId] = {
+      ...(rowFieldOverrides[spec.survivorPreviewRowId] ?? {}),
+      name,
+    };
+  }
+
+  applyBulkRowCombines(preview, rowCombines);
+  preview.rowFieldOverrides = rowFieldOverrides;
 
   const statsStored = {
     ...preview.stats,

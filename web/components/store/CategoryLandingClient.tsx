@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useReveal } from "@/hooks/useReveal";
 import { useStoreNavigation } from "@/components/store/StoreNavigationProvider";
 import { TechAmbient } from "@/components/ui/TechAmbient";
@@ -32,6 +32,12 @@ type CategoryLandingClientProps = {
 };
 
 const CATEGORY_PAGE_SIZE = 24;
+/** Si hay más de este total de SKUs, mostrar al menos MIN_VISIBLE_CARDS tarjetas. */
+const TOTAL_SKU_THRESHOLD = 10;
+const MIN_VISIBLE_CARDS = 8;
+/** Por clic, intentar revelar al menos esta cantidad de tarjetas nuevas (no solo SKUs). */
+const MIN_NEW_CARDS_PER_CLICK = 8;
+const MAX_FETCH_ROUNDS = 25;
 
 function normalizeGroup(menuTag: string | null): string {
   return (menuTag?.trim() ? menuTag.trim() : "General") as string;
@@ -71,6 +77,23 @@ function productMatchesCategoryFilters(
   return true;
 }
 
+function computeDisplayCount(
+  allProducts: StoreProduct[],
+  filterOpts: {
+    selectedGrupo: string;
+    selectedSub: string;
+    selectedBrand: string;
+    selectedProductTag: string;
+    subcategoriesFromDb: SubcategoryRow[];
+  }
+): number {
+  const filtered = allProducts.filter((p) => productMatchesCategoryFilters(p, filterOpts));
+  return enrichStorefrontDisplayProducts(
+    resolveStorefrontDisplayAfterFilter(filtered, allProducts),
+    allProducts
+  ).length;
+}
+
 function CategoryProductSkeleton() {
   return (
     <div className="products-grid category-landing-products" aria-hidden>
@@ -104,9 +127,27 @@ export function CategoryLandingClient({
   const [hasMore, setHasMore] = useState(true);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [allTags, setAllTags] = useState<string[]>([]);
+  const loadingRef = useRef(false);
 
-  const fetchCategoryPage = useCallback(
-    async (skip: number, append: boolean) => {
+  const copy = useMemo(() => getCategoryLandingCopy(categoryLabel, categorySlug), [categoryLabel, categorySlug]);
+  const [selectedGrupo, setSelectedGrupo] = useState(defaultGrupo);
+  const [selectedSub, setSelectedSub] = useState(defaultSubcategory);
+  const [selectedBrand, setSelectedBrand] = useState("");
+  const [selectedProductTag, setSelectedProductTag] = useState(defaultProductTag);
+
+  const filterOpts = useMemo(
+    () => ({
+      selectedGrupo,
+      selectedSub,
+      selectedBrand,
+      selectedProductTag,
+      subcategoriesFromDb,
+    }),
+    [selectedGrupo, selectedSub, selectedBrand, selectedProductTag, subcategoriesFromDb]
+  );
+
+  const fetchRawPage = useCallback(
+    async (skip: number) => {
       const url = `/api/store/category/${encodeURIComponent(categorySlug)}/products?skip=${skip}&take=${CATEGORY_PAGE_SIZE}`;
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) throw new Error("No se pudo cargar productos");
@@ -115,31 +156,64 @@ export function CategoryLandingClient({
         hasMore?: boolean;
         totalCount?: number;
       };
-      const batch = Array.isArray(data.products) ? data.products : [];
-      if (typeof data.totalCount === "number") setTotalProductCount(data.totalCount);
-      if (batch.length === 0) {
-        setHasMore(false);
-        return batch;
-      }
-      setProducts((prev) => {
-        if (!append) return batch;
-        const map = new Map(prev.map((p) => [p.id, p]));
-        for (const p of batch) map.set(p.id, p);
-        return Array.from(map.values());
-      });
-      mergeCatalogProducts(batch);
-      setRestSkip(skip + batch.length);
-      setHasMore(Boolean(data.hasMore));
-      setAllTags((prev) => {
-        const tagSet = new Set(prev);
-        for (const p of batch) {
-          for (const t of p.tags ?? []) tagSet.add(t);
-        }
-        return Array.from(tagSet).sort((a, b) => a.localeCompare(b, "es"));
-      });
-      return batch;
+      return {
+        batch: Array.isArray(data.products) ? data.products : [],
+        hasMore: Boolean(data.hasMore),
+        totalCount: typeof data.totalCount === "number" ? data.totalCount : null,
+      };
     },
-    [categorySlug, mergeCatalogProducts]
+    [categorySlug]
+  );
+
+  const mergeLocal = useCallback((prev: StoreProduct[], batch: StoreProduct[]) => {
+    const map = new Map(prev.map((p) => [p.id, p]));
+    for (const p of batch) map.set(p.id, p);
+    return Array.from(map.values());
+  }, []);
+
+  const fillUntilDisplayCards = useCallback(
+    async (opts: {
+      startProducts: StoreProduct[];
+      startSkip: number;
+      startHasMore: boolean;
+      startTags: string[];
+      minDisplay: number;
+      minNewCards: number;
+      displayBefore: number;
+    }) => {
+      let localProducts = opts.startProducts;
+      let skip = opts.startSkip;
+      let more = opts.startHasMore;
+      let tags = opts.startTags;
+      let total: number | null = null;
+      let rounds = 0;
+
+      while (more && rounds < MAX_FETCH_ROUNDS) {
+        const displayNow = computeDisplayCount(localProducts, filterOpts);
+        const gained = displayNow - opts.displayBefore;
+        if (displayNow >= opts.minDisplay && gained >= opts.minNewCards) break;
+
+        const page = await fetchRawPage(skip);
+        if (page.totalCount != null) total = page.totalCount;
+        if (page.batch.length === 0) {
+          more = false;
+          break;
+        }
+        localProducts = mergeLocal(localProducts, page.batch);
+        mergeCatalogProducts(page.batch);
+        const tagSet = new Set(tags);
+        for (const p of page.batch) {
+          for (const tg of p.tags ?? []) tagSet.add(tg);
+        }
+        tags = Array.from(tagSet).sort((a, b) => a.localeCompare(b, "es"));
+        skip += page.batch.length;
+        more = page.hasMore;
+        rounds += 1;
+      }
+
+      return { products: localProducts, skip, hasMore: more, tags, total };
+    },
+    [fetchRawPage, filterOpts, mergeCatalogProducts, mergeLocal]
   );
 
   useEffect(() => {
@@ -150,33 +224,91 @@ export function CategoryLandingClient({
     setTotalProductCount(0);
     setAllTags([]);
     setCatalogLoading(true);
+    loadingRef.current = true;
 
-    void fetchCategoryPage(0, false)
-      .catch(() => {
+    void (async () => {
+      try {
+        const first = await fetchRawPage(0);
+        if (cancelled) return;
+        if (first.totalCount != null) setTotalProductCount(first.totalCount);
+        let local = mergeLocal([], first.batch);
+        mergeCatalogProducts(first.batch);
+        let skip = first.batch.length;
+        let more = first.hasMore;
+        let tags: string[] = [];
+        {
+          const tagSet = new Set<string>();
+          for (const p of first.batch) for (const tg of p.tags ?? []) tagSet.add(tg);
+          tags = Array.from(tagSet).sort((a, b) => a.localeCompare(b, "es"));
+        }
+
+        const total = first.totalCount ?? 0;
+        if (total > TOTAL_SKU_THRESHOLD && more) {
+          const filled = await fillUntilDisplayCards({
+            startProducts: local,
+            startSkip: skip,
+            startHasMore: more,
+            startTags: tags,
+            minDisplay: MIN_VISIBLE_CARDS,
+            minNewCards: 0,
+            displayBefore: 0,
+          });
+          if (cancelled) return;
+          local = filled.products;
+          skip = filled.skip;
+          more = filled.hasMore;
+          tags = filled.tags;
+          if (filled.total != null) setTotalProductCount(filled.total);
+        }
+
+        if (cancelled) return;
+        setProducts(local);
+        setRestSkip(skip);
+        setHasMore(more);
+        setAllTags(tags);
+      } catch {
         if (!cancelled) setHasMore(false);
-      })
-      .finally(() => {
+      } finally {
+        loadingRef.current = false;
         if (!cancelled) setCatalogLoading(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [categorySlug, fetchCategoryPage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al cambiar categoría
+  }, [categorySlug]);
 
   const loadMoreCategory = useCallback(() => {
-    if (!hasMore || catalogLoading) return;
+    if (!hasMore || catalogLoading || loadingRef.current) return;
     setCatalogLoading(true);
-    void fetchCategoryPage(restSkip, true)
-      .catch(() => setHasMore(false))
-      .finally(() => setCatalogLoading(false));
-  }, [hasMore, catalogLoading, fetchCategoryPage, restSkip]);
-
-  const copy = useMemo(() => getCategoryLandingCopy(categoryLabel, categorySlug), [categoryLabel, categorySlug]);
-  const [selectedGrupo, setSelectedGrupo] = useState(defaultGrupo);
-  const [selectedSub, setSelectedSub] = useState(defaultSubcategory);
-  const [selectedBrand, setSelectedBrand] = useState("");
-  const [selectedProductTag, setSelectedProductTag] = useState(defaultProductTag);
+    loadingRef.current = true;
+    const displayBefore = computeDisplayCount(products, filterOpts);
+    void (async () => {
+      try {
+        const filled = await fillUntilDisplayCards({
+          startProducts: products,
+          startSkip: restSkip,
+          startHasMore: hasMore,
+          startTags: allTags,
+          minDisplay: displayBefore + 1,
+          minNewCards: MIN_NEW_CARDS_PER_CLICK,
+          displayBefore,
+        });
+        setProducts(filled.products);
+        setRestSkip(filled.skip);
+        setHasMore(filled.hasMore);
+        setAllTags(filled.tags);
+        if (filled.total != null) setTotalProductCount(filled.total);
+      } catch {
+        setHasMore(false);
+      } finally {
+        loadingRef.current = false;
+        setCatalogLoading(false);
+      }
+    })();
+  }, [hasMore, catalogLoading, products, filterOpts, restSkip, allTags, fillUntilDisplayCards]);
 
   useEffect(() => {
     setSelectedGrupo(defaultGrupo);
@@ -210,16 +342,8 @@ export function CategoryLandingClient({
   }, [products]);
 
   const filtered = useMemo(() => {
-    return products.filter((p) =>
-      productMatchesCategoryFilters(p, {
-        selectedGrupo,
-        selectedSub,
-        selectedBrand,
-        selectedProductTag,
-        subcategoriesFromDb,
-      })
-    );
-  }, [products, selectedGrupo, selectedSub, selectedBrand, selectedProductTag, subcategoriesFromDb]);
+    return products.filter((p) => productMatchesCategoryFilters(p, filterOpts));
+  }, [products, filterOpts]);
 
   const displayProducts = useMemo(
     () =>
@@ -235,9 +359,17 @@ export function CategoryLandingClient({
   useEffect(() => {
     if (!hasActiveFilters) return;
     if (filtered.length > 0) return;
-    if (!hasMore || catalogLoading) return;
+    if (!hasMore || catalogLoading || loadingRef.current) return;
     loadMoreCategory();
   }, [hasActiveFilters, filtered.length, hasMore, catalogLoading, loadMoreCategory]);
+
+  useEffect(() => {
+    if (catalogLoading || loadingRef.current) return;
+    if (!hasMore) return;
+    if (totalProductCount <= TOTAL_SKU_THRESHOLD) return;
+    if (displayProducts.length >= MIN_VISIBLE_CARDS) return;
+    loadMoreCategory();
+  }, [catalogLoading, hasMore, totalProductCount, displayProducts.length, loadMoreCategory]);
 
   const clearSubIfInvalid = (grupo: string) => {
     if (!grupo) return;

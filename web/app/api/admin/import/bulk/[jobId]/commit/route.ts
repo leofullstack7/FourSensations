@@ -30,6 +30,9 @@ import {
 } from "@/lib/server/bulk-import-zip-store";
 import { enrichBulkPreviewFromDatabase } from "@/lib/server/bulk-import-mark-existing";
 import {
+  applyBulkRowCombines,
+} from "@/lib/bulk-import/bulk-row-combine";
+import {
   CatalogActions,
   CatalogEntities,
   loadProductSnapshot,
@@ -160,6 +163,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if (!preview?.rows?.length) {
     return noStoreJson({ error: "Preview no disponible" }, { status: 500 });
   }
+
+  applyBulkRowCombines(preview, preview.rowCombines);
 
   const existingPolicy = parsed.data.existingPolicy ?? "skip";
   const keepJob = parsed.data.keepJob === true;
@@ -538,6 +543,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
     if (keepJob) {
       await enrichBulkPreviewFromDatabase(prisma, preview);
+      applyBulkRowCombines(preview, preview.rowCombines);
       await prisma.bulkImportJob.update({
         where: { id: jobId },
         data: {
