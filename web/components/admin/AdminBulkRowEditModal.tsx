@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import { loadZipImageObjectUrl } from "@/lib/bulk-import/zip-client-image";
+import { AdminBulkImageLightbox } from "@/components/admin/AdminBulkMatchedImages";
 
 export type BulkRowEditDraft = {
   name: string;
@@ -81,6 +82,7 @@ export function AdminBulkRowEditModal({
   });
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
     if (!open || !row) return;
@@ -244,12 +246,26 @@ export function AdminBulkRowEditModal({
               {imageLoading ? (
                 <span style={{ fontSize: 13, color: "var(--text-muted)" }}>Cargando imagen…</span>
               ) : imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={imageUrl}
-                  alt={row.matchedImages[0]?.imageFilename ?? "Producto"}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
+                <button
+                  type="button"
+                  onClick={() => setLightboxOpen(true)}
+                  title="Ampliar imagen"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    padding: 0,
+                    border: "none",
+                    background: "transparent",
+                    cursor: "zoom-in",
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imageUrl}
+                    alt={row.matchedImages[0]?.imageFilename ?? "Producto"}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  />
+                </button>
               ) : (
                 <div style={{ textAlign: "center", padding: 16, color: "var(--text-muted)", fontSize: 13 }}>
                   <div style={{ fontSize: 28, marginBottom: 6 }}>🖼️</div>
@@ -257,6 +273,13 @@ export function AdminBulkRowEditModal({
                 </div>
               )}
             </div>
+            {lightboxOpen && imageUrl ? (
+              <AdminBulkImageLightbox
+                src={imageUrl}
+                alt={row.matchedImages[0]?.imageFilename ?? "Producto"}
+                onClose={() => setLightboxOpen(false)}
+              />
+            ) : null}
             {row.matchedImages[0]?.imageFilename ? (
               <p style={{ margin: 0, fontSize: 11, color: "var(--text-muted)", wordBreak: "break-all" }}>
                 {row.matchedImages[0].imageFilename}

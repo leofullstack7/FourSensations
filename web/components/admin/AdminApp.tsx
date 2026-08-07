@@ -55,10 +55,12 @@ import {
   BULK_INVALID_PRICE_BATCH_THRESHOLD,
 } from "@/components/admin/AdminBulkMissingPriceModal";
 import { BulkDiffCell, BulkModePicker } from "@/components/admin/AdminBulkModeUi";
+import { AdminBulkMatchedImages } from "@/components/admin/AdminBulkMatchedImages";
 import { AdminProductAiDetailPanel, AdminProductDescriptionBlock } from "@/components/admin/AdminProductAiUi";
 import { computeBulkRowFieldDiffs, bulkRowHasUpdatableDiffs } from "@/lib/bulk-import/bulk-field-diff";
 import type { BulkFieldDiff } from "@/lib/bulk-import/bulk-field-diff";
 import { validateBulkRowCombine } from "@/lib/bulk-import/bulk-row-combine";
+import { BulkZipImageUrlCache } from "@/lib/bulk-import/zip-image-cache";
 import { menuTagForProduct, productOwnTags, tagsToInputValue } from "@/lib/product-tags";
 import { fetchAdminPaidOrders } from "@/lib/api/admin-orders";
 import {
@@ -2649,6 +2651,11 @@ function AdminBulkTab({
   const [combinePickedRowId, setCombinePickedRowId] = useState("");
   const [combineCustomName, setCombineCustomName] = useState("");
   const [combiningRows, setCombiningRows] = useState(false);
+  /** Modo combinar: checkboxes visuales independientes; selectedRowIds de importación se conservan. */
+  const [combineModeActive, setCombineModeActive] = useState(false);
+  const [combinePickIds, setCombinePickIds] = useState<string[]>([]);
+  const zipImageCacheRef = useRef<BulkZipImageUrlCache | null>(null);
+  const [zipImageCache, setZipImageCache] = useState<BulkZipImageUrlCache | null>(null);
   const [bulkSuccessModal, setBulkSuccessModal] = useState<{
     imported: number;
     variantsAssigned: number;
@@ -2722,9 +2729,26 @@ function AdminBulkTab({
     setRowImageTargetId(null);
     setShowAllCases(false);
     setBulkSuccessModal(null);
+    setCombineModeActive(false);
+    setCombinePickIds([]);
+    setCombineModalOpen(false);
     bulkProgress.reset();
     setFileInputKey((k) => k + 1);
   };
+
+  useEffect(() => {
+    zipImageCacheRef.current?.revokeAll();
+    zipImageCacheRef.current = null;
+    setZipImageCache(null);
+    if (!zipFile) return;
+    const cache = new BulkZipImageUrlCache(zipFile);
+    zipImageCacheRef.current = cache;
+    setZipImageCache(cache);
+    return () => {
+      cache.revokeAll();
+      if (zipImageCacheRef.current === cache) zipImageCacheRef.current = null;
+    };
+  }, [zipFile]);
 
   useEffect(() => {
     if (!zipFile) {
@@ -2939,12 +2963,22 @@ function AdminBulkTab({
     return (preview.rows ?? []).filter((r) => r.issues.includes("Precio inválido o vacío"));
   }, [preview]);
 
-  const toggleRow = useCallback((previewRowId: string) => {
-    setSelectedRowIds((prev) => {
-      if (prev.includes(previewRowId)) return prev.filter((id) => id !== previewRowId);
-      return [...prev, previewRowId];
-    });
-  }, []);
+  const toggleRow = useCallback(
+    (previewRowId: string) => {
+      if (combineModeActive) {
+        setCombinePickIds((prev) => {
+          if (prev.includes(previewRowId)) return prev.filter((id) => id !== previewRowId);
+          return [...prev, previewRowId];
+        });
+        return;
+      }
+      setSelectedRowIds((prev) => {
+        if (prev.includes(previewRowId)) return prev.filter((id) => id !== previewRowId);
+        return [...prev, previewRowId];
+      });
+    },
+    [combineModeActive]
+  );
 
   const selectAllValid = () => {
     if (!preview) return;
@@ -2954,7 +2988,9 @@ function AdminBulkTab({
       const blocking = bulkRowBlockingIssues(r, existingPolicy);
       if (blocking.length === 0 && r.normalizedCode) next.add(bulkImportStableRowId(r));
     }
-    setSelectedRowIds(Array.from(next));
+    const ids = Array.from(next);
+    if (combineModeActive) setCombinePickIds(ids);
+    else setSelectedRowIds(ids);
   };
 
   const selectAllForVariantGroups = () => {
@@ -2962,10 +2998,14 @@ function AdminBulkTab({
     const next = (preview.rows ?? [])
       .filter((r) => bulkRowIsReadyForVariantGroupAssign(r, "skip"))
       .map(bulkImportStableRowId);
-    setSelectedRowIds(next);
+    if (combineModeActive) setCombinePickIds(next);
+    else setSelectedRowIds(next);
   };
 
-  const clearSelection = () => setSelectedRowIds([]);
+  const clearSelection = () => {
+    if (combineModeActive) setCombinePickIds([]);
+    else setSelectedRowIds([]);
+  };
 
   /** Quita de la selección todas las filas de categoría Tintes. */
   const skipTintRows = useCallback(() => {
@@ -3147,12 +3187,51 @@ function AdminBulkTab({
 
   const selectedNewProductRowIds = selectedOkNewProductRowIds;
 
-  const canImportAndGroup = selectedOkNewProductRowIds.length > 0;
+  /** Filas ✓ OK nuevas disponibles para combinar (sin depender del checkbox de importación). */
+  const combinableOkRows = useMemo(() => {
+    return previewTableRows.filter((r) => {
+      if (r.readyForVariantGroup || r.alreadyVariantGrouped || r.hasExisting) return false;
+      const status = describeBulkRowStatus(
+        {
+          errors: r.errors,
+          warnings: r.warnings,
+          hasExisting: r.hasExisting,
+          readyForVariantGroup: r.readyForVariantGroup,
+          alreadyVariantGrouped: r.alreadyVariantGrouped,
+          hasImageMatch: r.hasImageMatch,
+          barcodeRaw: r.barcodeRaw,
+          nameValue: r.nameValue,
+          categorySlug: r.categorySlug,
+          subcategoryValue: r.subcategoryValue,
+          priceValue: r.priceValue,
+        },
+        existingPolicy
+      );
+      return status.tone === "ok";
+    });
+  }, [previewTableRows, existingPolicy]);
+
+  const combinePickIdSet = useMemo(() => new Set(combinePickIds), [combinePickIds]);
 
   const selectedOkRowsForCombine = useMemo(() => {
-    const idSet = new Set(selectedOkNewProductRowIds);
-    return previewTableRows.filter((r) => idSet.has(r.previewRowId));
-  }, [previewTableRows, selectedOkNewProductRowIds]);
+    return combinableOkRows.filter((r) => combinePickIdSet.has(r.previewRowId));
+  }, [combinableOkRows, combinePickIdSet]);
+
+  const enterCombineMode = useCallback(() => {
+    if (combinableOkRows.length < 2) {
+      showToast("Necesitas al menos 2 productos ✓ OK en la lista para combinar.", "default", "ℹ️");
+      return;
+    }
+    setCombinePickIds([]);
+    setCombineModeActive(true);
+    showToast("Marca los productos a unir y pulsa COMBINAR.", "default", "🔗");
+  }, [combinableOkRows.length, showToast]);
+
+  const exitCombineMode = useCallback(() => {
+    setCombineModeActive(false);
+    setCombinePickIds([]);
+    setCombineModalOpen(false);
+  }, []);
 
   const openCombineModal = useCallback(() => {
     if (!preview) return;
@@ -3197,7 +3276,13 @@ function AdminBulkTab({
           rowFieldOverrides: { [survivorPreviewRowId]: { name } },
         });
         setPreview(p);
-        setSelectedRowIds([survivorPreviewRowId]);
+        const absorbedSet = new Set(absorbedPreviewRowIds);
+        setSelectedRowIds((prev) => {
+          const next = prev.filter((id) => !absorbedSet.has(id));
+          if (!next.includes(survivorPreviewRowId)) next.push(survivorPreviewRowId);
+          return next;
+        });
+        setCombinePickIds([]);
         setCombineModalOpen(false);
         showToast(
           `Combinados ${ids.length} códigos en «${name}» con todas sus fotos.`,
@@ -3876,10 +3961,14 @@ function AdminBulkTab({
         <td className="admin-bulk-check-cell">
           <input
             type="checkbox"
-            checked={r.selected}
+            checked={combineModeActive ? combinePickIdSet.has(r.previewRowId) : r.selected}
             onChange={() => toggleRow(r.previewRowId)}
             onClick={(e) => e.stopPropagation()}
-            aria-label={`Seleccionar fila ${r.csvRowIndex + 1}`}
+            aria-label={
+              combineModeActive
+                ? `Elegir para combinar fila ${r.csvRowIndex + 1}`
+                : `Seleccionar fila ${r.csvRowIndex + 1}`
+            }
           />
         </td>
         {preview?.csvHasVariantGroupColumn && (
@@ -3913,23 +4002,7 @@ function AdminBulkTab({
           {(r.tagsValue ?? []).length ? (r.tagsValue ?? []).join(", ") : "—"}
         </td>
         <td style={{ fontSize: 12 }}>
-          {r.matchedImages.length
-            ? r.matchedImages
-                .map((m) => {
-                  const how =
-                    m.matchedBy === "tintLevel"
-                      ? "nivel"
-                      : m.matchedBy === "numericPrefix"
-                        ? "prefijo"
-                        : m.matchedBy === "sixDigitPrefix"
-                          ? "6 dígitos"
-                          : m.matchedBy === "fuzzy"
-                            ? `similitud ${m.fuzzySimilarity != null ? `${Math.round(m.fuzzySimilarity * 100)}%` : "≥85%"}`
-                            : "exacto";
-                  return `${m.imageFilename} (${how})`;
-                })
-                .join(", ")
-            : "—"}
+          <AdminBulkMatchedImages images={r.matchedImages} cache={zipImageCache} />
         </td>
         <td style={{ fontSize: 12 }}>
           <span
@@ -4708,8 +4781,20 @@ function AdminBulkTab({
               </button>
             )}
             <span style={{ fontSize: 13, color: "var(--text-muted)", alignSelf: "center" }}>
-              {selectedRowIds.length} fila(s) seleccionada(s) de {previewTableRows.length}
-              {preview.csvHasVariantGroupColumn ? " en CSV" : " con match de imagen"}
+              {combineModeActive ? (
+                <>
+                  {combinePickIds.length} elegidos para combinar
+                  <span style={{ opacity: 0.75 }}>
+                    {" "}
+                    · {selectedRowIds.length} OK siguen marcados para importar
+                  </span>
+                </>
+              ) : (
+                <>
+                  {selectedRowIds.length} fila(s) seleccionada(s) de {previewTableRows.length}
+                  {preview.csvHasVariantGroupColumn ? " en CSV" : " con match de imagen"}
+                </>
+              )}
             </span>
           </div>
 
@@ -4749,18 +4834,45 @@ function AdminBulkTab({
           <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
             Solo productos nuevos listos (✓ OK). Si es variante, verás un aviso bajo el nombre.
           </p>
-          {selectedOkNewProductRowIds.length >= 2 ? (
+          {combineModeActive ? (
+            <div className="admin-bulk-combine-banner" role="status">
+              <div className="admin-bulk-combine-banner__title">Modo combinar activado</div>
+              <div className="admin-bulk-combine-banner__actions">
+                <span style={{ fontSize: 13, color: "#7a2f5a", fontWeight: 600 }}>
+                  {combinePickIds.length} elegidos
+                </span>
+                <button
+                  type="button"
+                  className="btn admin-bulk-combine-banner__combine"
+                  disabled={saving || combiningRows || combinePickIds.length < 2}
+                  onClick={openCombineModal}
+                >
+                  Combinar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  disabled={combiningRows}
+                  onClick={exitCombineMode}
+                  style={{ fontWeight: 700 }}
+                >
+                  Ya terminé
+                </button>
+              </div>
+            </div>
+          ) : combinableOkRows.length >= 2 ? (
             <div style={{ marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
               <button
                 type="button"
                 className="btn btn-outline"
                 disabled={saving || combiningRows}
-                onClick={openCombineModal}
+                onClick={enterCombineMode}
+                style={{ fontWeight: 700, letterSpacing: "0.02em" }}
               >
-                🔗 Combinar productos en uno solo ({selectedOkNewProductRowIds.length})
+                Combinar productos de esta lista
               </button>
               <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                Une códigos distintos del mismo producto y junta todas las fotos.
+                Entra al modo combinar, marca los códigos del mismo producto y únelos con todas sus fotos.
               </span>
             </div>
           ) : null}
@@ -5464,33 +5576,48 @@ function AdminBulkTab({
             aria-label="Acciones de importación masiva"
           >
             <div className="admin-bulk-actions-bar__meta">
-              <strong>{selectedRowIds.length}</strong> fila(s) seleccionada(s)
-              {selectedVariantGroupRowIds.length > 0 ? (
+              {combineModeActive ? (
                 <>
-                  {" "}
-                  · <strong>{selectedVariantGroupRowIds.length}</strong> para agrupar
+                  <strong>{combinePickIds.length}</strong> para combinar
+                  <span style={{ color: "var(--text-muted)" }}>
+                    {" "}
+                    · {selectedRowIds.length} listos para importar (en segundo plano)
+                  </span>
                 </>
-              ) : null}
-              {selectedOkNewProductRowIds.length > 0 ? (
+              ) : (
                 <>
-                  {" "}
-                  · <strong>{selectedOkNewProductRowIds.length}</strong> OK para importar
+                  <strong>{selectedRowIds.length}</strong> fila(s) seleccionada(s)
+                  {selectedVariantGroupRowIds.length > 0 ? (
+                    <>
+                      {" "}
+                      · <strong>{selectedVariantGroupRowIds.length}</strong> para agrupar
+                    </>
+                  ) : null}
+                  {selectedOkNewProductRowIds.length > 0 ? (
+                    <>
+                      {" "}
+                      · <strong>{selectedOkNewProductRowIds.length}</strong> OK para importar
+                    </>
+                  ) : null}
                 </>
-              ) : null}
+              )}
             </div>
             <button
               type="button"
               className="btn btn-outline"
               disabled={
                 saving ||
+                combineModeActive ||
                 (needsTintSelection && !tintsExplicitlySkipped) ||
                 (pendingNewCategories.length > 0 && !newCategoriesModalAcknowledged) ||
                 taxonomyRehomeHints.length > 0
               }
               title={
-                selectedOkNewProductRowIds.length > 0
-                  ? "Importa los productos nuevos OK (con barras se agrupan al crear)"
-                  : "Selecciona productos con estado ✓ OK"
+                combineModeActive
+                  ? "Sal del modo combinar (Ya terminé) para importar"
+                  : selectedOkNewProductRowIds.length > 0
+                    ? "Importa los productos nuevos OK (con barras se agrupan al crear)"
+                    : "Selecciona productos con estado ✓ OK"
               }
               onClick={() => {
                 if (selectedOkNewProductRowIds.length === 0) {
@@ -5623,8 +5750,8 @@ function AdminBulkTab({
                     key={r.previewRowId}
                     style={{
                       display: "flex",
-                      gap: 8,
-                      alignItems: "flex-start",
+                      gap: 10,
+                      alignItems: "center",
                       fontSize: 13,
                       padding: "8px 10px",
                       borderRadius: 8,
@@ -5645,6 +5772,7 @@ function AdminBulkTab({
                         setCombinePickedRowId(r.previewRowId);
                       }}
                     />
+                    <AdminBulkMatchedImages images={r.matchedImages.slice(0, 1)} cache={zipImageCache} />
                     <span>
                       <strong>{label}</strong>
                       <span style={{ display: "block", fontFamily: "monospace", fontSize: 12, color: "var(--text-muted)" }}>
