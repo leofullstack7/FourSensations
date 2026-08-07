@@ -22,6 +22,7 @@ import {
   fetchAdminProducts,
   postAdminProductsAiCompleteOne,
   postAdminProductsBulkDelete,
+  postAdminProductsNormalizeNames,
   postAdminProductsMerge,
   postAdminProductsAiClear,
   updateAdminProduct,
@@ -284,6 +285,8 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   const [productListSelectedIds, setProductListSelectedIds] = useState<Set<string>>(() => new Set());
   const [productBulkMenuOpen, setProductBulkMenuOpen] = useState(false);
   const [productBulkDeleting, setProductBulkDeleting] = useState(false);
+  const [productNameNormBusy, setProductNameNormBusy] = useState(false);
+  const [productNameNormProgress, setProductNameNormProgress] = useState<{ done: number; total: number } | null>(null);
   const [productMergeOpen, setProductMergeOpen] = useState(false);
   const [productMergeBusy, setProductMergeBusy] = useState(false);
   const [productMergeNameMode, setProductMergeNameMode] = useState<"pick" | "custom">("pick");
@@ -619,6 +622,77 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   const clearProductListSelection = useCallback(() => {
     setProductListSelectedIds(new Set());
   }, []);
+
+  const selectAllCatalogProducts = useCallback(() => {
+    setProductListSelectedIds(new Set(products.map((p) => p.id)));
+    setProductBulkMenuOpen(false);
+    showToast(`${products.length} producto(s) seleccionado(s)`, "success", "☑️");
+  }, [products, showToast]);
+
+  const selectAllVisibleProducts = useCallback(() => {
+    applyProductListSelectionForVisible(
+      filteredProducts.map((p) => p.id),
+      true,
+    );
+    setProductBulkMenuOpen(false);
+    showToast(`${filteredProducts.length} producto(s) visibles seleccionado(s)`, "success", "☑️");
+  }, [applyProductListSelectionForVisible, filteredProducts, showToast]);
+
+  const handleNormalizeSelectedNames = useCallback(async () => {
+    const ids = Array.from(productListSelectedIds);
+    if (ids.length === 0) {
+      showToast("Selecciona uno o más productos (o usa «Seleccionar todos»).", "danger", "⚠️");
+      return;
+    }
+    if (
+      !confirm(
+        `¿Normalizar ${ids.length} nombre(s)?\n\nCada palabra quedará con mayúscula inicial.\nEjemplo: SERUM LABIAL → Serum Labial`,
+      )
+    ) {
+      return;
+    }
+    setProductBulkMenuOpen(false);
+    setProductNameNormBusy(true);
+    setProductNameNormProgress({ done: 0, total: ids.length });
+    const CHUNK = 40;
+    let updated = 0;
+    let unchanged = 0;
+    try {
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const chunk = ids.slice(i, i + CHUNK);
+        const isLast = i + CHUNK >= ids.length;
+        const res = await postAdminProductsNormalizeNames({
+          ids: chunk,
+          recordVersion: false,
+        });
+        updated += res.updated;
+        unchanged += res.unchanged;
+        setProductNameNormProgress({ done: Math.min(i + chunk.length, ids.length), total: ids.length });
+        if (isLast && updated > 0) {
+          await postAdminProductsNormalizeNames({
+            ids: chunk.slice(0, 1),
+            recordVersion: true,
+            reportUpdated: updated,
+          });
+        }
+      }
+      showToast(
+        updated > 0
+          ? `Nombres normalizados: ${updated} actualizado(s)${unchanged ? `, ${unchanged} sin cambios` : ""}.`
+          : unchanged > 0
+            ? `Ningún nombre cambió (${unchanged} ya estaban normalizados).`
+            : "No se actualizó ningún nombre.",
+        updated > 0 ? "success" : "default",
+        "✏️",
+      );
+      await loadProducts();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "No se pudieron normalizar los nombres", "danger", "⚠️");
+    } finally {
+      setProductNameNormBusy(false);
+      setProductNameNormProgress(null);
+    }
+  }, [productListSelectedIds, showToast, loadProducts]);
 
   const handleBulkDeleteSelected = useCallback(async () => {
     const ids = Array.from(productListSelectedIds);
@@ -1276,8 +1350,8 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                     className={`tab-btn ${productBulkMenuOpen ? "active" : ""}`}
                     aria-expanded={productBulkMenuOpen}
                     aria-haspopup="menu"
-                    disabled={productBulkDeleting || productAiBusy}
-                    title="Más acciones (eliminación en lote)"
+                    disabled={productBulkDeleting || productAiBusy || productNameNormBusy}
+                    title="Más acciones (lote)"
                     onClick={() => setProductBulkMenuOpen((o) => !o)}
                     style={{ minWidth: 44, padding: "10px 14px" }}
                   >
@@ -1290,7 +1364,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                         position: "absolute",
                         top: "calc(100% + 6px)",
                         right: 0,
-                        minWidth: 260,
+                        minWidth: 280,
                         background: "var(--ivory)",
                         border: "1px solid var(--cream)",
                         borderRadius: "var(--radius-md)",
@@ -1302,6 +1376,49 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                         gap: 6,
                       }}
                     >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={productNameNormBusy || filteredProducts.length === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={selectAllVisibleProducts}
+                      >
+                        ☑️ Seleccionar todos (visibles) ({filteredProducts.length})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={productNameNormBusy || products.length === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={selectAllCatalogProducts}
+                      >
+                        ☑️ Seleccionar todos (catálogo) ({products.length})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={productNameNormBusy || productListSelectedIds.size === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={() => {
+                          clearProductListSelection();
+                          setProductBulkMenuOpen(false);
+                        }}
+                      >
+                        Limpiar selección ({productListSelectedIds.size})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-primary btn-sm"
+                        disabled={productNameNormBusy || productListSelectedIds.size === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={() => void handleNormalizeSelectedNames()}
+                      >
+                        ✏️ Normalizar nombres de productos ({productListSelectedIds.size})
+                      </button>
                       <button
                         type="button"
                         role="menuitem"
@@ -1448,6 +1565,48 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                   )}
                 </div>
               </div>
+              {productNameNormProgress ? (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                    marginTop: 12,
+                    padding: "12px 14px",
+                    borderRadius: 10,
+                    border: "1px solid var(--dusty-rose)",
+                    background: "linear-gradient(135deg, #fffafc 0%, #f3e8ff 100%)",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13, fontWeight: 600, marginBottom: 8, color: "#7a2f5a" }}>
+                    <span>
+                      <span className="admin-inline-spinner" aria-hidden style={{ marginRight: 8 }} />
+                      Normalizando nombres…
+                    </span>
+                    <span>
+                      {productNameNormProgress.done} / {productNameNormProgress.total} (
+                      {productNameNormProgress.total > 0
+                        ? Math.round((productNameNormProgress.done / productNameNormProgress.total) * 100)
+                        : 0}
+                      %)
+                    </span>
+                  </div>
+                  <div style={{ height: 10, borderRadius: 999, background: "rgba(200,145,139,0.2)", overflow: "hidden" }}>
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${
+                          productNameNormProgress.total > 0
+                            ? Math.round((productNameNormProgress.done / productNameNormProgress.total) * 100)
+                            : 0
+                        }%`,
+                        borderRadius: 999,
+                        background: "linear-gradient(90deg, var(--rose, #c8918b), #8b5cf6)",
+                        transition: "width 0.25s ease",
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : null}
               {productTab === "list" && (
                 <AdminProductListTab
                   productSearch={productSearch}

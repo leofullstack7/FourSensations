@@ -123,6 +123,26 @@ export async function postAdminProductsBulkPatch(body: {
   };
 }
 
+export async function postAdminProductsNormalizeNames(body: {
+  ids: string[];
+  recordVersion?: boolean;
+  reportUpdated?: number;
+}): Promise<{ updated: number; unchanged: number; requested: number; found: number }> {
+  const res = await fetch("/api/admin/products/normalize-names", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as {
+    updated: number;
+    unchanged: number;
+    requested: number;
+    found: number;
+  };
+}
+
 export async function postAdminProductsMerge(body: {
   survivorId: string;
   absorbedIds: string[];
