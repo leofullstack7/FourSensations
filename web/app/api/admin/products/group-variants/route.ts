@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 
 const schema = z.object({
   primaryId: z.string().min(1),
-  ids: z.array(z.string().min(1)).min(2).max(80),
+  ids: z.array(z.string().min(1)).min(2).max(120),
 });
 
 function groupCodeForPrimary(p: {

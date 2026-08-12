@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import logoIcon from "@/assets/logo.png";
 import logoWide from "@/assets/logo-largo.png";
 import { LabArcMagicAura } from "@/components/lab/LabArcMagicAura";
 import { LabStoreHeaderIcons } from "@/components/lab/LabStoreHeaderIcons";
@@ -363,7 +362,7 @@ export function HeaderArcPrototype({ children }: { children?: ReactNode }) {
       >
         <Link href="/" className="gb-arc-lab__flat-logo" tabIndex={flatInteractive ? 0 : -1}>
           <span className="gb-arc-lab__flat-logo-mark">
-            <Image src={logoIcon} alt="GinnaBeauty" width={40} height={40} />
+            <Image src={logoWide} alt="GinnaBeauty" width={200} height={60} />
           </span>
         </Link>
         <ul className="gb-arc-lab__flat-menu">
@@ -404,7 +403,7 @@ export function HeaderArcPrototype({ children }: { children?: ReactNode }) {
         <div className="gb-arc-lab__top">
           <Link href="/" className="gb-arc-lab__logo" tabIndex={arcInteractive ? 0 : -1}>
             <span className="gb-arc-lab__logo-mark gb-arc-lab__logo-mark--wide">
-              <Image src={logoWide} alt="GinnaBeauty" width={180} height={52} priority />
+              <Image src={logoWide} alt="GinnaBeauty" width={240} height={72} priority />
             </span>
           </Link>
           <div className="gb-arc-lab__search" role="search">
@@ -536,7 +535,7 @@ export function HeaderArcPrototype({ children }: { children?: ReactNode }) {
       <main className="gb-arc-lab__main">
         <section className="gb-arc-lab__hero" aria-label="Hero editorial (prototipo)">
           <div className="gb-arc-lab__hero-mark">
-            <Image src={logoIcon} alt="GinnaBeauty" width={44} height={44} />
+            <Image src={logoWide} alt="GinnaBeauty" width={220} height={72} />
           </div>
           <p className="gb-arc-lab__hero-brand">GinnaBeauty</p>
           <p className="gb-arc-lab__hero-sub">Cosmética Premium</p>

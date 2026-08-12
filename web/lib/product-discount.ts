@@ -51,8 +51,10 @@ export function computedDiscountPercent(price: number, originalPrice: number | n
 }
 
 /**
- * Precio público: descuento de admin (con fecha o hasta quitarlo) o
- * originalPrice > price. Si no hay oferta real, solo el precio de venta.
+ * Precio público: solo muestra oferta si hay descuento gestionado en admin
+ * (`discountPercent` activo, con o sin fecha de fin).
+ * No inventa % a partir de `originalPrice` (datos viejos/importados pueden
+ * tener un “antes” basura y pintar descuentos falsos del 90%+).
  */
 export function resolveProductPrice(p: ProductDiscountFields, now = new Date()): ResolvedProductPrice {
   if (isActiveManagedDiscount(p, now)) {
@@ -68,15 +70,6 @@ export function resolveProductPrice(p: ProductDiscountFields, now = new Date()):
       price: discounted,
       originalPrice: base > discounted ? base : null,
       discountPercent: pct,
-    };
-  }
-
-  const computed = computedDiscountPercent(p.price, p.originalPrice);
-  if (computed != null) {
-    return {
-      price: p.price,
-      originalPrice: p.originalPrice,
-      discountPercent: computed,
     };
   }
 

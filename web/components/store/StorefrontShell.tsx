@@ -21,7 +21,7 @@ import { formatPrice } from "@/lib/format";
 import { preloadStorefrontProductImages } from "@/lib/preload-storefront-image";
 import { computeShippingCop, loadCart, saveCart, syncCartPricesFromCatalog } from "@/lib/cart-storage";
 import { StoreDiscountBadge, StoreProductPrice } from "@/components/store/StoreProductPrice";
-import { formatDiscountBadge } from "@/lib/product-discount";
+import { formatDiscountBadge, resolveProductPrice } from "@/lib/product-discount";
 import { loadFavorites, saveFavorites } from "@/lib/favorites-storage";
 import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
 import { isHttpImageUrl } from "@/lib/util/image-url";
@@ -882,17 +882,24 @@ export function StorefrontShell({
                     </ul>
                   ) : null}
                   <div className="cart-item-price">
-                    {formatPrice(item.price)}
-                    {item.discountPercent != null ? (
-                      <span className="price-discount" style={{ marginLeft: 6 }}>
-                        {formatDiscountBadge(item.discountPercent)}
-                      </span>
-                    ) : null}
-                    {item.originalPrice != null && item.originalPrice > item.price ? (
-                      <span className="price-original" style={{ marginLeft: 6, fontSize: 12 }}>
-                        {formatPrice(item.originalPrice)}
-                      </span>
-                    ) : null}
+                    {(() => {
+                      const resolved = resolveProductPrice(item);
+                      return (
+                        <>
+                          {formatPrice(resolved.price)}
+                          {resolved.discountPercent != null ? (
+                            <span className="price-discount" style={{ marginLeft: 6, whiteSpace: "nowrap" }}>
+                              {formatDiscountBadge(resolved.discountPercent)}
+                            </span>
+                          ) : null}
+                          {resolved.originalPrice != null ? (
+                            <span className="price-original" style={{ marginLeft: 6, fontSize: 12 }}>
+                              {formatPrice(resolved.originalPrice)}
+                            </span>
+                          ) : null}
+                        </>
+                      );
+                    })()}
                   </div>
                   <div className="qty-control">
                     <button type="button" className="qty-btn" onClick={() => changeQty(item.id, -1)}>

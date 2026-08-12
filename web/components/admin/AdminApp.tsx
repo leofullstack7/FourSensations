@@ -1875,6 +1875,9 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                   hiddenProductCount={hiddenProductCount}
                   showHiddenProducts={showHiddenProducts}
                   onToggleShowHidden={() => setShowHiddenProducts((v) => !v)}
+                  zeroPriceProductCount={zeroPriceProductCount}
+                  productHideBusy={productHideBusy}
+                  onHideZeroPriceProducts={() => void handleHideZeroPriceProducts()}
                   listLoading={productsLoading}
                   categoryTree={categoriesTree}
                   selectedIds={productListSelectedIds}
@@ -2450,6 +2453,9 @@ function AdminProductListTab({
   hiddenProductCount,
   showHiddenProducts,
   onToggleShowHidden,
+  zeroPriceProductCount,
+  productHideBusy,
+  onHideZeroPriceProducts,
   listLoading,
   categoryTree,
   selectedIds,
@@ -2485,6 +2491,9 @@ function AdminProductListTab({
   hiddenProductCount: number;
   showHiddenProducts: boolean;
   onToggleShowHidden: () => void;
+  zeroPriceProductCount: number;
+  productHideBusy: boolean;
+  onHideZeroPriceProducts: () => void;
   listLoading: boolean;
   categoryTree: AdminCategoryTree[];
   selectedIds: ReadonlySet<string>;
@@ -2647,7 +2656,7 @@ function AdminProductListTab({
                     : `${totalProductCount} producto(s) en el sistema · ${filteredProducts.length} fila(s) en la lista`}
               </p>
             )}
-            <div style={{ marginTop: 10 }}>
+            <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
               <button
                 type="button"
                 className={`btn btn-sm ${showHiddenProducts ? "btn-primary" : "btn-outline"}`}
@@ -2657,6 +2666,23 @@ function AdminProductListTab({
                   ? "Volver a productos visibles"
                   : `Ver productos ocultos${hiddenProductCount > 0 ? ` (${hiddenProductCount})` : ""}`}
               </button>
+              {!showHiddenProducts ? (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  disabled={productHideBusy || zeroPriceProductCount === 0}
+                  title={
+                    zeroPriceProductCount === 0
+                      ? "No hay productos visibles con precio 0"
+                      : `Ocultar los ${zeroPriceProductCount} productos con precio 0`
+                  }
+                  onClick={() => onHideZeroPriceProducts()}
+                >
+                  {productHideBusy
+                    ? "Ocultando…"
+                    : `Ocultar todos (precio 0)${zeroPriceProductCount > 0 ? ` (${zeroPriceProductCount})` : ""}`}
+                </button>
+              ) : null}
             </div>
           </>
         }
