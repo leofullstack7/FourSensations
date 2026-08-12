@@ -3,8 +3,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import logoImage from "@/app/logo.png";
+import { LabArcMagicAura } from "@/components/lab/LabArcMagicAura";
+import { LabStoreHeaderIcons } from "@/components/lab/LabStoreHeaderIcons";
+import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 type ArcCat = {
   id: string;
@@ -80,12 +83,6 @@ const CATS: ArcCat[] = [
     icon: "🎁",
   },
 ];
-
-const LAB_DEMO_CARDS = [
-  { title: "Card producto (lab)", tone: "Vista de referencia", price: "—", badge: null as string | null },
-  { title: "Card producto (lab)", tone: "Imagen / precio reales en tienda", price: "—", badge: "Nuevo" },
-  { title: "Card producto (lab)", tone: "Solo composición visual", price: "—", badge: null },
-] as const;
 
 const TINTS = ["a", "b", "c"] as const;
 
@@ -229,27 +226,26 @@ function bandForState(height: number, uniform: boolean): number {
     : Math.min(136, Math.max(108, height - topPad - 24));
 }
 
-const ARC_H_EXPANDED = 280;
-const ARC_H_COLLAPSED = 96;
-const ARC_ANIM_MS = 520;
+const ARC_H = 280;
+/** Rango de scroll donde el arco se desvanece y aparece el menú plano. */
+const FLAT_FADE_START = 12;
+const FLAT_FADE_END = 150;
 
 function easeInOutCubic(t: number) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-export function HeaderArcPrototype() {
+export function HeaderArcPrototype({ children }: { children?: ReactNode }) {
+  const { openSearch } = useStorefrontUi();
   const shellRef = useRef<HTMLElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const arcHRef = useRef(ARC_H_EXPANDED);
-  const animRef = useRef<number | null>(null);
   const [width, setWidth] = useState(1400);
   const [shellH, setShellH] = useState(360);
-  const [scrolled, setScrolled] = useState(false);
-  const [arcH, setArcH] = useState(ARC_H_EXPANDED);
+  /** 0 = arco visible; 1 = menú plano a pantalla completa. */
+  const [navProgress, setNavProgress] = useState(0);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [flatActiveId, setFlatActiveId] = useState<string | null>(null);
   const [topbarIndex, setTopbarIndex] = useState(0);
-
-  const compact = arcH < (ARC_H_EXPANDED + ARC_H_COLLAPSED) * 0.55;
 
   const measureArc = useCallback(() => {
     const el = wrapRef.current;
@@ -266,7 +262,7 @@ export function HeaderArcPrototype() {
   useLayoutEffect(() => {
     measureArc();
     measureShell();
-  }, [measureArc, measureShell, activeId, arcH]);
+  }, [measureArc, measureShell, activeId]);
 
   useEffect(() => {
     const onResize = () => {
@@ -284,53 +280,22 @@ export function HeaderArcPrototype() {
   }, [measureArc, measureShell]);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 16);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  /* Animación suave del arco (colapsar / expandir) — sin saltos de geometría */
-  useEffect(() => {
-    const target = scrolled ? ARC_H_COLLAPSED : ARC_H_EXPANDED;
-    if (Math.abs(arcHRef.current - target) < 0.5) {
-      arcHRef.current = target;
-      setArcH(target);
-      return;
-    }
-
-    const reduce =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) {
-      arcHRef.current = target;
-      setArcH(target);
-      return;
-    }
-
-    if (animRef.current != null) cancelAnimationFrame(animRef.current);
-    const from = arcHRef.current;
-    const delta = target - from;
-    const t0 = performance.now();
-
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - t0) / ARC_ANIM_MS);
-      const next = from + delta * easeInOutCubic(t);
-      arcHRef.current = next;
-      setArcH(next);
-      if (t < 1) {
-        animRef.current = requestAnimationFrame(tick);
-      } else {
-        arcHRef.current = target;
-        setArcH(target);
-        animRef.current = null;
+    const update = () => {
+      const y = window.scrollY;
+      if (y <= 0) {
+        setNavProgress(0);
+        return;
       }
+      const raw = Math.min(1, Math.max(0, (y - FLAT_FADE_START) / (FLAT_FADE_END - FLAT_FADE_START)));
+      const reduce =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      setNavProgress(reduce ? (raw >= 0.5 ? 1 : 0) : easeInOutCubic(raw));
     };
-    animRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (animRef.current != null) cancelAnimationFrame(animRef.current);
-    };
-  }, [scrolled]);
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -339,29 +304,94 @@ export function HeaderArcPrototype() {
     return () => window.clearInterval(id);
   }, []);
 
-  const segments = useMemo(() => buildSegments(width, arcH, compact), [width, arcH, compact]);
-  const guide = useMemo(() => guidePath(width, arcH, compact), [width, arcH, compact]);
-  const band = useMemo(() => bandForState(arcH, compact), [arcH, compact]);
+  const segments = useMemo(() => buildSegments(width, ARC_H, false), [width]);
+  const guide = useMemo(() => guidePath(width, ARC_H, false), [width]);
+  const band = useMemo(() => bandForState(ARC_H, false), []);
   const topGuide = useMemo(
-    () => parallelGuidePath(width, arcH, compact, band),
-    [width, arcH, compact, band],
+    () => parallelGuidePath(width, ARC_H, false, band),
+    [width, band],
   );
 
+  const arcOpacity = 1 - navProgress;
+  const flatOpacity = navProgress;
+  const roseVeil = Math.sin(navProgress * Math.PI) * 0.55;
+  const showFlat = navProgress > 0.02;
+  const flatInteractive = navProgress > 0.45;
+  const arcInteractive = navProgress < 0.55;
+
   return (
-    <div className={`gb-arc-lab${scrolled ? " is-scrolled" : ""}`}>
+    <div
+      className={`gb-arc-lab${navProgress > 0.08 ? " is-scrolled" : ""}${navProgress > 0.85 ? " is-flat" : ""}`}
+      style={
+        {
+          "--gb-arc-progress": String(navProgress),
+          "--gb-arc-veil": String(roseVeil),
+        } as CSSProperties
+      }
+    >
       <div className="gb-arc-lab__fondo" aria-hidden>
         {/* full-width, altura proporcional: no deformar el arte */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/fondo-ginna.png" alt="" width={1920} height={1080} decoding="async" />
       </div>
 
-      <header ref={shellRef} className="gb-arc-lab__shell">
+      {/* Velo rosado durante el crossfade arco ↔ menú plano */}
+      <div className="gb-arc-lab__rose-veil" aria-hidden />
+
+      <LabArcMagicAura />
+
+      {/* Menú plano duplicado (edge-to-edge) — aparece al hacer scroll */}
+      <nav
+        className="gb-arc-lab__flat"
+        style={{
+          opacity: flatOpacity,
+          pointerEvents: flatInteractive ? "auto" : "none",
+        }}
+        aria-hidden={!showFlat}
+        aria-label="Menú de categorías"
+      >
+        <Link href="/" className="gb-arc-lab__flat-logo" tabIndex={flatInteractive ? 0 : -1}>
+          <span className="gb-arc-lab__flat-logo-mark">
+            <Image src={logoImage} alt="GinnaBeauty" width={40} height={40} />
+          </span>
+        </Link>
+        <ul className="gb-arc-lab__flat-menu">
+          {CATS.map((c) => (
+            <li key={`flat-${c.id}`}>
+              <button
+                type="button"
+                className={`gb-arc-lab__flat-link${flatActiveId === c.id ? " is-active" : ""}`}
+                tabIndex={flatInteractive ? 0 : -1}
+                onMouseEnter={() => setFlatActiveId(c.id)}
+                onFocus={() => setFlatActiveId(c.id)}
+                onMouseLeave={() => setFlatActiveId(null)}
+                onBlur={() => setFlatActiveId(null)}
+              >
+                {c.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="gb-arc-lab__flat-utils">
+          <LabStoreHeaderIcons larger />
+        </div>
+      </nav>
+
+      <header
+        ref={shellRef}
+        className="gb-arc-lab__shell"
+        style={{
+          opacity: arcOpacity,
+          pointerEvents: arcInteractive ? "auto" : "none",
+        }}
+        aria-hidden={navProgress > 0.9}
+      >
         <div className="gb-arc-lab__ann" aria-live="polite">
           {STOREFRONT_TOPBAR_MESSAGES[topbarIndex]}
         </div>
 
         <div className="gb-arc-lab__top">
-          <Link href="/" className="gb-arc-lab__logo">
+          <Link href="/" className="gb-arc-lab__logo" tabIndex={arcInteractive ? 0 : -1}>
             <span className="gb-arc-lab__logo-mark">
               <Image src={logoImage} alt="" width={44} height={44} priority />
             </span>
@@ -370,35 +400,30 @@ export function HeaderArcPrototype() {
               <small>Cosmética Premium</small>
             </span>
           </Link>
-          <div className="gb-arc-lab__search">
+          <div className="gb-arc-lab__search" role="search">
             <span aria-hidden>⌕</span>
-            <input type="search" placeholder="Buscar productos..." readOnly />
+            <input
+              type="search"
+              placeholder="Buscar productos..."
+              readOnly
+              onClick={openSearch}
+              onFocus={openSearch}
+            />
           </div>
-          <div className="gb-arc-lab__utils" aria-hidden>
-            <button type="button" className="gb-arc-lab__icon" tabIndex={-1} aria-label="Cuenta">
-              ⌾
-            </button>
-            <button type="button" className="gb-arc-lab__icon" tabIndex={-1} aria-label="Favoritos">
-              ♡
-            </button>
-            <button type="button" className="gb-arc-lab__icon gb-arc-lab__icon--cart" tabIndex={-1} aria-label="Carrito">
-              🛒
-              <i>1</i>
-            </button>
-          </div>
+          <LabStoreHeaderIcons larger />
         </div>
 
         <div
           ref={wrapRef}
           className="gb-arc-lab__arc"
-          style={{ height: Math.round(arcH) }}
+          style={{ height: ARC_H }}
           onMouseLeave={() => setActiveId(null)}
         >
           <svg
             className="gb-arc-lab__svg"
-            viewBox={`0 0 ${width} ${Math.round(arcH)}`}
+            viewBox={`0 0 ${width} ${ARC_H}`}
             width="100%"
-            height={Math.round(arcH)}
+            height={ARC_H}
             preserveAspectRatio="none"
             role="navigation"
             aria-label="Categorías en arco (prototipo)"
@@ -445,8 +470,8 @@ export function HeaderArcPrototype() {
             </defs>
 
             {segments.map((s) => {
-              const lineH = compact ? 11 : 13;
-              const startY = -((s.lines.length - 1) * lineH) / 2 + (compact ? 2 : 4);
+              const lineH = 15;
+              const startY = -((s.lines.length - 1) * lineH) / 2;
               return (
                 <g
                   key={s.id}
@@ -463,11 +488,6 @@ export function HeaderArcPrototype() {
                     className="gb-arc-lab__caption"
                     style={{ pointerEvents: "none" }}
                   >
-                    {!compact ? (
-                      <tspan x={0} y={startY - lineH} className="gb-arc-lab__cap-icon">
-                        {s.icon}
-                      </tspan>
-                    ) : null}
                     {s.lines.map((line, li) => (
                       <tspan key={`${s.id}-${li}`} x={0} y={startY + li * lineH}>
                         {line}
@@ -496,102 +516,17 @@ export function HeaderArcPrototype() {
 
       <div className="gb-arc-lab__spacer" style={{ height: shellH }} aria-hidden />
 
-      <main className="gb-arc-lab__main">
-        <section className="gb-arc-lab__hero" aria-label="Hero editorial (prototipo)">
-          <div className="gb-arc-lab__hero-mark">
-            <Image src={logoImage} alt="GinnaBeauty" width={44} height={44} />
-          </div>
-          <p className="gb-arc-lab__hero-brand">GinnaBeauty</p>
-          <p className="gb-arc-lab__hero-sub">Cosmética Premium</p>
-          <h1 className="gb-arc-lab__hero-title">
-            Tu belleza, <em>sin límites</em>
-          </h1>
-          <p className="gb-arc-lab__hero-lead">
-            Descubre cosméticos premium, cuidado de piel y capilar curados con amor para realzar tu brillo
-            natural.
-          </p>
-          <div className="gb-arc-lab__hero-ctas">
-            <span className="gb-arc-lab__btn gb-arc-lab__btn--primary">Ver productos →</span>
-            <span className="gb-arc-lab__btn gb-arc-lab__btn--outline">Buscar mi producto →</span>
-          </div>
-        </section>
+      <div className="gb-arc-lab__compare-bar">
+        <span>
+          Laboratorio A/B · interfaz con arco — el home actual sigue en{" "}
+          <Link href="/">/</Link>
+        </span>
+        <Link href="/" className="gb-arc-lab__back">
+          Ver home actual →
+        </Link>
+      </div>
 
-        <section className="gb-arc-lab__trust" aria-label="Beneficios">
-          <div className="gb-arc-lab__trust-item">
-            <span aria-hidden>🚚</span>
-            <div>
-              <strong>Envío a toda Colombia</strong>
-              <small>Gratis en compras superiores a $130.000</small>
-            </div>
-          </div>
-          <div className="gb-arc-lab__trust-item">
-            <span aria-hidden>🔄</span>
-            <div>
-              <strong>Devoluciones 7 días</strong>
-              <small>Satisfacción o te devolvemos</small>
-            </div>
-          </div>
-          <div className="gb-arc-lab__trust-item">
-            <span aria-hidden>✅</span>
-            <div>
-              <strong>Productos originales</strong>
-              <small>100% auténticos y certificados</small>
-            </div>
-          </div>
-        </section>
-
-        <div className="gb-arc-lab__wave" aria-hidden />
-
-        <section className="gb-arc-lab__featured" aria-label="Destacados (prototipo visual)">
-          <h2 className="gb-arc-lab__featured-title">
-            <span aria-hidden>✦</span> Destacados <em>para ti</em> <span aria-hidden>✦</span>
-          </h2>
-          <p className="gb-arc-lab__featured-sub">
-            Solo composición visual. En producción se llenan con productos reales del catálogo.
-          </p>
-          <div className="gb-arc-lab__cards">
-            {LAB_DEMO_CARDS.map((card, i) => (
-              <article key={`lab-card-${i}`} className="gb-arc-lab__card">
-                {card.badge ? <span className="gb-arc-lab__card-badge">{card.badge}</span> : null}
-                <button type="button" className="gb-arc-lab__card-heart" tabIndex={-1} aria-hidden>
-                  ♡
-                </button>
-                <div className="gb-arc-lab__card-img" style={{ backgroundImage: `url(${CATS[i % CATS.length]!.img})` }} />
-                <div className="gb-arc-lab__card-body">
-                  <h3>{card.title}</h3>
-                  <p>{card.tone}</p>
-                  <div className="gb-arc-lab__card-meta">
-                    <strong>{card.price}</strong>
-                    <span className="gb-arc-lab__card-cart" aria-hidden>
-                      🛒
-                    </span>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <div className="gb-arc-lab__notes">
-          <h2>Prototipo de laboratorio</h2>
-          <ul>
-            <li>
-              Esta ruta (<code>/lab/header-arco</code>) es aislada: no modifica el home de la tienda.
-            </li>
-            <li>
-              Fondo: <code>fondo-ginna.png</code> a 100% de ancho (altura proporcional, sin deformar), visible
-              detrás del arco.
-            </li>
-            <li>Arco con 9 segmentos como la referencia visual.</li>
-            <li>Topbar: mensajes reales de <code>STOREFRONT_TOPBAR_MESSAGES</code>.</li>
-            <li>Scroll: header fixed + arco compacto.</li>
-          </ul>
-          <Link href="/" className="gb-arc-lab__back">
-            ← Volver a la tienda (home original)
-          </Link>
-        </div>
-        <div className="gb-arc-lab__scroll-pad" aria-hidden />
-      </main>
+      <div className="gb-arc-lab__home-body">{children}</div>
     </div>
   );
 }

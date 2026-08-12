@@ -16,6 +16,10 @@ export type StorefrontUiContextValue = {
   closeProductModal: () => void;
   openSearch: () => void;
   openSearchWithQuery: (query: string) => void;
+  openCart: () => void;
+  openWishlist: () => void;
+  openAccount: () => void;
+  cartCount: number;
   /** `productSnapshot` evita fallar cuando el producto aún no está en el catálogo del shell (tintes, etc.). */
   addToCart: (id: string, productSnapshot?: StoreProduct) => void;
   addComboToCart: (combo: import("@/lib/types/store-combo").StoreCombo) => void;

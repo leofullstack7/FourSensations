@@ -79,11 +79,14 @@ export function StorefrontShell({
   catalogProducts,
   initialMenuConfig,
   categorySlugByName,
+  hideNavChrome = false,
 }: {
   children: ReactNode;
   catalogProducts: StoreProduct[];
   initialMenuConfig: MenuConfig;
   categorySlugByName: Record<string, string>;
+  /** Oculta topbar + header de tienda (modales y carrito siguen activos). Útil para labs A/B. */
+  hideNavChrome?: boolean;
 }) {
   const [products, setProducts] = useState<StoreProduct[]>(catalogProducts);
   const [menuConfig] = useState<MenuConfig>(initialMenuConfig);
@@ -520,15 +523,22 @@ export function StorefrontShell({
     document.body.style.overflow = "hidden";
   }, []);
 
-  const openCart = () => {
+  const openCart = useCallback(() => {
     setCartOpen(true);
     document.body.style.overflow = "hidden";
-  };
+  }, []);
 
   const closeCart = () => {
     setCartOpen(false);
     document.body.style.overflow = "";
   };
+
+  const openAccount = useCallback(() => {
+    setAuthMode("login");
+    setCustomerAuthTab("login");
+    setAuthOpen(true);
+    document.body.style.overflow = "hidden";
+  }, []);
 
   const subtotal = getCartTotal();
   const shipping = computeShippingCop(subtotal);
@@ -547,14 +557,19 @@ export function StorefrontShell({
         closeProductModal,
         openSearch,
         openSearchWithQuery,
+        openCart,
+        openWishlist,
+        openAccount,
+        cartCount,
         addToCart,
         addComboToCart,
         toggleFavorite,
         favorites,
       }}
     >
-      <div className="gb-store-shell">
+      <div className={`gb-store-shell${hideNavChrome ? " gb-store-shell--lab-chrome" : ""}`}>
       <>
+      {!hideNavChrome ? (
       <div className="store-nav-sticky" id="store-nav-sticky">
       <div className="topbar" aria-live="polite">
         <MotionSpan
@@ -711,12 +726,7 @@ export function StorefrontShell({
                     type="button"
                     className="icon-btn icon-btn--account"
                     title="Mi cuenta"
-                    onClick={() => {
-                      setAuthMode("login");
-                      setCustomerAuthTab("login");
-                      setAuthOpen(true);
-                      document.body.style.overflow = "hidden";
-                    }}
+                    onClick={openAccount}
                   >
                     <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
                       <circle cx="12" cy="8" r="4" />
@@ -820,6 +830,7 @@ export function StorefrontShell({
         </div>
       </header>
       </div>
+      ) : null}
 
       {children}
 

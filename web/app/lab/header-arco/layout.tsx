@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { Cormorant_Garamond, DM_Sans, Italiana } from "next/font/google";
+import { StoreNavigationProvider } from "@/components/store/StoreNavigationProvider";
 
 const italiana = Italiana({
   subsets: ["latin"],
@@ -28,7 +30,9 @@ export default function HeaderArcoLabLayout({ children }: { children: React.Reac
       className={`${italiana.variable} ${cormorant.variable} ${dmSans.variable}`}
       style={{ fontFamily: "var(--gb-arc-sans), system-ui, sans-serif" }}
     >
-      {children}
+      <Suspense fallback={null}>
+        <StoreNavigationProvider>{children}</StoreNavigationProvider>
+      </Suspense>
     </div>
   );
 }
