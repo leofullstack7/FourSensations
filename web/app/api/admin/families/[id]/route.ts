@@ -1,4 +1,4 @@
-import { NextRequest } from "next/request";
+import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { noStoreJson } from "@/lib/server/no-store-json";
