@@ -77,13 +77,25 @@ export function isIssueIgnorableForReplace(
   existingPolicy: BulkExistingPolicy
 ): boolean {
   if (existingPolicy !== "replace" || row.isExistingProduct !== true) return false;
-  return (
+  if (
     issue === "Producto ya registrado" ||
     issue === "Sin imagen en ZIP para este código" ||
     issue === "Sin imagen en ZIP para este nivel" ||
     issue === "Código de barras distinto al registrado en tienda" ||
     issue.startsWith("Aviso:")
-  );
+  ) {
+    return true;
+  }
+  // CSV-only / actualizar: un código repetido no impide actualizar UNA fila;
+  // el commit ya rechaza si hay dos seleccionadas con el mismo código.
+  if (issue === "Código duplicado en el CSV" || issue === "Nivel duplicado en el CSV") {
+    return true;
+  }
+  // Sin fotos en el ZIP no hay match que resolver.
+  if (issue === "Match ambiguo con imágenes" && !row.imageMatches.some((m) => m.matchedBy !== "none" && m.matchedBy !== "ambiguous")) {
+    return true;
+  }
+  return false;
 }
 
 export function bulkRowBlockingIssues(

@@ -799,19 +799,21 @@ export function buildBulkPreview(params: {
     }
     if (r.normalizedCode && (codeCount.get(r.normalizedCode) ?? 0) > 1) {
       r.issues.push("Código duplicado en el CSV");
-      ambiguousRowIndexes.add(r.rowIndex);
     }
     if (bulkPreviewRowIsTintes(r) && tintScopeActive && tintMatchScope) {
       if (!rowInTintMatchScope(r, tintMatchScope)) return;
       const tk = normalizeTintLevelKey(r.mapped.tintLevel);
       if (tk && (tintLevelCount.get(tk) ?? 0) > 1) {
         r.issues.push("Nivel duplicado en el CSV");
-        ambiguousRowIndexes.add(r.rowIndex);
       }
     }
-    // Solo marcar como ambigua si la fila NO tiene ningún match válido ya asignado.
-    // Si tiene un match exacto/fuzzy propio, el conflicto de otra imagen no debe bloquearla.
-    if (ambiguousRowIndexes.has(r.rowIndex) && !r.imageMatches.some(isValidImageMatch)) {
+    // Solo con ZIP: el conflicto de matching de fotos no aplica a CSV-only (actualizar).
+    // Un código repetido en el CSV es otro issue; no debe disfrazarse de match de imágenes.
+    if (
+      zipEntries.length > 0 &&
+      ambiguousRowIndexes.has(r.rowIndex) &&
+      !r.imageMatches.some(isValidImageMatch)
+    ) {
       r.issues.push("Match ambiguo con imágenes");
     }
 

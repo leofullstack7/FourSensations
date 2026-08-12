@@ -2822,9 +2822,19 @@ function collectBulkAutoSelectIds(
 
 /** Selección automática (modo actualizar): existentes con al menos un campo distinto. */
 function collectBulkUpdateSelectIds(preview: BulkPreviewResult): string[] {
-  return (preview.rows ?? [])
-    .filter((r) => r.isExistingProduct && bulkRowHasUpdatableDiffs(r))
-    .map((r) => bulkImportStableRowId(r));
+  const seenCodes = new Set<string>();
+  const ids: string[] = [];
+  for (const r of preview.rows ?? []) {
+    if (!r.isExistingProduct || !bulkRowHasUpdatableDiffs(r)) continue;
+    if (bulkRowBlockingIssues(r, "replace").length > 0) continue;
+    const code = r.normalizedCode;
+    if (code) {
+      if (seenCodes.has(code)) continue;
+      seenCodes.add(code);
+    }
+    ids.push(bulkImportStableRowId(r));
+  }
+  return ids;
 }
 
 function AdminBulkTab({
