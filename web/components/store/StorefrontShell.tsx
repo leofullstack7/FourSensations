@@ -26,6 +26,7 @@ import { loadFavorites, saveFavorites } from "@/lib/favorites-storage";
 import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
 import { isHttpImageUrl } from "@/lib/util/image-url";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { ExploreBrandsMenu } from "@/components/store/ExploreBrandsMenu";
 import { StoreFloatingActions } from "@/components/store/StoreFloatingActions";
 import { ProductModalZoomImage } from "@/components/store/ProductModalZoomImage";
 import { ProductVariantsPickerModal } from "@/components/store/ProductVariantsPickerModal";
@@ -650,6 +651,7 @@ export function StorefrontShell({
 
           <div className="header-row-toolbar">
             <div className="header-toolbar-inner">
+              <ExploreBrandsMenu />
               <div className="search-bar header-toolbar-search">
                 <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <circle cx="11" cy="11" r="8" />

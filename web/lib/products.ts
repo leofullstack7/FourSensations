@@ -1,6 +1,11 @@
 import { unstable_cache } from "next/cache";
 import { mockProducts } from "@/data/mock-products";
 import {
+  formatBrandDisplayName,
+  brandSlugFromName,
+  type StoreBrandListItem,
+} from "@/lib/brand-display";
+import {
   CATEGORY_STOREFRONT_FEATURED_COUNT,
   defaultFeaturedProductIds,
   orderCategoryProductsByFeatured,
@@ -291,5 +296,125 @@ export async function getStorefrontCategoryFeaturedProducts(categorySlug: string
       .map((id) => byId.get(id))
       .filter((p): p is StoreProduct => Boolean(p));
     return { products, featuredIds, totalCount: all.length };
+  }
+}
+
+export async function listStorefrontBrands(): Promise<StoreBrandListItem[]> {
+  try {
+    const grouped = await prisma.product.groupBy({
+      by: ['brand'],
+      where: { active: true, brand: { not: '' } },
+      _count: { _all: true },
+      orderBy: { brand: 'asc' },
+    });
+    const bySlug = new Map<string, StoreBrandListItem>();
+    for (const row of grouped) {
+      const name = (row.brand || '').trim();
+      if (!name) continue;
+      const slug = brandSlugFromName(name);
+      if (!slug) continue;
+      const existing = bySlug.get(slug);
+      if (existing) {
+        existing.productCount += row._count._all;
+      } else {
+        bySlug.set(slug, {
+          name,
+          slug,
+          displayName: formatBrandDisplayName(name),
+          productCount: row._count._all,
+        });
+      }
+    }
+    return Array.from(bySlug.values()).sort((a, b) =>
+      a.displayName.localeCompare(b.displayName, 'es', { sensitivity: 'base' }),
+    );
+  } catch {
+    const bySlug = new Map<string, StoreBrandListItem>();
+    for (const p of mockProducts) {
+      const name = (p.brand || '').trim();
+      if (!name) continue;
+      const slug = brandSlugFromName(name);
+      if (!slug) continue;
+      const existing = bySlug.get(slug);
+      if (existing) existing.productCount += 1;
+      else {
+        bySlug.set(slug, {
+          name,
+          slug,
+          displayName: formatBrandDisplayName(name),
+          productCount: 1,
+        });
+      }
+    }
+    return Array.from(bySlug.values()).sort((a, b) =>
+      a.displayName.localeCompare(b.displayName, 'es', { sensitivity: 'base' }),
+    );
+  }
+}
+
+export async function resolveBrandNameFromSlug(slug: string): Promise<string | null> {
+  const brands = await listStorefrontBrands();
+  const hit = brands.find((b) => b.slug === slug);
+  return hit?.name ?? null;
+}
+
+async function brandNamesMatchingSlug(brandSlug: string): Promise<string[]> {
+  try {
+    const rows = await prisma.product.findMany({
+      where: { active: true, brand: { not: "" } },
+      select: { brand: true },
+      distinct: ["brand"],
+    });
+    return rows.map((r) => r.brand).filter((name) => brandSlugFromName(name) === brandSlug);
+  } catch {
+    return mockProducts
+      .map((p) => p.brand)
+      .filter((name, i, arr) => brandSlugFromName(name) === brandSlug && arr.indexOf(name) === i);
+  }
+}
+
+export async function getStorefrontBrandProductsPage(
+  brandSlug: string,
+  opts?: { take?: number; cursor?: string | null },
+): Promise<{ products: StoreProduct[]; nextCursor: string | null; totalCount: number }> {
+  const take = Math.min(Math.max(opts?.take ?? 24, 1), 48);
+  const cursor = opts?.cursor?.trim() || null;
+  const brandNames = await brandNamesMatchingSlug(brandSlug);
+  if (brandNames.length === 0) return { products: [], nextCursor: null, totalCount: 0 };
+
+  try {
+    return await unstable_cache(
+      async () => {
+        const where = { active: true, brand: { in: brandNames } };
+        const totalCount = await prisma.product.count({ where });
+        const rows = await prisma.product.findMany({
+          where,
+          include: productStoreInclude,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: take + 1,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        });
+        const hasMore = rows.length > take;
+        const page = hasMore ? rows.slice(0, take) : rows;
+        return {
+          products: page.map((r) => rowToStore(r, r.images)),
+          nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+          totalCount,
+        };
+      },
+      ["storefront-brand-page", brandSlug, String(take), cursor ?? ""],
+      { revalidate: 120, tags: ["storefront-brands", `storefront-brand:${brandSlug}`] },
+    )();
+  } catch {
+    const all = mockProducts.filter((p) => brandSlugFromName(p.brand) === brandSlug);
+    const start = cursor ? all.findIndex((p) => p.id === cursor) + 1 : 0;
+    const slice = all.slice(Math.max(0, start), Math.max(0, start) + take + 1);
+    const hasMore = slice.length > take;
+    const page = hasMore ? slice.slice(0, take) : slice;
+    return {
+      products: page,
+      nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+      totalCount: all.length,
+    };
   }
 }

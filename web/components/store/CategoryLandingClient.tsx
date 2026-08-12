@@ -8,6 +8,7 @@ import { TechAmbient } from "@/components/ui/TechAmbient";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreProductCard } from "@/components/store/store-product-card";
 import type { StoreProduct } from "@/lib/types/product";
+import { formatBrandDisplayName } from "@/lib/brand-display";
 import { getCategoryLandingCopy } from "@/lib/category-landing-theme";
 import { getCategoryLandingBanner, getCategoryLandingBannerTone } from "@/lib/category-banners";
 import {
@@ -32,10 +33,10 @@ type CategoryLandingClientProps = {
 };
 
 const CATEGORY_PAGE_SIZE = 24;
-/** Si hay más de este total de SKUs, mostrar al menos MIN_VISIBLE_CARDS tarjetas. */
+/** Si hay más de este total de SKUs, mostrar al inicio solo INITIAL_VISIBLE tarjetas. */
 const TOTAL_SKU_THRESHOLD = 10;
-const MIN_VISIBLE_CARDS = 8;
-/** Por clic, intentar revelar al menos esta cantidad de tarjetas nuevas (no solo SKUs). */
+const INITIAL_VISIBLE = 8;
+const REVEAL_STEP = 8;
 const MIN_NEW_CARDS_PER_CLICK = 8;
 const MAX_FETCH_ROUNDS = 25;
 
@@ -47,6 +48,10 @@ function subcategoryMatches(productSub: string, filterSub: string): boolean {
   return productSub.trim().toLowerCase() === filterSub.trim().toLowerCase();
 }
 
+function brandMatches(productBrand: string, selectedBrand: string): boolean {
+  return productBrand.trim().toLowerCase() === selectedBrand.trim().toLowerCase();
+}
+
 function productMatchesCategoryFilters(
   p: StoreProduct,
   opts: {
@@ -55,19 +60,19 @@ function productMatchesCategoryFilters(
     selectedBrand: string;
     selectedProductTag: string;
     subcategoriesFromDb: SubcategoryRow[];
-  }
+  },
 ): boolean {
   const { selectedGrupo, selectedSub, selectedBrand, selectedProductTag, subcategoriesFromDb } = opts;
   if (selectedGrupo) {
     const allowed = new Set(
-      subcategoriesFromDb.filter((s) => normalizeGroup(s.menuTag) === selectedGrupo).map((s) => s.name)
+      subcategoriesFromDb.filter((s) => normalizeGroup(s.menuTag) === selectedGrupo).map((s) => s.name),
     );
     if (allowed.size > 0 && !Array.from(allowed).some((name) => subcategoryMatches(p.subcategory, name))) {
       return false;
     }
   }
   if (selectedSub && !subcategoryMatches(p.subcategory, selectedSub)) return false;
-  if (selectedBrand && p.brand !== selectedBrand) return false;
+  if (selectedBrand && !brandMatches(p.brand, selectedBrand)) return false;
   if (
     selectedProductTag &&
     !(p.tags ?? []).some((t) => t.toLowerCase() === selectedProductTag.toLowerCase())
@@ -85,12 +90,12 @@ function computeDisplayCount(
     selectedBrand: string;
     selectedProductTag: string;
     subcategoriesFromDb: SubcategoryRow[];
-  }
+  },
 ): number {
   const filtered = allProducts.filter((p) => productMatchesCategoryFilters(p, filterOpts));
   return enrichStorefrontDisplayProducts(
     resolveStorefrontDisplayAfterFilter(filtered, allProducts),
-    allProducts
+    allProducts,
   ).length;
 }
 
@@ -127,6 +132,7 @@ export function CategoryLandingClient({
   const [hasMore, setHasMore] = useState(true);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [allTags, setAllTags] = useState<string[]>([]);
+  const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE);
   const loadingRef = useRef(false);
 
   const copy = useMemo(() => getCategoryLandingCopy(categoryLabel, categorySlug), [categoryLabel, categorySlug]);
@@ -134,6 +140,12 @@ export function CategoryLandingClient({
   const [selectedSub, setSelectedSub] = useState(defaultSubcategory);
   const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedProductTag, setSelectedProductTag] = useState(defaultProductTag);
+
+  const [grupoChosen, setGrupoChosen] = useState(Boolean(defaultGrupo));
+  const [subChosen, setSubChosen] = useState(Boolean(defaultSubcategory));
+  const [brandChosen, setBrandChosen] = useState(false);
+  const [filterHint, setFilterHint] = useState<string | null>(null);
+  const [hintTarget, setHintTarget] = useState<"grupo" | "sub" | "brand" | null>(null);
 
   const filterOpts = useMemo(
     () => ({
@@ -143,7 +155,7 @@ export function CategoryLandingClient({
       selectedProductTag,
       subcategoriesFromDb,
     }),
-    [selectedGrupo, selectedSub, selectedBrand, selectedProductTag, subcategoriesFromDb]
+    [selectedGrupo, selectedSub, selectedBrand, selectedProductTag, subcategoriesFromDb],
   );
 
   const fetchRawPage = useCallback(
@@ -162,7 +174,7 @@ export function CategoryLandingClient({
         totalCount: typeof data.totalCount === "number" ? data.totalCount : null,
       };
     },
-    [categorySlug]
+    [categorySlug],
   );
 
   const mergeLocal = useCallback((prev: StoreProduct[], batch: StoreProduct[]) => {
@@ -213,7 +225,7 @@ export function CategoryLandingClient({
 
       return { products: localProducts, skip, hasMore: more, tags, total };
     },
-    [fetchRawPage, filterOpts, mergeCatalogProducts, mergeLocal]
+    [fetchRawPage, filterOpts, mergeCatalogProducts, mergeLocal],
   );
 
   useEffect(() => {
@@ -223,6 +235,7 @@ export function CategoryLandingClient({
     setHasMore(true);
     setTotalProductCount(0);
     setAllTags([]);
+    setVisibleLimit(INITIAL_VISIBLE);
     setCatalogLoading(true);
     loadingRef.current = true;
 
@@ -249,7 +262,7 @@ export function CategoryLandingClient({
             startSkip: skip,
             startHasMore: more,
             startTags: tags,
-            minDisplay: MIN_VISIBLE_CARDS,
+            minDisplay: INITIAL_VISIBLE,
             minNewCards: 0,
             displayBefore: 0,
           });
@@ -281,11 +294,11 @@ export function CategoryLandingClient({
   }, [categorySlug]);
 
   const loadMoreCategory = useCallback(() => {
-    if (!hasMore || catalogLoading || loadingRef.current) return;
+    if (!hasMore || catalogLoading || loadingRef.current) return Promise.resolve();
     setCatalogLoading(true);
     loadingRef.current = true;
     const displayBefore = computeDisplayCount(products, filterOpts);
-    void (async () => {
+    return (async () => {
       try {
         const filled = await fillUntilDisplayCards({
           startProducts: products,
@@ -314,14 +327,34 @@ export function CategoryLandingClient({
     setSelectedGrupo(defaultGrupo);
     setSelectedSub(defaultSubcategory);
     setSelectedProductTag(defaultProductTag);
+    setSelectedBrand("");
+    setGrupoChosen(Boolean(defaultGrupo || defaultSubcategory || defaultProductTag));
+    setSubChosen(Boolean(defaultSubcategory || defaultProductTag));
+    setBrandChosen(Boolean(defaultProductTag));
+    setFilterHint(null);
+    setHintTarget(null);
+    setVisibleLimit(INITIAL_VISIBLE);
   }, [defaultGrupo, defaultSubcategory, defaultProductTag, categorySlug]);
 
   useEffect(() => {
     if (!categoryNavFilters) return;
-    if (categoryNavFilters.grupo) setSelectedGrupo(categoryNavFilters.grupo);
-    if (categoryNavFilters.sub) setSelectedSub(categoryNavFilters.sub);
-    if (categoryNavFilters.tag) setSelectedProductTag(categoryNavFilters.tag);
+    if (categoryNavFilters.grupo) {
+      setSelectedGrupo(categoryNavFilters.grupo);
+      setGrupoChosen(true);
+    }
+    if (categoryNavFilters.sub) {
+      setSelectedSub(categoryNavFilters.sub);
+      setSubChosen(true);
+    }
+    if (categoryNavFilters.tag) {
+      setSelectedProductTag(categoryNavFilters.tag);
+      setBrandChosen(true);
+    }
   }, [categoryNavFilters]);
+
+  useEffect(() => {
+    setVisibleLimit(INITIAL_VISIBLE);
+  }, [selectedGrupo, selectedSub, selectedBrand, selectedProductTag]);
 
   const subNamesInDb = useMemo(() => subcategoriesFromDb.map((s) => s.name), [subcategoriesFromDb]);
 
@@ -333,13 +366,34 @@ export function CategoryLandingClient({
   }, [subcategoriesFromDb, selectedGrupo, subNamesInDb]);
 
   const brandOptions = useMemo(() => {
+    const set = new Map<string, string>();
+    for (const p of products) {
+      if (!productMatchesCategoryFilters(p, { ...filterOpts, selectedBrand: "", selectedProductTag: "" })) {
+        continue;
+      }
+      const b = p.brand.trim();
+      if (!b) continue;
+      const key = b.toLowerCase();
+      if (!set.has(key)) set.set(key, b);
+    }
+    return Array.from(set.values()).sort((a, b) => a.localeCompare(b, "es"));
+  }, [products, filterOpts]);
+
+  const tagOptions = useMemo(() => {
     const set = new Set<string>();
     for (const p of products) {
-      const b = p.brand.trim();
-      if (b) set.add(b);
+      if (
+        !productMatchesCategoryFilters(p, {
+          ...filterOpts,
+          selectedProductTag: "",
+        })
+      ) {
+        continue;
+      }
+      for (const t of p.tags ?? []) if (t.trim()) set.add(t.trim());
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
-  }, [products]);
+  }, [products, filterOpts]);
 
   const filtered = useMemo(() => {
     return products.filter((p) => productMatchesCategoryFilters(p, filterOpts));
@@ -349,34 +403,107 @@ export function CategoryLandingClient({
     () =>
       enrichStorefrontDisplayProducts(
         resolveStorefrontDisplayAfterFilter(filtered, products),
-        products
+        products,
       ),
-    [filtered, products]
+    [filtered, products],
   );
 
   const hasActiveFilters = Boolean(selectedGrupo || selectedSub || selectedBrand || selectedProductTag);
+
+  const shouldCapVisible =
+    totalProductCount > TOTAL_SKU_THRESHOLD || displayProducts.length > TOTAL_SKU_THRESHOLD;
+  const shownProducts = shouldCapVisible
+    ? displayProducts.slice(0, visibleLimit)
+    : displayProducts;
+  const hasHiddenLoaded = shownProducts.length < displayProducts.length;
+  const showMoreButton = hasHiddenLoaded || (hasMore && shouldCapVisible);
+
+  const onVerMas = () => {
+    if (hasHiddenLoaded) {
+      setVisibleLimit((n) => n + REVEAL_STEP);
+      return;
+    }
+    void loadMoreCategory().then(() => setVisibleLimit((n) => n + REVEAL_STEP));
+  };
 
   useEffect(() => {
     if (!hasActiveFilters) return;
     if (filtered.length > 0) return;
     if (!hasMore || catalogLoading || loadingRef.current) return;
-    loadMoreCategory();
+    void loadMoreCategory();
   }, [hasActiveFilters, filtered.length, hasMore, catalogLoading, loadMoreCategory]);
 
   useEffect(() => {
     if (catalogLoading || loadingRef.current) return;
     if (!hasMore) return;
     if (totalProductCount <= TOTAL_SKU_THRESHOLD) return;
-    if (displayProducts.length >= MIN_VISIBLE_CARDS) return;
-    loadMoreCategory();
+    if (displayProducts.length >= INITIAL_VISIBLE) return;
+    void loadMoreCategory();
   }, [catalogLoading, hasMore, totalProductCount, displayProducts.length, loadMoreCategory]);
 
-  const clearSubIfInvalid = (grupo: string) => {
-    if (!grupo) return;
-    const allowed = new Set(
-      subcategoriesFromDb.filter((s) => normalizeGroup(s.menuTag) === grupo).map((s) => s.name)
-    );
-    if (selectedSub && !allowed.has(selectedSub)) setSelectedSub("");
+  const flashHint = (target: "grupo" | "sub" | "brand", message: string) => {
+    setHintTarget(target);
+    setFilterHint(message);
+  };
+
+  const pickGrupo = (g: string) => {
+    setGrupoChosen(true);
+    setSelectedGrupo(g);
+    setSelectedSub("");
+    setSelectedBrand("");
+    setSelectedProductTag("");
+    setSubChosen(false);
+    setBrandChosen(false);
+    setFilterHint(null);
+    setHintTarget(null);
+  };
+
+  const pickSub = (s: string) => {
+    if (!grupoChosen) {
+      flashHint("grupo", "Primero selecciona un grupo del menú.");
+      return;
+    }
+    setSubChosen(true);
+    setSelectedSub(s);
+    setSelectedBrand("");
+    setSelectedProductTag("");
+    setBrandChosen(false);
+    setFilterHint(null);
+    setHintTarget(null);
+  };
+
+  const pickBrand = (b: string) => {
+    if (!grupoChosen) {
+      flashHint("grupo", "Primero selecciona un grupo del menú.");
+      return;
+    }
+    if (!subChosen) {
+      flashHint("sub", "Primero selecciona una subcategoría.");
+      return;
+    }
+    setBrandChosen(true);
+    setSelectedBrand(b);
+    setSelectedProductTag("");
+    setFilterHint(null);
+    setHintTarget(null);
+  };
+
+  const pickTag = (t: string) => {
+    if (!grupoChosen) {
+      flashHint("grupo", "Primero selecciona un grupo del menú.");
+      return;
+    }
+    if (!subChosen) {
+      flashHint("sub", "Primero selecciona una subcategoría.");
+      return;
+    }
+    if (!brandChosen) {
+      flashHint("brand", "Primero selecciona una marca.");
+      return;
+    }
+    setSelectedProductTag(t);
+    setFilterHint(null);
+    setHintTarget(null);
   };
 
   useReveal();
@@ -411,6 +538,12 @@ export function CategoryLandingClient({
           onClick={() => {
             setSelectedGrupo("");
             setSelectedSub("");
+            setSelectedBrand("");
+            setSelectedProductTag("");
+            setGrupoChosen(false);
+            setSubChosen(false);
+            setBrandChosen(false);
+            setFilterHint(null);
           }}
         >
           {copy.ctaExplore}
@@ -450,16 +583,16 @@ export function CategoryLandingClient({
           <div className="category-filter-panel">
             <div className="category-filter-title">Filtrar productos</div>
             <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 12px" }}>
-              Subcategorías y grupos según tu catálogo en base de datos.
+              Elige en orden: grupo → subcategoría → marca → etiqueta.
             </p>
             <div className="category-filter-grid">
-              <div>
-                <div className="category-filter-label">Grupo del menú</div>
+              <div className={hintTarget === "grupo" ? "category-filter-step is-hint" : "category-filter-step"}>
+                <div className="category-filter-label">1. Grupo del menú</div>
                 <div className="category-chip-row">
                   <button
                     type="button"
-                    className={`category-filter-chip${selectedGrupo === "" ? " active" : ""}`}
-                    onClick={() => setSelectedGrupo("")}
+                    className={`category-filter-chip${grupoChosen && selectedGrupo === "" ? " active" : ""}`}
+                    onClick={() => pickGrupo("")}
                   >
                     Todos
                   </button>
@@ -468,10 +601,7 @@ export function CategoryLandingClient({
                       key={g}
                       type="button"
                       className={`category-filter-chip${selectedGrupo === g ? " active" : ""}`}
-                      onClick={() => {
-                        setSelectedGrupo(g);
-                        clearSubIfInvalid(g);
-                      }}
+                      onClick={() => pickGrupo(g)}
                     >
                       {g}
                     </button>
@@ -479,13 +609,17 @@ export function CategoryLandingClient({
                 </div>
               </div>
 
-              <div>
-                <div className="category-filter-label">Subcategorías</div>
+              <div
+                className={`category-filter-step${!grupoChosen ? " is-locked" : ""}${
+                  hintTarget === "sub" ? " is-hint" : ""
+                }`}
+              >
+                <div className="category-filter-label">2. Subcategorías</div>
                 <div className="category-chip-row">
                   <button
                     type="button"
-                    className={`category-filter-chip${selectedSub === "" ? " active" : ""}`}
-                    onClick={() => setSelectedSub("")}
+                    className={`category-filter-chip${subChosen && selectedSub === "" ? " active" : ""}`}
+                    onClick={() => pickSub("")}
                   >
                     Todas
                   </button>
@@ -494,7 +628,7 @@ export function CategoryLandingClient({
                       key={s}
                       type="button"
                       className={`category-filter-chip${selectedSub === s ? " active" : ""}`}
-                      onClick={() => setSelectedSub(s)}
+                      onClick={() => pickSub(s)}
                     >
                       {s}
                     </button>
@@ -502,13 +636,17 @@ export function CategoryLandingClient({
                 </div>
               </div>
 
-              <div>
-                <div className="category-filter-label">Familias / marcas</div>
+              <div
+                className={`category-filter-step${!subChosen ? " is-locked" : ""}${
+                  hintTarget === "brand" ? " is-hint" : ""
+                }`}
+              >
+                <div className="category-filter-label">3. Familias / marcas</div>
                 <div className="category-chip-row">
                   <button
                     type="button"
-                    className={`category-filter-chip${selectedBrand === "" ? " active" : ""}`}
-                    onClick={() => setSelectedBrand("")}
+                    className={`category-filter-chip${brandChosen && selectedBrand === "" ? " active" : ""}`}
+                    onClick={() => pickBrand("")}
                   >
                     Todas
                   </button>
@@ -516,31 +654,31 @@ export function CategoryLandingClient({
                     <button
                       key={b}
                       type="button"
-                      className={`category-filter-chip${selectedBrand === b ? " active" : ""}`}
-                      onClick={() => setSelectedBrand(b)}
+                      className={`category-filter-chip${brandMatches(selectedBrand, b) ? " active" : ""}`}
+                      onClick={() => pickBrand(b)}
                     >
-                      {b}
+                      {formatBrandDisplayName(b)}
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div>
-                <div className="category-filter-label">Etiquetas de producto</div>
+              <div className={`category-filter-step${!brandChosen ? " is-locked" : ""}`}>
+                <div className="category-filter-label">4. Etiquetas de producto</div>
                 <div className="category-chip-row">
                   <button
                     type="button"
-                    className={`category-filter-chip${selectedProductTag === "" ? " active" : ""}`}
-                    onClick={() => setSelectedProductTag("")}
+                    className={`category-filter-chip${selectedProductTag === "" && brandChosen ? " active" : ""}`}
+                    onClick={() => pickTag("")}
                   >
                     Todas
                   </button>
-                  {allTags.map((t) => (
+                  {tagOptions.map((t) => (
                     <button
                       key={t}
                       type="button"
                       className={`category-filter-chip${selectedProductTag === t ? " active" : ""}`}
-                      onClick={() => setSelectedProductTag(t)}
+                      onClick={() => pickTag(t)}
                     >
                       {t}
                     </button>
@@ -548,14 +686,19 @@ export function CategoryLandingClient({
                 </div>
               </div>
             </div>
+            {filterHint ? (
+              <p className="category-filter-hint" role="status">
+                {filterHint}
+              </p>
+            ) : null}
           </div>
 
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "14px 0 12px" }}>
             {showInitialSkeleton
               ? "Cargando productos…"
-              : selectedGrupo || selectedSub || selectedBrand || selectedProductTag
-                ? `${filtered.length} producto(s) con filtros activos`
-                : `Mostrando ${products.length} de ${totalProductCount} en ${categoryLabel}`}
+              : hasActiveFilters
+                ? `${filtered.length} producto(s) con filtros activos · mostrando ${shownProducts.length}`
+                : `Mostrando ${shownProducts.length} de ${totalProductCount} en ${categoryLabel}`}
             {catalogLoading && products.length > 0 ? " · cargando más…" : ""}
           </p>
 
@@ -579,7 +722,7 @@ export function CategoryLandingClient({
           ) : (
             <>
               <div className="products-grid category-landing-products">
-                {displayProducts.map((p, i) => (
+                {shownProducts.map((p, i) => (
                   <StoreProductCard
                     key={`${categorySlug}-${p.id}`}
                     product={p}
@@ -591,17 +734,15 @@ export function CategoryLandingClient({
                   />
                 ))}
               </div>
-              {hasMore ? (
+              {showMoreButton ? (
                 <div style={{ display: "flex", justifyContent: "center", margin: "28px 0 8px" }}>
                   <button
                     type="button"
                     className="btn btn-outline"
-                    onClick={loadMoreCategory}
+                    onClick={onVerMas}
                     disabled={catalogLoading}
                   >
-                    {catalogLoading
-                      ? "Cargando productos…"
-                      : `Cargar más productos (${Math.max(0, totalProductCount - products.length)} restantes)`}
+                    {catalogLoading ? "Cargando productos…" : "Ver más productos"}
                   </button>
                 </div>
               ) : null}
