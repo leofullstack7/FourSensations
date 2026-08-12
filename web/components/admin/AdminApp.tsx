@@ -3408,10 +3408,20 @@ function AdminBulkTab({
     [previewTableRows]
   );
 
-  const selectedUpdateRowIds = useMemo(
-    () => updateDiffRows.filter((r) => r.selected).map((r) => r.previewRowId),
-    [updateDiffRows]
-  );
+  const selectedUpdateRowIds = useMemo(() => {
+    const seen = new Set<string>();
+    const ids: string[] = [];
+    for (const r of updateDiffRows) {
+      if (!r.selected) continue;
+      const code = (r.codeValue ?? "").trim().toLowerCase();
+      if (code) {
+        if (seen.has(code)) continue;
+        seen.add(code);
+      }
+      ids.push(r.previewRowId);
+    }
+    return ids;
+  }, [updateDiffRows]);
   const selectedVariantGroupRowIds = useMemo(() => {
     if (!preview) return [];
     const source = preview.csvHasVariantGroupColumn ? preview.rows ?? [] : preview.matchedRows ?? [];

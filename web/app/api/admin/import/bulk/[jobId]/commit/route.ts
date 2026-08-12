@@ -239,12 +239,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     }
     const ref = row.normalizedCode;
     if (seenRefInSelection.has(ref)) {
-      return noStoreJson(
-        {
-          error: `El código «${ref}» aparece en más de una fila seleccionada. Solo puede haber una fila por código de referencia.`,
-        },
-        { status: 400 }
-      );
+      continue;
     }
     seenRefInSelection.add(ref);
     toImport.push(row);
