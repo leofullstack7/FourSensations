@@ -10050,6 +10050,42 @@ function AdminProductDetailModal({
                 disabled={saving || !editCategory.trim() || !editSubcategory.trim()}
                 onClick={() => {
                   void (async () => {
+                    const priceNum = Number(String(editPrice).replace(",", ".").trim());
+                    const stockNum = Number(String(editStock).replace(",", ".").trim());
+                    const originalRaw = editOriginalPrice.trim();
+                    const originalNum = originalRaw
+                      ? Number(originalRaw.replace(",", "."))
+                      : null;
+
+                    if (!editName.trim()) {
+                      showToast("Escribe un nombre para el producto.", "danger", "⚠️");
+                      return;
+                    }
+                    if (!editCategory.trim() || !editSubcategory.trim()) {
+                      showToast("Elige categoría y subcategoría antes de guardar.", "danger", "⚠️");
+                      return;
+                    }
+                    if (!Number.isFinite(priceNum) || priceNum < 0 || !Number.isInteger(priceNum)) {
+                      showToast(
+                        "El precio debe ser un número entero en pesos (0 o más), sin decimales.",
+                        "danger",
+                        "⚠️",
+                      );
+                      return;
+                    }
+                    if (originalNum != null && (!Number.isFinite(originalNum) || originalNum < 0 || !Number.isInteger(originalNum))) {
+                      showToast(
+                        "El precio original debe ser un número entero en pesos, o déjalo vacío.",
+                        "danger",
+                        "⚠️",
+                      );
+                      return;
+                    }
+                    if (!Number.isFinite(stockNum) || stockNum < 0 || !Number.isInteger(stockNum)) {
+                      showToast("El stock debe ser un número entero (0 o más).", "danger", "⚠️");
+                      return;
+                    }
+
                     try {
                       await onSave({
                         name: editName.trim(),
@@ -10057,9 +10093,9 @@ function AdminProductDetailModal({
                         category: editCategory.trim(),
                         subcategory: editSubcategory.trim(),
                         tags: editTags,
-                        price: Number(editPrice),
-                        originalPrice: editOriginalPrice.trim() ? Number(editOriginalPrice) : null,
-                        stock: Number(editStock),
+                        price: priceNum,
+                        originalPrice: originalNum,
+                        stock: stockNum,
                         emoji: editEmoji.trim() || null,
                         description: editDescription.trim(),
                         badge: editBadge || null,

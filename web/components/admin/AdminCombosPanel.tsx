@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import logoImage from "@/app/logo.png";
+import logoImage from "@/assets/logo.png";
 import {
   fetchAdminCombos,
   fetchAdminCombosCatalog,

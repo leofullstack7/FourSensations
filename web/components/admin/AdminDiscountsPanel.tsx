@@ -8,7 +8,7 @@ import { isActiveManagedDiscount } from "@/lib/product-discount";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import type { AdminProduct } from "@/lib/types/admin";
 import { isHttpImageUrl } from "@/lib/util/image-url";
-import logoImage from "@/app/logo.png";
+import logoImage from "@/assets/logo.png";
 import Image from "next/image";
 
 function categoryLabel(slug: string, tree: AdminCategoryTree[]): string {

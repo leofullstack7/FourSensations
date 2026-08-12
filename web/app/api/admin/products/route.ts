@@ -83,7 +83,11 @@ export async function POST(req: NextRequest) {
 
     const data = parsed.data;
     const brand = data.brand?.trim() || "GinnaBeauty";
-    await upsertProductFamilyByName(brand);
+    try {
+      await upsertProductFamilyByName(brand);
+    } catch (familyErr) {
+      console.warn("[POST /api/admin/products] familia no sincronizada:", familyErr);
+    }
     const tags = (data.tags ?? []).map((t) => t.trim()).filter(Boolean);
 
     const mainUrl = data.imageUrl ?? null;

@@ -27,10 +27,10 @@ export const adminProductCreateSchema = z.object({
   category: z.string().trim().min(1).max(80),
   subcategory: z.string().trim().min(1).max(120),
   tags: z.array(z.string().trim().min(1).max(60)).max(30).optional().default([]),
-  description: z.string().trim().min(1).max(20_000),
-  price: z.coerce.number().int().positive(),
-  originalPrice: z.coerce.number().int().positive().nullable().optional(),
-  stock: z.coerce.number().int().min(0).default(0),
+  description: z.string().trim().min(1, "La descripción es obligatoria").max(20_000),
+  price: z.coerce.number({ invalid_type_error: "El precio debe ser un número" }).int("El precio debe ser un número entero (sin decimales)").nonnegative("El precio no puede ser negativo"),
+  originalPrice: z.coerce.number().int().nonnegative().nullable().optional(),
+  stock: z.coerce.number().int().min(0, "El stock no puede ser negativo").default(0),
   rating: z.coerce.number().min(0).max(5).default(5),
   reviews: z.coerce.number().int().min(0).default(0),
   badge: z.enum(badgeValues).nullable().optional(),
@@ -64,10 +64,14 @@ export const adminProductUpdateSchema = z
     category: z.string().trim().min(1).max(80).optional(),
     subcategory: z.string().trim().min(1).max(120).optional(),
     tags: z.array(z.string().trim().min(1).max(60)).max(30).optional(),
-    description: z.string().trim().min(1).max(20_000).optional(),
-    price: z.coerce.number().int().positive().optional(),
-    originalPrice: z.coerce.number().int().positive().nullable().optional(),
-    stock: z.coerce.number().int().min(0).optional(),
+    description: z.string().trim().max(20_000).optional(),
+    price: z
+      .coerce.number({ invalid_type_error: "El precio debe ser un número" })
+      .int("El precio debe ser un número entero (sin decimales)")
+      .nonnegative("El precio no puede ser negativo")
+      .optional(),
+    originalPrice: z.coerce.number().int().nonnegative().nullable().optional(),
+    stock: z.coerce.number().int().min(0, "El stock no puede ser negativo").optional(),
     rating: z.coerce.number().min(0).max(5).optional(),
     reviews: z.coerce.number().int().min(0).optional(),
     badge: z.enum(badgeValues).nullable().optional(),
@@ -91,8 +95,34 @@ export const adminProductUpdateSchema = z
 export type AdminProductUpdateInput = z.infer<typeof adminProductUpdateSchema>;
 
 export function formatZodError(err: z.ZodError): { message: string; issues: z.ZodIssue[] } {
+  const labels: Record<string, string> = {
+    name: "Nombre",
+    brand: "Familia / marca",
+    category: "Categoría",
+    subcategory: "Subcategoría",
+    description: "Descripción",
+    price: "Precio",
+    originalPrice: "Precio original",
+    stock: "Stock",
+    tags: "Etiquetas",
+    imageUrl: "Imagen",
+    colorHex: "Color",
+    colorName: "Nombre del color",
+  };
+
+  const parts = err.issues.map((e) => {
+    const key = String(e.path[0] ?? "");
+    const label = labels[key] ?? (key || "Campo");
+    let msg = e.message;
+    if (msg === "Required") msg = "es obligatorio";
+    if (msg.includes("expected number")) msg = "debe ser un número válido";
+    if (msg.includes("Too small") && key === "price") msg = "debe ser 0 o mayor";
+    if (msg.includes("Too small") && key === "description") msg = "no puede quedar vacía";
+    return `${label}: ${msg}`;
+  });
+
   return {
-    message: err.issues.map((e) => `${e.path.join(".")}: ${e.message}`).join("; "),
+    message: parts.join(" · ") || "Revisa los datos del formulario",
     issues: err.issues,
   };
 }

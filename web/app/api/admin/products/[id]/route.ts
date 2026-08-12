@@ -122,7 +122,12 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
         : undefined;
 
     if (d.brand !== undefined) {
-      await upsertProductFamilyByName(d.brand);
+      try {
+        await upsertProductFamilyByName(d.brand);
+      } catch (familyErr) {
+        // No bloquear el guardado del producto (precio, stock, etc.) si falla el catálogo de familias.
+        console.warn("[PUT /api/admin/products/[id]] familia no sincronizada:", familyErr);
+      }
     }
 
     // Solo columnas escalares; `ProductImage` (galería) no se toca aquí.
@@ -183,13 +188,16 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error desconocido";
     console.error("[PUT /api/admin/products/[id]]", e);
-    const staleClient =
-      msg.includes("Unknown argument `colorHex`") || msg.includes("Unknown argument `colorName`");
+    const schemaDrift =
+      msg.includes("Unknown argument") ||
+      msg.includes("does not exist") ||
+      msg.includes("column") ||
+      msg.includes("ProductFamily");
     return NextResponse.json(
       {
-        error: staleClient
-          ? "Base de datos desactualizada en el servidor. Reinicia «npm run dev» y vuelve a intentar."
-          : "Error al actualizar producto",
+        error: schemaDrift
+          ? "No se pudo guardar por un desajuste técnico de la base de datos. Reintenta en unos minutos; si continúa, avisa al equipo con el mensaje completo del aviso."
+          : "No se pudo actualizar el producto. Revisa precio, categoría, subcategoría y descripción, e inténtalo de nuevo.",
         ...(process.env.NODE_ENV === "development" && { detail: msg.slice(0, 400) }),
       },
       { status: 500 }

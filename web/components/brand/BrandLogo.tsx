@@ -1,8 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
-import logoImage from "@/app/logo.png";
+import logoIcon from "@/assets/logo.png";
+import logoWide from "@/assets/logo-largo.png";
 
-export type BrandLogoVariant = "store" | "admin" | "auth";
+export type BrandLogoVariant = "store" | "admin" | "auth" | "icon";
 
 type BrandLogoProps = {
   variant?: BrandLogoVariant;
@@ -17,11 +18,34 @@ export function BrandLogo({
   priority = variant === "store",
   className = "",
 }: BrandLogoProps) {
-  const iconSize = variant === "auth" ? 80 : variant === "admin" ? 44 : 86;
+  if (variant === "store") {
+    const inner = (
+      <span className="logo-wide-wrap">
+        <Image
+          src={logoWide}
+          alt="GinnaBeauty"
+          width={220}
+          height={64}
+          className="gb-brand-image logo-wide-image"
+          priority={priority}
+        />
+      </span>
+    );
+    if (href) {
+      return (
+        <Link href={href} className={`logo logo--wide ${className}`.trim()}>
+          {inner}
+        </Link>
+      );
+    }
+    return <div className={`logo logo--wide ${className}`.trim()}>{inner}</div>;
+  }
+
+  const iconSize = variant === "auth" ? 80 : variant === "admin" ? 44 : 72;
 
   const icon = (
     <Image
-      src={logoImage}
+      src={logoIcon}
       alt="Logo GinnaBeauty"
       width={iconSize}
       height={iconSize}
@@ -30,26 +54,8 @@ export function BrandLogo({
     />
   );
 
-  if (variant === "store") {
-    const inner = (
-      <>
-        <div className="logo-icon">{icon}</div>
-        <div className="logo-text">
-          <span className="logo-brand">
-            Ginna<em>Beauty</em>
-          </span>
-          <span className="logo-tagline">Cosmética Premium</span>
-        </div>
-      </>
-    );
-    if (href) {
-      return (
-        <Link href={href} className={`logo ${className}`.trim()}>
-          {inner}
-        </Link>
-      );
-    }
-    return <div className={`logo ${className}`.trim()}>{inner}</div>;
+  if (variant === "icon") {
+    return <div className={`logo-icon ${className}`.trim()}>{icon}</div>;
   }
 
   if (variant === "admin") {

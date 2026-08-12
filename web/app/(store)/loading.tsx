@@ -2,7 +2,7 @@
  * UI de carga de la tienda: skeleton tech con logo animado.
  */
 import Image from "next/image";
-import logoImage from "@/app/logo.png";
+import logoImage from "@/assets/logo.png";
 import "../shell-loading.css";
 
 export default function StoreLoading() {

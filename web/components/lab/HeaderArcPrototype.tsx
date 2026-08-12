@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import logoImage from "@/app/logo.png";
+import logoIcon from "@/assets/logo.png";
+import logoWide from "@/assets/logo-largo.png";
 import { LabArcMagicAura } from "@/components/lab/LabArcMagicAura";
 import { LabStoreHeaderIcons } from "@/components/lab/LabStoreHeaderIcons";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
@@ -83,6 +84,12 @@ const CATS: ArcCat[] = [
     icon: "🎁",
   },
 ];
+
+const LAB_DEMO_CARDS = [
+  { title: "Card producto (lab)", tone: "Vista de referencia", price: "—", badge: null as string | null },
+  { title: "Card producto (lab)", tone: "Imagen / precio reales en tienda", price: "—", badge: "Nuevo" },
+  { title: "Card producto (lab)", tone: "Solo composición visual", price: "—", badge: null },
+] as const;
 
 const TINTS = ["a", "b", "c"] as const;
 
@@ -247,6 +254,10 @@ export function HeaderArcPrototype({ children }: { children?: ReactNode }) {
   const [flatActiveId, setFlatActiveId] = useState<string | null>(null);
   const [topbarIndex, setTopbarIndex] = useState(0);
 
+  const scrollToBanner = useCallback(() => {
+    document.getElementById("hero-banner")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   const measureArc = useCallback(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -352,7 +363,7 @@ export function HeaderArcPrototype({ children }: { children?: ReactNode }) {
       >
         <Link href="/" className="gb-arc-lab__flat-logo" tabIndex={flatInteractive ? 0 : -1}>
           <span className="gb-arc-lab__flat-logo-mark">
-            <Image src={logoImage} alt="GinnaBeauty" width={40} height={40} />
+            <Image src={logoIcon} alt="GinnaBeauty" width={40} height={40} />
           </span>
         </Link>
         <ul className="gb-arc-lab__flat-menu">
@@ -392,12 +403,8 @@ export function HeaderArcPrototype({ children }: { children?: ReactNode }) {
 
         <div className="gb-arc-lab__top">
           <Link href="/" className="gb-arc-lab__logo" tabIndex={arcInteractive ? 0 : -1}>
-            <span className="gb-arc-lab__logo-mark">
-              <Image src={logoImage} alt="" width={44} height={44} priority />
-            </span>
-            <span className="gb-arc-lab__logo-text">
-              <strong>GinnaBeauty</strong>
-              <small>Cosmética Premium</small>
+            <span className="gb-arc-lab__logo-mark gb-arc-lab__logo-mark--wide">
+              <Image src={logoWide} alt="GinnaBeauty" width={180} height={52} priority />
             </span>
           </Link>
           <div className="gb-arc-lab__search" role="search">
@@ -525,6 +532,90 @@ export function HeaderArcPrototype({ children }: { children?: ReactNode }) {
           Ver home actual →
         </Link>
       </div>
+
+      <main className="gb-arc-lab__main">
+        <section className="gb-arc-lab__hero" aria-label="Hero editorial (prototipo)">
+          <div className="gb-arc-lab__hero-mark">
+            <Image src={logoIcon} alt="GinnaBeauty" width={44} height={44} />
+          </div>
+          <p className="gb-arc-lab__hero-brand">GinnaBeauty</p>
+          <p className="gb-arc-lab__hero-sub">Cosmética Premium</p>
+          <h1 className="gb-arc-lab__hero-title">
+            Tu belleza, <em>sin límites</em>
+          </h1>
+          <p className="gb-arc-lab__hero-lead">
+            Descubre cosméticos premium, cuidado de piel y capilar curados con amor para realzar tu brillo
+            natural.
+          </p>
+          <div className="gb-arc-lab__hero-ctas">
+            <button type="button" className="gb-arc-lab__btn gb-arc-lab__btn--primary" onClick={scrollToBanner}>
+              Ver productos →
+            </button>
+            <button type="button" className="gb-arc-lab__btn gb-arc-lab__btn--outline" onClick={openSearch}>
+              Buscar mi producto →
+            </button>
+          </div>
+        </section>
+
+        <section className="gb-arc-lab__trust" aria-label="Beneficios">
+          <div className="gb-arc-lab__trust-item">
+            <span aria-hidden>🚚</span>
+            <div>
+              <strong>Envío a toda Colombia</strong>
+              <small>Gratis en compras superiores a $130.000</small>
+            </div>
+          </div>
+          <div className="gb-arc-lab__trust-item">
+            <span aria-hidden>🔄</span>
+            <div>
+              <strong>Devoluciones 7 días</strong>
+              <small>Satisfacción o te devolvemos</small>
+            </div>
+          </div>
+          <div className="gb-arc-lab__trust-item">
+            <span aria-hidden>✅</span>
+            <div>
+              <strong>Productos originales</strong>
+              <small>100% auténticos y certificados</small>
+            </div>
+          </div>
+        </section>
+
+        <div className="gb-arc-lab__wave" aria-hidden />
+
+        <section className="gb-arc-lab__featured" aria-label="Destacados (prototipo visual)">
+          <h2 className="gb-arc-lab__featured-title">
+            <span aria-hidden>✦</span> Destacados <em>para ti</em> <span aria-hidden>✦</span>
+          </h2>
+          <p className="gb-arc-lab__featured-sub">
+            Composición del laboratorio. Debajo continúa el banner y el catálogo real de la tienda.
+          </p>
+          <div className="gb-arc-lab__cards">
+            {LAB_DEMO_CARDS.map((card, i) => (
+              <article key={`lab-card-${i}`} className="gb-arc-lab__card">
+                {card.badge ? <span className="gb-arc-lab__card-badge">{card.badge}</span> : null}
+                <button type="button" className="gb-arc-lab__card-heart" tabIndex={-1} aria-hidden>
+                  ♡
+                </button>
+                <div
+                  className="gb-arc-lab__card-img"
+                  style={{ backgroundImage: `url(${CATS[i % CATS.length]!.img})` }}
+                />
+                <div className="gb-arc-lab__card-body">
+                  <h3>{card.title}</h3>
+                  <p>{card.tone}</p>
+                  <div className="gb-arc-lab__card-meta">
+                    <strong>{card.price}</strong>
+                    <span className="gb-arc-lab__card-cart" aria-hidden>
+                      🛒
+                    </span>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      </main>
 
       <div className="gb-arc-lab__home-body">{children}</div>
     </div>

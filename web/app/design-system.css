@@ -349,6 +349,21 @@ input, select, textarea { font-family: inherit; }
   align-items: center;
   gap: 10px;
 }
+.logo--wide {
+  gap: 0;
+}
+.logo-wide-wrap {
+  display: flex;
+  align-items: center;
+  max-width: min(240px, 42vw);
+}
+.logo-wide-image {
+  width: 100%;
+  height: auto;
+  max-height: 64px;
+  object-fit: contain;
+  display: block;
+}
 .logo-icon {
   width: 86px;
   height: 86px;
@@ -2330,6 +2345,9 @@ footer {
     grid-column: 1;
     grid-row: 1;
     justify-self: start;
+  }
+  .header-inner > .logo .logo-wide-wrap {
+    max-width: min(168px, 48vw);
   }
   .mobile-menu-toggle {
     display: inline-flex;
