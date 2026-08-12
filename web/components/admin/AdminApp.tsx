@@ -928,6 +928,10 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
       showToast("Elige qué producto será la cara principal", "default", "ℹ️");
       return;
     }
+    if (selectedProductsForMerge.length > 500) {
+      showToast("Puedes agrupar máximo 500 productos a la vez.", "danger", "⚠️");
+      return;
+    }
     void (async () => {
       setProductVariantGroupBusy(true);
       try {
