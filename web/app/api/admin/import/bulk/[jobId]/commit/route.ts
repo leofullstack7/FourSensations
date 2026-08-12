@@ -26,7 +26,7 @@ import { normalizeColorHex } from "@/lib/product-color";
 import { revalidateStorefrontProducts } from "@/lib/server/revalidate-storefront-products";
 import {
   deleteBulkImportZip,
-  resolveBulkImportZipBuffer,
+  tryResolveBulkImportZipBuffer,
 } from "@/lib/server/bulk-import-zip-store";
 import { enrichBulkPreviewFromDatabase } from "@/lib/server/bulk-import-mark-existing";
 import {
@@ -65,6 +65,17 @@ const commitSchema = z
   .refine((v) => (v.rowIds?.length ?? 0) > 0 || (v.rowIndexes?.length ?? 0) > 0, {
     message: "Selecciona al menos una fila",
   });
+
+function rowNeedsZipImages(row: BulkPreviewRow): boolean {
+  return (row.imageMatches ?? []).some(
+    (m) =>
+      m.matchedBy === "exact" ||
+      m.matchedBy === "numericPrefix" ||
+      m.matchedBy === "sixDigitPrefix" ||
+      m.matchedBy === "tintLevel" ||
+      m.matchedBy === "fuzzy"
+  );
+}
 
 function variantGroupFieldsFromRow(row: BulkPreviewRow): {
   variantGroupCode: string | null;
@@ -270,19 +281,25 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     data: { status: BulkImportStatus.IMPORTING, errorMessage: null },
   });
 
-  let zipBuffer: Buffer;
-  try {
-    zipBuffer = await resolveBulkImportZipBuffer(jobId, job.zipBlob);
-  } catch (e) {
+  const zipBuffer = await tryResolveBulkImportZipBuffer(jobId, job.zipBlob);
+  const needsZip = toImport.some(rowNeedsZipImages);
+  if (needsZip && !zipBuffer) {
     await prisma.bulkImportJob.update({
       where: { id: jobId },
       data: { status: BulkImportStatus.PREVIEW, errorMessage: "ZIP no disponible" },
     });
-    const msg = e instanceof Error ? e.message : "ZIP no disponible";
-    return noStoreJson({ error: msg }, { status: 409 });
+    return noStoreJson(
+      {
+        error:
+          "El ZIP de esta sesión ya no está disponible (reinicio del servidor o expiración). Vuelve a analizar CSV + ZIP.",
+      },
+      { status: 409 }
+    );
   }
 
-  const { byFileName } = await listZipImagesAsync(zipBuffer, { includeBuffers: true });
+  const { byFileName } = zipBuffer
+    ? await listZipImagesAsync(zipBuffer, { includeBuffers: true })
+    : { byFileName: new Map() };
   const createdProducts: ReturnType<typeof prismaProductToAdmin>[] = [];
   const errors: string[] = [];
   let skippedExistingDuplicates = 0;

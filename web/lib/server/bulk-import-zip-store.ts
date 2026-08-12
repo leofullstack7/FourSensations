@@ -140,6 +140,17 @@ export async function resolveBulkImportZipBuffer(
   );
 }
 
+export async function tryResolveBulkImportZipBuffer(
+  jobId: string,
+  zipBlob: Uint8Array | Buffer | null | undefined,
+): Promise<Buffer | null> {
+  try {
+    return await resolveBulkImportZipBuffer(jobId, zipBlob);
+  } catch {
+    return null;
+  }
+}
+
 export async function cleanupBulkImportZipDir(): Promise<void> {
   try {
     await rm(bulkZipDir(), { recursive: true, force: true });
