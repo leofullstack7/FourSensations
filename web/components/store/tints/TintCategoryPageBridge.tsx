@@ -25,6 +25,7 @@ function tintBubbleToStoreProduct(item: TintBubbleItem): StoreProduct {
     tags: [],
     price: item.price,
     originalPrice: null,
+    discountPercent: null,
     rating: 5,
     reviews: 0,
     badge: null,

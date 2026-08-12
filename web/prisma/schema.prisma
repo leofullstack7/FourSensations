@@ -70,6 +70,12 @@ model Product {
   description   String         @db.Text
   price         Int
   originalPrice Int?
+  /// % de descuento comercial (1–90). Null = sin descuento de admin.
+  discountPercent    Int?
+  /// Fin del descuento. Null + discountPercent = hasta que el admin lo quite.
+  discountEndsAt     DateTime?
+  /// Precio de lista antes del descuento (para restaurar / tachar).
+  discountBasePrice  Int?
   stock         Int            @default(0)
   rating        Float          @default(5)
   reviews       Int            @default(0)

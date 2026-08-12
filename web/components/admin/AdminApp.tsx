@@ -140,6 +140,8 @@ import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import type { AdminProduct, AdminSale } from "@/lib/types/admin";
 import { formatPrice } from "@/lib/format";
 import { AdminCombosPanel } from "@/components/admin/AdminCombosPanel";
+import { AdminDiscountsPanel } from "@/components/admin/AdminDiscountsPanel";
+import { AdminProductListBoard } from "@/components/admin/AdminProductListBoard";
 import { AdminMenuTab } from "@/components/admin/AdminMenuTab";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { BulkImportProgressOverlay } from "@/components/admin/BulkImportProgressOverlay";
@@ -151,7 +153,7 @@ import {
   resolveMenuTagFromEditor,
 } from "@/lib/admin/menu-utils";
 
-type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "sales" | "stock" | "customers" | "categories" | "menu" | "versions" | "reports";
+type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "discounts" | "sales" | "stock" | "customers" | "categories" | "menu" | "versions" | "reports";
 
 type GoPageOptions = {
   productTab?: "list" | "add" | "bulk";
@@ -162,6 +164,7 @@ const ADMIN_PAGE_TITLES: Record<AdminPageId, string> = {
   products: "Gestión de Productos",
   "category-products": "Gestión de PRODUCTOS en Categorías",
   combos: "Crear Combos",
+  discounts: "Descuentos",
   sales: "Ventas",
   stock: "Inventario",
   customers: "Clientes CRM",
@@ -181,6 +184,7 @@ const ADMIN_NAV_ITEMS: {
   { id: "products", icon: "📦", label: "Productos" },
   { id: "category-products", icon: "✨", label: "Productos en Categorías" },
   { id: "combos", icon: "🧩", label: "Crear Combos" },
+  { id: "discounts", icon: "🏷️", label: "Descuentos" },
   { id: "sales", icon: "💰", label: "Ventas" },
   { id: "customers", icon: "👥", label: "Clientes CRM" },
   { id: "stock", icon: "📋", label: "Inventario" },
@@ -466,6 +470,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
       if (opts?.productTab) setProductTab(opts.productTab);
 
       if (p === "products" || p === "stock" || p === "dashboard") void loadProducts();
+      else if (p === "discounts") void loadCategories();
       else if (p === "categories" || p === "menu") void loadCategories();
       else if (p === "sales") void loadPaidOrders();
     },
@@ -1610,6 +1615,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
               ) : null}
               {productTab === "list" && (
                 <AdminProductListTab
+                  sidebarExpanded={sidebarExpanded}
                   productSearch={productSearch}
                   setProductSearch={setProductSearch}
                   filterBrand={productFilterBrand}
@@ -1740,6 +1746,14 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
 
             <div className={`admin-page ${page === "combos" ? "active" : ""}`} style={{ display: page === "combos" ? "block" : "none" }}>
               <AdminCombosPanel active={page === "combos"} showToast={showToast} />
+            </div>
+
+            <div className={`admin-page ${page === "discounts" ? "active" : ""}`} style={{ display: page === "discounts" ? "block" : "none" }}>
+              <AdminDiscountsPanel
+                active={page === "discounts"}
+                categories={categoriesTree}
+                showToast={showToast}
+              />
             </div>
 
             <div className={`admin-page ${page === "sales" ? "active" : ""}`} style={{ display: page === "sales" ? "block" : "none" }}>
@@ -2053,6 +2067,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
 }
 
 function AdminProductListTab({
+  sidebarExpanded,
   productSearch,
   setProductSearch,
   filterBrand,
@@ -2084,6 +2099,7 @@ function AdminProductListTab({
   onProductsRefresh,
   showToast,
 }: {
+  sidebarExpanded: boolean;
   productSearch: string;
   setProductSearch: (v: string) => void;
   filterBrand: string;
@@ -2145,121 +2161,126 @@ function AdminProductListTab({
 
   return (
     <>
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "flex-end",
-          gap: 12,
-          marginBottom: 20,
-        }}
+      <AdminProductListBoard
+        sidebarExpanded={sidebarExpanded}
+        toolbar={
+          <>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "flex-end",
+                gap: 12,
+              }}
+            >
+              <div className="search-bar" style={{ width: 260, minWidth: 200, flex: "1 1 200px" }}>
+                <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.35-4.35" />
+                </svg>
+                <input type="text" placeholder="Buscar producto..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} />
+              </div>
+              <div className="form-group" style={{ margin: 0, minWidth: 160, flex: "1 1 140px" }}>
+                <label className="form-label" style={{ fontSize: 11, marginBottom: 4 }}>
+                  Marca
+                </label>
+                <select
+                  className="form-select"
+                  value={filterBrand}
+                  onChange={(e) => setFilterBrand(e.target.value)}
+                  aria-label="Filtrar por marca"
+                >
+                  <option value="">Todas</option>
+                  {brandOptions.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group" style={{ margin: 0, minWidth: 160, flex: "1 1 140px" }}>
+                <label className="form-label" style={{ fontSize: 11, marginBottom: 4 }}>
+                  Categoría
+                </label>
+                <select
+                  className="form-select"
+                  value={filterCategorySlug}
+                  onChange={(e) => setFilterCategorySlug(e.target.value)}
+                  aria-label="Filtrar por categoría"
+                >
+                  <option value="">Todas</option>
+                  {sortedCategories.map((c) => (
+                    <option key={c.slug} value={c.slug}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group" style={{ margin: 0, minWidth: 160, flex: "1 1 140px" }}>
+                <label className="form-label" style={{ fontSize: 11, marginBottom: 4 }}>
+                  Subcategoría
+                </label>
+                <select
+                  className="form-select"
+                  value={filterSubcategory}
+                  onChange={(e) => setFilterSubcategory(e.target.value)}
+                  aria-label="Filtrar por subcategoría"
+                  disabled={subcategoryOptions.length === 0}
+                >
+                  <option value="">Todas</option>
+                  {subcategoryOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group" style={{ margin: 0, minWidth: 160, flex: "1 1 140px" }}>
+                <label className="form-label" style={{ fontSize: 11, marginBottom: 4 }}>
+                  Etiqueta producto
+                </label>
+                <select
+                  className="form-select"
+                  value={filterTag}
+                  onChange={(e) => setFilterTag(e.target.value)}
+                  aria-label="Filtrar por etiqueta"
+                  disabled={tagOptions.length === 0}
+                >
+                  <option value="">Todas</option>
+                  {tagOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  style={{ height: 38, alignSelf: "flex-end" }}
+                  onClick={() => {
+                    setProductSearch("");
+                    setFilterBrand("");
+                    setFilterCategorySlug("");
+                    setFilterSubcategory("");
+                    setFilterTag("");
+                  }}
+                >
+                  Limpiar filtros
+                </button>
+              )}
+            </div>
+            {!listLoading && totalProductCount > 0 && (
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "10px 0 0" }}>
+                {hasActiveFilters
+                  ? `Mostrando ${filteredProducts.length} fila(s) · ${filteredMatchCount} de ${totalProductCount} producto(s)`
+                  : `${totalProductCount} producto(s) en el sistema · ${filteredProducts.length} fila(s) en la lista`}
+              </p>
+            )}
+          </>
+        }
       >
-        <div className="search-bar" style={{ width: 260, minWidth: 200, flex: "1 1 200px" }}>
-          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-          <input type="text" placeholder="Buscar producto..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} />
-        </div>
-        <div className="form-group" style={{ margin: 0, minWidth: 160, flex: "1 1 140px" }}>
-          <label className="form-label" style={{ fontSize: 11, marginBottom: 4 }}>
-            Marca
-          </label>
-          <select
-            className="form-select"
-            value={filterBrand}
-            onChange={(e) => setFilterBrand(e.target.value)}
-            aria-label="Filtrar por marca"
-          >
-            <option value="">Todas</option>
-            {brandOptions.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="form-group" style={{ margin: 0, minWidth: 160, flex: "1 1 140px" }}>
-          <label className="form-label" style={{ fontSize: 11, marginBottom: 4 }}>
-            Categoría
-          </label>
-          <select
-            className="form-select"
-            value={filterCategorySlug}
-            onChange={(e) => setFilterCategorySlug(e.target.value)}
-            aria-label="Filtrar por categoría"
-          >
-            <option value="">Todas</option>
-            {sortedCategories.map((c) => (
-              <option key={c.slug} value={c.slug}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="form-group" style={{ margin: 0, minWidth: 160, flex: "1 1 140px" }}>
-          <label className="form-label" style={{ fontSize: 11, marginBottom: 4 }}>
-            Subcategoría
-          </label>
-          <select
-            className="form-select"
-            value={filterSubcategory}
-            onChange={(e) => setFilterSubcategory(e.target.value)}
-            aria-label="Filtrar por subcategoría"
-            disabled={subcategoryOptions.length === 0}
-          >
-            <option value="">Todas</option>
-            {subcategoryOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="form-group" style={{ margin: 0, minWidth: 160, flex: "1 1 140px" }}>
-          <label className="form-label" style={{ fontSize: 11, marginBottom: 4 }}>
-            Etiqueta producto
-          </label>
-          <select
-            className="form-select"
-            value={filterTag}
-            onChange={(e) => setFilterTag(e.target.value)}
-            aria-label="Filtrar por etiqueta"
-            disabled={tagOptions.length === 0}
-          >
-            <option value="">Todas</option>
-            {tagOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-        {hasActiveFilters && (
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            style={{ height: 38, alignSelf: "flex-end" }}
-            onClick={() => {
-              setProductSearch("");
-              setFilterBrand("");
-              setFilterCategorySlug("");
-              setFilterSubcategory("");
-              setFilterTag("");
-            }}
-          >
-            Limpiar filtros
-          </button>
-        )}
-      </div>
-      {!listLoading && totalProductCount > 0 && (
-        <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: -12, marginBottom: 16 }}>
-          {hasActiveFilters
-            ? `Mostrando ${filteredProducts.length} fila(s) · ${filteredMatchCount} de ${totalProductCount} producto(s)`
-            : `${totalProductCount} producto(s) en el sistema · ${filteredProducts.length} fila(s) en la lista`}
-        </p>
-      )}
-      <div className="admin-card admin-table-wrap" style={{ padding: 0 }}>
         <table className="admin-table admin-table--product-list">
           <thead style={{ padding: "0 16px" }}>
             <tr>
@@ -2435,7 +2456,7 @@ function AdminProductListTab({
             )}
           </tbody>
         </table>
-      </div>
+      </AdminProductListBoard>
       <AdminProductVariantsModal
         open={variantsModalProduct != null}
         anchorProduct={variantsModalProduct}

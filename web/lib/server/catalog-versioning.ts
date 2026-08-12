@@ -45,6 +45,9 @@ export type ProductVersionSnapshot = {
   description: string;
   price: number;
   originalPrice: number | null;
+  discountPercent: number | null;
+  discountEndsAt: string | null;
+  discountBasePrice: number | null;
   stock: number;
   rating: number;
   reviews: number;
@@ -134,6 +137,9 @@ export function snapshotProduct(
     description: p.description,
     price: p.price,
     originalPrice: p.originalPrice,
+    discountPercent: p.discountPercent ?? null,
+    discountEndsAt: p.discountEndsAt ? p.discountEndsAt.toISOString() : null,
+    discountBasePrice: p.discountBasePrice ?? null,
     stock: p.stock,
     rating: p.rating,
     reviews: p.reviews,
@@ -411,6 +417,9 @@ async function applyProductSnapshot(tx: Tx, snap: ProductVersionSnapshot) {
       description: snap.description,
       price: snap.price,
       originalPrice: snap.originalPrice,
+      discountPercent: snap.discountPercent ?? null,
+      discountEndsAt: snap.discountEndsAt ? new Date(snap.discountEndsAt) : null,
+      discountBasePrice: snap.discountBasePrice ?? null,
       stock: snap.stock,
       rating: snap.rating,
       reviews: snap.reviews,
@@ -441,6 +450,9 @@ async function applyProductSnapshot(tx: Tx, snap: ProductVersionSnapshot) {
       description: snap.description,
       price: snap.price,
       originalPrice: snap.originalPrice,
+      discountPercent: snap.discountPercent ?? null,
+      discountEndsAt: snap.discountEndsAt ? new Date(snap.discountEndsAt) : null,
+      discountBasePrice: snap.discountBasePrice ?? null,
       stock: snap.stock,
       rating: snap.rating,
       reviews: snap.reviews,
@@ -750,6 +762,7 @@ const PRODUCT_DIFF_FIELDS: Array<{
 }> = [
   { key: "name", label: "nombre" },
   { key: "price", label: "precio", format: (v) => `$${Number(v).toLocaleString("es-CO")}` },
+  { key: "discountPercent", label: "descuento %" },
   { key: "stock", label: "stock" },
   { key: "category", label: "categoría" },
   { key: "subcategory", label: "subcategoría" },

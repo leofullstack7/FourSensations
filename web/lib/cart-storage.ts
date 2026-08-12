@@ -1,5 +1,5 @@
 import { CHECKOUT_FREE_SHIPPING_THRESHOLD_COP } from "@/lib/checkout/shipping-zones";
-import type { CartLine } from "@/lib/types/product";
+import type { CartLine, StoreProduct } from "@/lib/types/product";
 
 export const CART_KEY = "gb_cart";
 
@@ -24,4 +24,29 @@ export function saveCart(cart: CartLine[]): void {
 /** Misma regla que checkout: envío gratis por encima del umbral. */
 export function computeShippingCop(subtotal: number): number {
   return subtotal > CHECKOUT_FREE_SHIPPING_THRESHOLD_COP ? 0 : 9_000;
+}
+
+/** Actualiza precios del carrito con el catálogo vivo (descuentos). Combos no se tocan. */
+export function syncCartPricesFromCatalog(cart: CartLine[], catalog: StoreProduct[]): CartLine[] {
+  if (catalog.length === 0 || cart.length === 0) return cart;
+  const byId = new Map(catalog.map((p) => [p.id, p]));
+  let changed = false;
+  const next = cart.map((line) => {
+    if (line.comboId) return line;
+    const live = byId.get(line.id);
+    if (!live) return line;
+    const nextPct = live.discountPercent ?? null;
+    const prevPct = line.discountPercent ?? null;
+    if (live.price === line.price && live.originalPrice === line.originalPrice && nextPct === prevPct) {
+      return line;
+    }
+    changed = true;
+    return {
+      ...line,
+      price: live.price,
+      originalPrice: live.originalPrice,
+      discountPercent: nextPct,
+    };
+  });
+  return changed ? next : cart;
 }

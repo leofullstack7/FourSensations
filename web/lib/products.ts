@@ -7,6 +7,7 @@ import {
 } from "@/lib/category-storefront-featured";
 import { categoryProductsCacheTag } from "@/lib/server/revalidate-category-storefront";
 import { STOREFRONT_PRODUCTS_CACHE_TAG } from "@/lib/server/revalidate-storefront-products";
+import { resolveProductPrice } from "@/lib/product-discount";
 import type { StoreProduct } from "@/lib/types/product";
 import { prisma } from "@/lib/prisma";
 
@@ -25,6 +26,9 @@ type ProductRow = {
   tags: string[];
   price: number;
   originalPrice: number | null;
+  discountPercent?: number | null;
+  discountEndsAt?: Date | null;
+  discountBasePrice?: number | null;
   rating: number;
   reviews: number;
   badge: string | null;
@@ -52,6 +56,13 @@ function rowToStore(p: ProductRow, galleryRows: { url: string }[] = []): StorePr
   const tintGroup = p.tintGroup?.trim() || undefined;
   const tintFamily = p.tintFamily?.name?.trim() || undefined;
   const tintType = p.tintType?.name?.trim() || undefined;
+  const resolved = resolveProductPrice({
+    price: p.price,
+    originalPrice: p.originalPrice,
+    discountPercent: p.discountPercent,
+    discountEndsAt: p.discountEndsAt,
+    discountBasePrice: p.discountBasePrice,
+  });
   return {
     id: p.id,
     name: p.name,
@@ -59,8 +70,9 @@ function rowToStore(p: ProductRow, galleryRows: { url: string }[] = []): StorePr
     category: p.category,
     subcategory: p.subcategory,
     tags: Array.isArray(p.tags) ? p.tags : [],
-    price: p.price,
-    originalPrice: p.originalPrice,
+    price: resolved.price,
+    originalPrice: resolved.originalPrice,
+    discountPercent: resolved.discountPercent,
     rating: p.rating,
     reviews: p.reviews,
     badge: (p.badge as StoreProduct["badge"]) ?? null,
@@ -92,7 +104,7 @@ const getCachedStorefrontProducts = unstable_cache(
     if (rows.length === 0) return mockProducts;
     return rows.map((r) => rowToStore(r, r.images));
   },
-  ["storefront-products-v2"],
+  ["storefront-products-v3"],
   { revalidate: 300, tags: [STOREFRONT_PRODUCTS_CACHE_TAG] }
 );
 

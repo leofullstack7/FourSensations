@@ -13,9 +13,10 @@ import {
   checkoutShippingCop,
   shippingZoneContextMessage,
 } from "@/lib/checkout/shipping-zones";
-import { loadCart, saveCart } from "@/lib/cart-storage";
+import { loadCart, saveCart, syncCartPricesFromCatalog } from "@/lib/cart-storage";
 import { formatPrice } from "@/lib/format";
-import type { CartLine } from "@/lib/types/product";
+import { formatDiscountBadge } from "@/lib/product-discount";
+import type { CartLine, StoreProduct } from "@/lib/types/product";
 import { isHttpImageUrl } from "@/lib/util/image-url";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { TechAmbient } from "@/components/ui/TechAmbient";
@@ -115,6 +116,21 @@ export function CheckoutPageClient() {
   useEffect(() => {
     setCart(loadCart());
     setHydrated(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/store/catalog", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { products?: StoreProduct[] };
+        if (!Array.isArray(data.products) || data.products.length === 0) return;
+        setCart((prev) => {
+          const next = syncCartPricesFromCatalog(prev, data.products!);
+          if (next !== prev) saveCart(next);
+          return next;
+        });
+      } catch {
+        /* catálogo opcional: el checkout cobra precio de DB */
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -527,7 +543,14 @@ export function CheckoutPageClient() {
                       </button>
                     </div>
                   </div>
-                  <div style={{ fontWeight: 600, color: "var(--dusty-rose)" }}>{formatPrice(item.price * item.qty)}</div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontWeight: 600, color: "var(--dusty-rose)" }}>{formatPrice(item.price * item.qty)}</div>
+                    {item.discountPercent != null ? (
+                      <div className="price-discount" style={{ marginTop: 4, display: "inline-block" }}>
+                        {formatDiscountBadge(item.discountPercent)}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </motion.section>

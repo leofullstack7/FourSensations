@@ -25,6 +25,9 @@ function normalizeAdminProduct(p: AdminProduct): AdminProduct {
     featuredInHome: p.featuredInHome === true,
     tags: Array.isArray(p.tags) ? p.tags.filter(Boolean) : [],
     images: Array.isArray(p.images) ? p.images : [],
+    discountPercent: p.discountPercent ?? null,
+    discountEndsAt: p.discountEndsAt ?? null,
+    discountBasePrice: p.discountBasePrice ?? null,
   };
 }
 

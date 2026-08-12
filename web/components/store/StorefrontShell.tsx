@@ -19,7 +19,9 @@ import { cartComboLineId } from "@/lib/types/store-combo";
 import { getCategoryLabel } from "@/lib/category-labels";
 import { formatPrice } from "@/lib/format";
 import { preloadStorefrontProductImages } from "@/lib/preload-storefront-image";
-import { computeShippingCop, loadCart, saveCart } from "@/lib/cart-storage";
+import { computeShippingCop, loadCart, saveCart, syncCartPricesFromCatalog } from "@/lib/cart-storage";
+import { StoreDiscountBadge, StoreProductPrice } from "@/components/store/StoreProductPrice";
+import { formatDiscountBadge } from "@/lib/product-discount";
 import { loadFavorites, saveFavorites } from "@/lib/favorites-storage";
 import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
 import { isHttpImageUrl } from "@/lib/util/image-url";
@@ -160,6 +162,16 @@ export function StorefrontShell({
   useEffect(() => {
     setCart(loadCart());
   }, []);
+
+  useEffect(() => {
+    if (products.length === 0) return;
+    setCart((prev) => {
+      const next = syncCartPricesFromCatalog(prev, products);
+      if (next === prev) return prev;
+      saveCart(next);
+      return next;
+    });
+  }, [products]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -856,7 +868,19 @@ export function StorefrontShell({
                       ))}
                     </ul>
                   ) : null}
-                  <div className="cart-item-price">{formatPrice(item.price)}</div>
+                  <div className="cart-item-price">
+                    {formatPrice(item.price)}
+                    {item.discountPercent != null ? (
+                      <span className="price-discount" style={{ marginLeft: 6 }}>
+                        {formatDiscountBadge(item.discountPercent)}
+                      </span>
+                    ) : null}
+                    {item.originalPrice != null && item.originalPrice > item.price ? (
+                      <span className="price-original" style={{ marginLeft: 6, fontSize: 12 }}>
+                        {formatPrice(item.originalPrice)}
+                      </span>
+                    ) : null}
+                  </div>
                   <div className="qty-control">
                     <button type="button" className="qty-btn" onClick={() => changeQty(item.id, -1)}>
                       −
@@ -947,12 +971,13 @@ export function StorefrontShell({
                     const src = urls[modalImgIdx] ?? null;
                     return (
                       <>
-                        <div className="modal-gallery-placeholder">
+                        <div className="modal-gallery-placeholder" style={{ position: "relative" }}>
                           {src ? (
                             <ProductModalZoomImage src={src} alt={selectedProduct.name} />
                           ) : (
                             selectedProduct.emoji
                           )}
+                          <StoreDiscountBadge product={selectedProduct} />
                         </div>
                         {urls.length > 1 && (
                           <div className="modal-gallery-thumbs">
@@ -1006,20 +1031,8 @@ export function StorefrontShell({
                         {selectedProduct.rating} · {selectedProduct.reviews} reseñas
                       </span>
                     </div>
-                    <div className="product-modal-price-row" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-                      <span className="price-current" style={{ fontSize: 32 }}>
-                        {formatPrice(selectedProduct.price)}
-                      </span>
-                      {selectedProduct.originalPrice != null && (
-                        <span className="price-original" style={{ fontSize: 18 }}>
-                          {formatPrice(selectedProduct.originalPrice)}
-                        </span>
-                      )}
-                      {selectedProduct.originalPrice != null && (
-                        <span className="price-discount" style={{ fontSize: 13 }}>
-                          -{Math.round((1 - selectedProduct.price / selectedProduct.originalPrice) * 100)}%
-                        </span>
-                      )}
+                    <div className="product-modal-price-row" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
+                      <StoreProductPrice product={selectedProduct} currentStyle={{ fontSize: 32 }} />
                     </div>
                     {showSelectedProductColorPicker ? (
                       <div className="product-modal-color-picker" style={{ marginBottom: 20 }}>

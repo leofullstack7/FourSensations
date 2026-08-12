@@ -2,9 +2,9 @@
 
 import Image from "next/image";
 import type { StoreProduct } from "@/lib/types/product";
-import { formatPrice } from "@/lib/format";
 import { isHttpImageUrl } from "@/lib/util/image-url";
 import { normalizeColorHex } from "@/lib/product-color";
+import { StoreDiscountBadge, StoreProductPrice } from "@/components/store/StoreProductPrice";
 
 export function StoreProductCard({
   product,
@@ -23,9 +23,6 @@ export function StoreProductCard({
   imagePriority?: boolean;
   compact?: boolean;
 }) {
-  const discount = product.originalPrice
-    ? Math.round((1 - product.price / product.originalPrice) * 100)
-    : null;
   const badgeMap = { new: "badge-new", sale: "badge-sale", hot: "badge-hot", best: "badge-best" } as const;
   const badgeLbl = { new: "Nuevo", sale: "Oferta", hot: "🔥 Hot", best: "⭐ Top" } as const;
   const colorHex = normalizeColorHex(product.colorHex);
@@ -61,11 +58,12 @@ export function StoreProductCard({
             <span className="product-variant-count-badge__lbl">vars</span>
           </div>
         )}
-        {product.badge && (
-          <div className="product-badges">
+        <div className="product-badges">
+          <StoreDiscountBadge product={product} />
+          {product.badge ? (
             <span className={`badge-tag ${badgeMap[product.badge]}`}>{badgeLbl[product.badge]}</span>
-          </div>
-        )}
+          ) : null}
+        </div>
         <div className="product-actions">
           <button
             type="button"
@@ -124,11 +122,7 @@ export function StoreProductCard({
         </div>
         <div className="product-price-row">
           <div>
-            <span className="price-current">{formatPrice(product.price)}</span>
-            {product.originalPrice != null && (
-              <span className="price-original">{formatPrice(product.originalPrice)}</span>
-            )}
-            {discount != null && <span className="price-discount">-{discount}%</span>}
+            <StoreProductPrice product={product} />
           </div>
           <button
             type="button"

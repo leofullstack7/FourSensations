@@ -1,6 +1,8 @@
 import { OrderStatus, PaymentStatus, Prisma } from "@prisma/client";
 import { SHIPPING_ZONES, checkoutShippingCop } from "@/lib/checkout/shipping-zones";
 import { prisma } from "@/lib/prisma";
+import { resolveProductPrice } from "@/lib/product-discount";
+import { expireDueProductDiscounts } from "@/lib/server/product-discounts";
 import { getActiveStoreComboById } from "@/lib/server/store-combos";
 import type { CreateCheckoutOrderInput } from "@/lib/validation/checkout-order";
 import { generateOrderReference } from "@/lib/server/checkout/reference";
@@ -95,6 +97,9 @@ export async function createPendingOrderFromCheckout(
       const productIds = Array.from(
         new Set(input.items.map((i) => i.productId).filter((id): id is string => Boolean(id))),
       );
+      if (productIds.length) {
+        await expireDueProductDiscounts(tx, productIds);
+      }
       const products = productIds.length
         ? await tx.product.findMany({
             where: { id: { in: productIds }, active: true },
@@ -131,7 +136,7 @@ export async function createPendingOrderFromCheckout(
           throw new Error(`Producto no disponible: ${productId}`);
         }
         stockNeed.set(productId, (stockNeed.get(productId) ?? 0) + line.quantity);
-        const unitPrice = p.price;
+        const unitPrice = resolveProductPrice(p).price;
         const lineTotal = unitPrice * line.quantity;
         subtotal += lineTotal;
         lines.push({

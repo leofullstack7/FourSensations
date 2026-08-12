@@ -949,6 +949,28 @@ input, select, textarea { font-family: inherit; }
   opacity: 1;
 }
 
+.product-discount-flag {
+  display: inline-flex;
+  align-items: center;
+  background: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 5px 10px;
+  border-radius: 999px;
+  box-shadow: 0 8px 20px rgba(190, 18, 60, 0.35);
+  text-transform: lowercase;
+  line-height: 1.2;
+  pointer-events: none;
+}
+.product-img-wrap > .product-discount-flag,
+.modal-gallery-placeholder > .product-discount-flag {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 4;
+}
 .product-badges {
   position: absolute;
   top: 12px;
@@ -1132,11 +1154,13 @@ input, select, textarea { font-family: inherit; }
 }
 .price-discount {
   font-size: 11px;
-  font-weight: 600;
-  color: var(--rose);
-  background: rgba(200,145,139,0.1);
-  padding: 2px 7px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
+  padding: 3px 8px;
   border-radius: var(--radius-full);
+  margin-left: 6px;
+  letter-spacing: 0.02em;
 }
 .add-to-cart-mini {
   width: 36px;

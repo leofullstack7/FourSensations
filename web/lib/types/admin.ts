@@ -31,6 +31,11 @@ export type AdminProduct = {
   tags: string[];
   price: number;
   originalPrice: number | null;
+  /** % de descuento de admin (1–90). */
+  discountPercent?: number | null;
+  /** ISO; null = hasta que se quite. */
+  discountEndsAt?: string | null;
+  discountBasePrice?: number | null;
   stock: number;
   rating: number;
   reviews: number;
