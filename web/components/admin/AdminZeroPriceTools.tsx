@@ -18,12 +18,13 @@ async function runChunkedBulkPatch(
     ids: string[];
     brand?: string;
     stock?: number;
+    active?: boolean;
     stockById?: Record<string, number>;
     versionLabel: string;
     onProgress: (done: number, total: number) => void;
   }
 ): Promise<number> {
-  const { ids, brand, stock, stockById, versionLabel, onProgress } = opts;
+  const { ids, brand, stock, active, stockById, versionLabel, onProgress } = opts;
   const total = ids.length;
   let updated = 0;
   onProgress(0, total);
@@ -44,6 +45,7 @@ async function runChunkedBulkPatch(
       ids: chunkIds,
       ...(brand !== undefined ? { brand } : {}),
       ...(stock !== undefined ? { stock } : {}),
+      ...(active !== undefined ? { active } : {}),
       ...(chunkStockById && Object.keys(chunkStockById).length > 0 ? { stockById: chunkStockById } : {}),
       recordVersion: isLast,
       versionLabel: isLast ? versionLabel : undefined,
@@ -116,6 +118,193 @@ function BulkProgressBar({
       </div>
     </div>
   );
+}
+
+/** Modal: asignar familia a un conjunto de productos (crea la familia si es nueva). */
+export function AdminChangeFamilyModal({
+  open,
+  ids,
+  title = "Cambiar familia",
+  description,
+  brandOptions,
+  saving,
+  onClose,
+  onApplied,
+  showToast,
+}: {
+  open: boolean;
+  ids: string[];
+  title?: string;
+  description: string;
+  brandOptions: string[];
+  saving: boolean;
+  onClose: () => void;
+  onApplied: () => void | Promise<void>;
+  showToast: (msg: string, type?: string, icon?: string) => void;
+}) {
+  const [mode, setMode] = useState<"pick" | "custom">("pick");
+  const [pickedBrand, setPickedBrand] = useState("");
+  const [customBrand, setCustomBrand] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setMode(brandOptions.length > 0 ? "pick" : "custom");
+    setPickedBrand(brandOptions[0] ?? "");
+    setCustomBrand("");
+    setProgress(null);
+    setBusy(false);
+  }, [open, brandOptions]);
+
+  if (!open) return null;
+
+  const brand = mode === "custom" ? customBrand.trim() : pickedBrand.trim();
+
+  const submit = () => {
+    if (!brand) {
+      showToast("Elige o escribe una familia.", "default", "ℹ️");
+      return;
+    }
+    if (ids.length === 0) {
+      showToast("No hay productos para actualizar.", "default", "ℹ️");
+      return;
+    }
+    void (async () => {
+      setBusy(true);
+      setProgress({ done: 0, total: ids.length });
+      try {
+        const updated = await runChunkedBulkPatch({
+          ids,
+          brand,
+          versionLabel: `Familia «${brand}» en ${ids.length} producto(s)`,
+          onProgress: (done, total) => setProgress({ done, total }),
+        });
+        showToast(`Familia «${brand}» aplicada a ${updated} producto(s).`, "success", "✅");
+        await onApplied();
+        onClose();
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "No se pudo actualizar", "danger", "⚠️");
+      } finally {
+        setBusy(false);
+        setProgress(null);
+      }
+    })();
+  };
+
+  return (
+    <div
+      className="admin-modal-overlay open"
+      role="presentation"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy && !saving) onClose();
+      }}
+    >
+      <div
+        className="admin-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        style={{ maxWidth: 460, padding: "22px 20px" }}
+      >
+        <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>{title}</h3>
+        <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
+          {description} Si escribes un nombre nuevo, se crea automáticamente en el catálogo de familias.
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+            <input
+              type="radio"
+              name="change-family-mode"
+              checked={mode === "pick"}
+              disabled={brandOptions.length === 0 || busy}
+              onChange={() => setMode("pick")}
+            />
+            Elegir una existente
+          </label>
+          <select
+            className="form-select"
+            disabled={mode !== "pick" || busy || brandOptions.length === 0}
+            value={pickedBrand}
+            onChange={(e) => setPickedBrand(e.target.value)}
+          >
+            {brandOptions.length === 0 ? (
+              <option value="">— Sin familias registradas —</option>
+            ) : (
+              brandOptions.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))
+            )}
+          </select>
+
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, marginTop: 4 }}>
+            <input
+              type="radio"
+              name="change-family-mode"
+              checked={mode === "custom"}
+              disabled={busy}
+              onChange={() => setMode("custom")}
+            />
+            Escribir una familia nueva
+          </label>
+          <input
+            className="form-input"
+            disabled={mode !== "custom" || busy}
+            value={customBrand}
+            placeholder="Ej. Igora, Samy, GinnaBeauty…"
+            onChange={(e) => setCustomBrand(e.target.value)}
+            onFocus={() => setMode("custom")}
+          />
+        </div>
+
+        {progress ? (
+          <BulkProgressBar
+            done={progress.done}
+            total={progress.total}
+            label={`Aplicando «${brand}»…`}
+          />
+        ) : null}
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
+          <button type="button" className="btn btn-outline" disabled={busy} onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={busy || ids.length === 0 || !brand}
+            onClick={submit}
+          >
+            {busy ? (
+              <>
+                <span className="admin-inline-spinner" aria-hidden />
+                {progress ? `${progress.done}/${progress.total}` : "Aplicando…"}
+              </>
+            ) : (
+              `Aplicar a ${ids.length}`
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export async function bulkSetProductsActive(opts: {
+  ids: string[];
+  active: boolean;
+  versionLabel: string;
+  onProgress?: (done: number, total: number) => void;
+}): Promise<number> {
+  return runChunkedBulkPatch({
+    ids: opts.ids,
+    active: opts.active,
+    versionLabel: opts.versionLabel,
+    onProgress: opts.onProgress ?? (() => undefined),
+  });
 }
 
 /** Modal: asignar la misma familia/marca a todos los productos con precio 0. */

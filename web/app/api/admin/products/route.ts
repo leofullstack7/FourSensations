@@ -12,6 +12,7 @@ import {
   snapshotProduct,
 } from "@/lib/server/catalog-versioning";
 import { recordCatalogVersionSafe } from "@/lib/server/record-catalog-version";
+import { upsertProductFamilyByName } from "@/lib/server/product-family";
 import {
   adminProductCreateSchema,
   formatZodError,
@@ -82,6 +83,7 @@ export async function POST(req: NextRequest) {
 
     const data = parsed.data;
     const brand = data.brand?.trim() || "GinnaBeauty";
+    await upsertProductFamilyByName(brand);
     const tags = (data.tags ?? []).map((t) => t.trim()).filter(Boolean);
 
     const mainUrl = data.imageUrl ?? null;

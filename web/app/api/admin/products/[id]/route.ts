@@ -16,6 +16,7 @@ import {
   snapshotProduct,
 } from "@/lib/server/catalog-versioning";
 import { recordCatalogVersionSafe } from "@/lib/server/record-catalog-version";
+import { upsertProductFamilyByName } from "@/lib/server/product-family";
 import {
   adminProductUpdateSchema,
   formatZodError,
@@ -119,6 +120,10 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
       aiPatchKeys.length > 0
         ? stripAiFlagsForManualEdit(existing.aiGeneratedFields, aiPatchKeys)
         : undefined;
+
+    if (d.brand !== undefined) {
+      await upsertProductFamilyByName(d.brand);
+    }
 
     // Solo columnas escalares; `ProductImage` (galería) no se toca aquí.
     // `imageUrl`: el esquema deja `undefined` si el cliente no envía la clave (no borrar foto);

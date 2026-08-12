@@ -8,8 +8,7 @@ type Option = { value: string; label: string };
 
 /**
  * Select con última opción «crear nueva…».
- * - Si `onCreate` está definido, confirma con botón y espera el valor definitivo (p. ej. slug de categoría).
- * - Si no, el texto escrito se aplica en vivo al campo (p. ej. familia/marca).
+ * El nombre nuevo se confirma con botón (nunca se aplica letra a letra).
  */
 export function AdminCreatableSelect({
   label,
@@ -37,23 +36,20 @@ export function AdminCreatableSelect({
   allowEmpty?: boolean;
   hint?: string;
 }) {
-  const valueInOptions = options.some((o) => o.value === value);
-  const [creating, setCreating] = useState(() => Boolean(value) && !valueInOptions);
-  const [draft, setDraft] = useState(() => (creating ? value : ""));
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const valueInOptions = options.some((o) => o.value === value);
+
   useEffect(() => {
-    const inOpts = options.some((o) => o.value === value);
-    if (value && !inOpts) {
+    if (creating) return;
+    if (!valueInOptions && value) {
       setCreating(true);
       setDraft(value);
-    } else if (inOpts) {
-      setCreating(false);
-      setDraft("");
-      setError(null);
     }
-  }, [value, options]);
+  }, [value, valueInOptions, creating]);
 
   const selectValue = creating ? CREATE_NEW_VALUE : value;
 
@@ -70,7 +66,7 @@ export function AdminCreatableSelect({
           if (v === CREATE_NEW_VALUE) {
             setCreating(true);
             setDraft("");
-            if (!onCreate) onChange("");
+            setError(null);
             return;
           }
           setCreating(false);
@@ -100,52 +96,55 @@ export function AdminCreatableSelect({
             placeholder={newPlaceholder}
             autoFocus
             onChange={(e) => {
-              const next = e.target.value;
-              setDraft(next);
+              setDraft(e.target.value);
               setError(null);
-              if (!onCreate) onChange(next);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.stopPropagation();
+              }
             }}
           />
-          {onCreate ? (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                disabled={disabled || busy || !draft.trim()}
-                onClick={() => {
-                  void (async () => {
-                    setBusy(true);
-                    setError(null);
-                    try {
-                      const created = await onCreate(draft.trim());
-                      setCreating(false);
-                      setDraft("");
-                      onChange(created);
-                    } catch (err) {
-                      setError(err instanceof Error ? err.message : "No se pudo crear");
-                    } finally {
-                      setBusy(false);
-                    }
-                  })();
-                }}
-              >
-                {busy ? "Creando…" : "Crear y usar"}
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                disabled={busy}
-                onClick={() => {
-                  setCreating(false);
-                  setDraft("");
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              disabled={disabled || busy || !draft.trim()}
+              onClick={() => {
+                void (async () => {
+                  const name = draft.trim();
+                  if (!name) return;
+                  setBusy(true);
                   setError(null);
-                  onChange(valueInOptions ? value : "");
-                }}
-              >
-                Cancelar
-              </button>
-            </div>
-          ) : null}
+                  try {
+                    const created = onCreate ? await onCreate(name) : name;
+                    setCreating(false);
+                    setDraft("");
+                    onChange(created);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "No se pudo crear");
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              {busy ? "Creando…" : onCreate ? "Crear y usar" : "Usar este nombre"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              disabled={busy}
+              onClick={() => {
+                setCreating(false);
+                setDraft("");
+                setError(null);
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
           {error ? (
             <p style={{ margin: 0, fontSize: 12, color: "var(--danger, #b42318)" }}>{error}</p>
           ) : null}

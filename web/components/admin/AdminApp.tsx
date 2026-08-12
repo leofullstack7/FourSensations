@@ -16,6 +16,11 @@ import {
   updateAdminSubcategory,
 } from "@/lib/api/admin-categories";
 import {
+  createAdminFamily,
+  fetchAdminFamilies,
+} from "@/lib/api/admin-families";
+import { AdminFamiliesPanel } from "@/components/admin/AdminFamiliesPanel";
+import {
   BULK_DELETE_ALL_CONFIRM_PHRASE,
   createAdminProduct,
   deleteAdminProduct,
@@ -60,8 +65,10 @@ import {
 import { BulkDiffCell, BulkModePicker } from "@/components/admin/AdminBulkModeUi";
 import { AdminBulkMatchedImages } from "@/components/admin/AdminBulkMatchedImages";
 import {
+  AdminChangeFamilyModal,
   AdminZeroPriceBrandModal,
   AdminZeroPriceStockPanel,
+  bulkSetProductsActive,
   productsWithZeroPrice,
 } from "@/components/admin/AdminZeroPriceTools";
 import { AdminProductAiDetailPanel, AdminProductDescriptionBlock } from "@/components/admin/AdminProductAiUi";
@@ -154,7 +161,7 @@ import {
   resolveMenuTagFromEditor,
 } from "@/lib/admin/menu-utils";
 
-type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "discounts" | "sales" | "stock" | "customers" | "categories" | "menu" | "versions" | "reports";
+type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "discounts" | "sales" | "stock" | "customers" | "categories" | "families" | "menu" | "versions" | "reports";
 
 type GoPageOptions = {
   productTab?: "list" | "add" | "bulk";
@@ -170,6 +177,7 @@ const ADMIN_PAGE_TITLES: Record<AdminPageId, string> = {
   stock: "Inventario",
   customers: "Clientes CRM",
   categories: "Categorías y subcategorías",
+  families: "Familias",
   menu: "Gestión del Menú",
   versions: "Versiones",
   reports: "Reportes",
@@ -190,6 +198,7 @@ const ADMIN_NAV_ITEMS: {
   { id: "customers", icon: "👥", label: "Clientes CRM" },
   { id: "stock", icon: "📋", label: "Inventario" },
   { id: "categories", icon: "🏷️", label: "Categorías", section: "config" },
+  { id: "families", icon: "🧬", label: "Familias", section: "config" },
   { id: "menu", icon: "🗂️", label: "Gestión de Menú", section: "config" },
   { id: "versions", icon: "🕘", label: "Versiones", section: "config" },
   { id: "reports", icon: "📈", label: "Reportes", section: "config" },
@@ -277,12 +286,16 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   const [categoriesTree, setCategoriesTree] = useState<AdminCategoryTree[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
+  const [familyNames, setFamilyNames] = useState<string[]>([]);
   const [productMutation, setProductMutation] = useState<"add" | "bulk" | "edit" | null>(null);
   const [stockSavingId, setStockSavingId] = useState<string | null>(null);
   const [onlineSales, setOnlineSales] = useState<AdminSale[]>([]);
   const [manualSales, setManualSales] = useState<AdminSale[]>([]);
   const [productTab, setProductTab] = useState<"list" | "add" | "bulk" | "zero-stock">("list");
   const [zeroPriceBrandModalOpen, setZeroPriceBrandModalOpen] = useState(false);
+  const [changeFamilyModalOpen, setChangeFamilyModalOpen] = useState(false);
+  const [showHiddenProducts, setShowHiddenProducts] = useState(false);
+  const [productHideBusy, setProductHideBusy] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [productFilterBrand, setProductFilterBrand] = useState("");
   const [productFilterCategorySlug, setProductFilterCategorySlug] = useState("");
@@ -384,6 +397,16 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
     }
   }, [showToast]);
 
+  const loadFamilies = useCallback(async () => {
+    try {
+      const list = await fetchAdminFamilies();
+      setFamilyNames(list.map((f) => f.name));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Error al cargar familias";
+      showToast(msg, "danger", "⚠️");
+    }
+  }, [showToast]);
+
   const loadPaidOrders = useCallback(async () => {
     try {
       const list = await fetchAdminPaidOrders();
@@ -440,6 +463,11 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
 
   useEffect(() => {
     if (!sessionReady || !sessionUserId || session?.user?.role !== "ADMIN") return;
+    void loadFamilies();
+  }, [sessionReady, sessionUserId, session?.user?.role, loadFamilies]);
+
+  useEffect(() => {
+    if (!sessionReady || !sessionUserId || session?.user?.role !== "ADMIN") return;
     void loadPaidOrders();
   }, [sessionReady, sessionUserId, session?.user?.role, loadPaidOrders]);
 
@@ -476,9 +504,10 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
       if (p === "products" || p === "stock" || p === "dashboard") void loadProducts();
       else if (p === "discounts") void loadCategories();
       else if (p === "categories" || p === "menu") void loadCategories();
+      else if (p === "families") void loadFamilies();
       else if (p === "sales") void loadPaidOrders();
     },
-    [page, loadProducts, loadCategories, loadPaidOrders]
+    [page, loadProducts, loadCategories, loadFamilies, loadPaidOrders]
   );
 
   const MOBILE_BREAKPOINT = 768;
@@ -510,19 +539,33 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   const productFilterBrandOptions = useMemo(() => {
     const seen = new Set<string>();
     const out: string[] = [];
+    for (const name of familyNames) {
+      const b = name.trim();
+      if (!b) continue;
+      const key = b.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(b);
+    }
     for (const p of products) {
       const b = (p.brand ?? "").trim();
       if (!b) continue;
-      if (seen.has(b)) continue;
-      seen.add(b);
+      const key = b.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
       out.push(b);
     }
     out.sort((a, b) => a.localeCompare(b, "es"));
     return out;
-  }, [products]);
+  }, [familyNames, products]);
 
   const zeroPriceProductCount = useMemo(
-    () => productsWithZeroPrice(products).length,
+    () => productsWithZeroPrice(products.filter((p) => p.active !== false)).length,
+    [products]
+  );
+
+  const hiddenProductCount = useMemo(
+    () => products.filter((p) => p.active === false).length,
     [products]
   );
 
@@ -597,8 +640,16 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
         (x.tags ?? []).some((t) => t.trim().toLowerCase() === productFilterTag.toLowerCase())
       );
     }
+    if (showHiddenProducts) {
+      list = list.filter((x) => x.active === false);
+    } else {
+      list = list.filter((x) => x.active !== false);
+    }
     const filteredMatchCount = list.length;
-    const filteredProducts = resolveAdminListRowsAfterFilter(list, products);
+    const visibilityPool = showHiddenProducts
+      ? products.filter((x) => x.active === false)
+      : products.filter((x) => x.active !== false);
+    const filteredProducts = resolveAdminListRowsAfterFilter(list, visibilityPool);
     return { filteredProducts, filteredMatchCount };
   }, [
     products,
@@ -607,6 +658,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
     productFilterCategorySlug,
     productFilterSubcategory,
     productFilterTag,
+    showHiddenProducts,
   ]);
 
   const toggleProductListSelection = useCallback((id: string) => {
@@ -703,6 +755,75 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
       setProductNameNormProgress(null);
     }
   }, [productListSelectedIds, showToast, loadProducts]);
+
+  const handleHideZeroPriceProducts = useCallback(async () => {
+    const ids = productsWithZeroPrice(products.filter((p) => p.active !== false)).map((p) => p.id);
+    if (ids.length === 0) {
+      showToast("No hay productos visibles con precio 0.", "default", "ℹ️");
+      return;
+    }
+    if (
+      !confirm(
+        `¿Ocultar ${ids.length} producto(s) con precio 0?\n\nDejarán de aparecer en la tienda. Podrás verlos con «Ver productos ocultos».`
+      )
+    ) {
+      return;
+    }
+    setProductBulkMenuOpen(false);
+    setProductHideBusy(true);
+    try {
+      const updated = await bulkSetProductsActive({
+        ids,
+        active: false,
+        versionLabel: `Ocultos en tienda: ${ids.length} producto(s) con precio 0`,
+      });
+      showToast(`${updated} producto(s) ocultos. Ya no salen en la tienda.`, "success", "🙈");
+      await loadProducts();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "No se pudieron ocultar", "danger", "⚠️");
+    } finally {
+      setProductHideBusy(false);
+    }
+  }, [products, showToast, loadProducts]);
+
+  const handleSetSelectedActive = useCallback(
+    async (active: boolean) => {
+      const ids = Array.from(productListSelectedIds);
+      if (ids.length === 0) {
+        showToast("Selecciona uno o más productos.", "default", "ℹ️");
+        return;
+      }
+      const label = active ? "mostrar en la tienda" : "ocultar";
+      if (!confirm(`¿${active ? "Mostrar" : "Ocultar"} ${ids.length} producto(s) seleccionado(s)?`)) {
+        return;
+      }
+      setProductBulkMenuOpen(false);
+      setProductHideBusy(true);
+      try {
+        const updated = await bulkSetProductsActive({
+          ids,
+          active,
+          versionLabel: active
+            ? `Visibles en tienda: ${ids.length} producto(s)`
+            : `Ocultos en tienda: ${ids.length} producto(s)`,
+        });
+        showToast(
+          active
+            ? `${updated} producto(s) visibles otra vez en la tienda.`
+            : `${updated} producto(s) ocultos.`,
+          "success",
+          active ? "👁️" : "🙈"
+        );
+        clearProductListSelection();
+        await loadProducts();
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : `No se pudieron ${label}`, "danger", "⚠️");
+      } finally {
+        setProductHideBusy(false);
+      }
+    },
+    [productListSelectedIds, showToast, loadProducts, clearProductListSelection]
+  );
 
   const handleBulkDeleteSelected = useCallback(async () => {
     const ids = Array.from(productListSelectedIds);
@@ -1405,7 +1526,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                     className={`tab-btn ${productBulkMenuOpen ? "active" : ""}`}
                     aria-expanded={productBulkMenuOpen}
                     aria-haspopup="menu"
-                    disabled={productBulkDeleting || productAiBusy || productNameNormBusy || productVariantGroupBusy}
+                    disabled={productBulkDeleting || productAiBusy || productHideBusy || productNameNormBusy || productVariantGroupBusy}
                     title="Más acciones (lote)"
                     onClick={() => setProductBulkMenuOpen((o) => !o)}
                     style={{ minWidth: 44, padding: "10px 14px" }}
@@ -1544,7 +1665,25 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                         type="button"
                         role="menuitem"
                         className="btn btn-outline btn-sm"
-                        disabled={productBulkDeleting || productAiBusy || zeroPriceProductCount === 0}
+                        disabled={
+                          productBulkDeleting ||
+                          productAiBusy ||
+                          productHideBusy ||
+                          productListSelectedIds.size === 0
+                        }
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={() => {
+                          setProductBulkMenuOpen(false);
+                          setChangeFamilyModalOpen(true);
+                        }}
+                      >
+                        Cambiar familia ({productListSelectedIds.size})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={productBulkDeleting || productAiBusy || productHideBusy || zeroPriceProductCount === 0}
                         style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
                         title={
                           zeroPriceProductCount === 0
@@ -1557,6 +1696,41 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                         }}
                       >
                         Cambiar familia / marca (precio 0) ({zeroPriceProductCount})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={productBulkDeleting || productAiBusy || productHideBusy || zeroPriceProductCount === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        title={
+                          zeroPriceProductCount === 0
+                            ? "No hay productos con precio 0"
+                            : `Ocultar ${zeroPriceProductCount} producto(s) con precio 0`
+                        }
+                        onClick={() => void handleHideZeroPriceProducts()}
+                      >
+                        Ocultar productos (precio 0) ({zeroPriceProductCount})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={productBulkDeleting || productAiBusy || productHideBusy || productListSelectedIds.size === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={() => void handleSetSelectedActive(false)}
+                      >
+                        Ocultar seleccionados ({productListSelectedIds.size})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={productBulkDeleting || productAiBusy || productHideBusy || productListSelectedIds.size === 0}
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={() => void handleSetSelectedActive(true)}
+                      >
+                        Mostrar en la tienda ({productListSelectedIds.size})
                       </button>
                       <button
                         type="button"
@@ -1698,6 +1872,9 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                   filteredMatchCount={filteredMatchCount}
                   allProducts={products}
                   totalProductCount={catalogStats.totalProducts}
+                  hiddenProductCount={hiddenProductCount}
+                  showHiddenProducts={showHiddenProducts}
+                  onToggleShowHidden={() => setShowHiddenProducts((v) => !v)}
                   listLoading={productsLoading}
                   categoryTree={categoriesTree}
                   selectedIds={productListSelectedIds}
@@ -1861,6 +2038,16 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
               />
             </div>
 
+            <div className={`admin-page ${page === "families" ? "active" : ""}`} style={{ display: page === "families" ? "block" : "none" }}>
+              <AdminFamiliesPanel
+                active={page === "families"}
+                showToast={showToast}
+                onFamiliesChanged={async () => {
+                  await Promise.all([loadFamilies(), loadProducts()]);
+                }}
+              />
+            </div>
+
             <div className={`admin-page ${page === "menu" ? "active" : ""}`} style={{ display: page === "menu" ? "block" : "none" }}>
               <AdminMenuTab
                 tree={categoriesTree}
@@ -1921,6 +2108,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
         brandOptions={productFilterBrandOptions}
         tagOptions={productFilterTagOptions}
         onReloadCategories={loadCategories}
+        onReloadFamilies={loadFamilies}
         onClose={() => {
           setDetailOpen(false);
           setDetailProductId(null);
@@ -1931,7 +2119,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
           try {
             await updateAdminProduct(detailProductId, patch);
             showToast("Producto actualizado", "success", "✅");
-            await loadProducts();
+            await Promise.all([loadProducts(), loadFamilies()]);
           } catch (e) {
             showToast(e instanceof Error ? e.message : "Error al guardar", "danger", "⚠️");
             throw e;
@@ -1967,7 +2155,25 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
           brandOptions={productFilterBrandOptions}
           saving={productBulkDeleting}
           onClose={() => setZeroPriceBrandModalOpen(false)}
-          onApplied={loadProducts}
+          onApplied={async () => {
+            await Promise.all([loadProducts(), loadFamilies()]);
+          }}
+          showToast={showToast}
+        />
+      ) : null}
+
+      {changeFamilyModalOpen ? (
+        <AdminChangeFamilyModal
+          open={changeFamilyModalOpen}
+          ids={Array.from(productListSelectedIds)}
+          title="Cambiar familia"
+          description={`Se actualizará la familia de ${productListSelectedIds.size} producto(s) seleccionado(s).`}
+          brandOptions={productFilterBrandOptions}
+          saving={productHideBusy}
+          onClose={() => setChangeFamilyModalOpen(false)}
+          onApplied={async () => {
+            await Promise.all([loadProducts(), loadFamilies()]);
+          }}
           showToast={showToast}
         />
       ) : null}
@@ -2241,6 +2447,9 @@ function AdminProductListTab({
   filteredMatchCount,
   allProducts,
   totalProductCount,
+  hiddenProductCount,
+  showHiddenProducts,
+  onToggleShowHidden,
   listLoading,
   categoryTree,
   selectedIds,
@@ -2273,6 +2482,9 @@ function AdminProductListTab({
   filteredMatchCount: number;
   allProducts: AdminProduct[];
   totalProductCount: number;
+  hiddenProductCount: number;
+  showHiddenProducts: boolean;
+  onToggleShowHidden: () => void;
   listLoading: boolean;
   categoryTree: AdminCategoryTree[];
   selectedIds: ReadonlySet<string>;
@@ -2428,11 +2640,24 @@ function AdminProductListTab({
             </div>
             {!listLoading && totalProductCount > 0 && (
               <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "10px 0 0" }}>
-                {hasActiveFilters
-                  ? `Mostrando ${filteredProducts.length} fila(s) · ${filteredMatchCount} de ${totalProductCount} producto(s)`
-                  : `${totalProductCount} producto(s) en el sistema · ${filteredProducts.length} fila(s) en la lista`}
+                {showHiddenProducts
+                  ? `Mostrando ${filteredProducts.length} producto(s) oculto(s) · no salen en la tienda`
+                  : hasActiveFilters
+                    ? `Mostrando ${filteredProducts.length} fila(s) · ${filteredMatchCount} de ${totalProductCount} producto(s)`
+                    : `${totalProductCount} producto(s) en el sistema · ${filteredProducts.length} fila(s) en la lista`}
               </p>
             )}
+            <div style={{ marginTop: 10 }}>
+              <button
+                type="button"
+                className={`btn btn-sm ${showHiddenProducts ? "btn-primary" : "btn-outline"}`}
+                onClick={onToggleShowHidden}
+              >
+                {showHiddenProducts
+                  ? "Volver a productos visibles"
+                  : `Ver productos ocultos${hiddenProductCount > 0 ? ` (${hiddenProductCount})` : ""}`}
+              </button>
+            </div>
           </>
         }
       >
@@ -2472,7 +2697,9 @@ function AdminProductListTab({
                 <td colSpan={11} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   {totalProductCount === 0
                     ? "Sin productos"
-                    : "Ningún producto coincide con la búsqueda o los filtros seleccionados."}
+                    : showHiddenProducts
+                      ? "No hay productos ocultos."
+                      : "Ningún producto coincide con la búsqueda o los filtros seleccionados."}
                 </td>
               </tr>
             ) : (
@@ -2597,7 +2824,11 @@ function AdminProductListTab({
                       )}
                     </td>
                     <td>
-                      <span className={`status-chip ${stockStatus}`}>{stockLabel}</span>
+                      {p.active === false ? (
+                        <span className="status-chip status-out">Oculto</span>
+                      ) : (
+                        <span className={`status-chip ${stockStatus}`}>{stockLabel}</span>
+                      )}
                     </td>
                     <td>
                       <div className="action-group">
@@ -9153,6 +9384,7 @@ function AdminProductDetailModal({
   brandOptions,
   tagOptions,
   onReloadCategories,
+  onReloadFamilies,
   onClose,
   onSave,
   onDelete,
@@ -9166,6 +9398,7 @@ function AdminProductDetailModal({
   brandOptions: string[];
   tagOptions: string[];
   onReloadCategories: () => Promise<void>;
+  onReloadFamilies: () => Promise<void>;
   onClose: () => void;
   onSave: (patch: Record<string, unknown>) => Promise<void>;
   onDelete: (id: string) => void | Promise<void>;
@@ -9225,15 +9458,10 @@ function AdminProductDetailModal({
     [categoryTree]
   );
 
-  const brandSelectOptions = useMemo(() => {
-    const seen = new Set(brandOptions.map((b) => b.toLowerCase()));
-    const out = brandOptions.map((b) => ({ value: b, label: b }));
-    const current = editBrand.trim();
-    if (current && !seen.has(current.toLowerCase())) {
-      out.unshift({ value: current, label: current });
-    }
-    return out;
-  }, [brandOptions, editBrand]);
+  const brandSelectOptions = useMemo(
+    () => brandOptions.map((b) => ({ value: b, label: b })),
+    [brandOptions]
+  );
 
   const categorySelectOptions = useMemo(
     () =>
@@ -9504,7 +9732,13 @@ function AdminProductDetailModal({
                   disabled={editBusy}
                   allowEmpty
                   emptyLabel="Seleccionar…"
-                  hint="Elige una existente o crea una nueva escribiendo el nombre."
+                  hint="Elige una existente o crea una nueva. Confirma el nombre con el botón; no se guarda letra a letra."
+                  onCreate={async (name) => {
+                    const created = await createAdminFamily(name);
+                    await onReloadFamilies();
+                    showToast(`Familia «${created.name}» creada`, "success", "✅");
+                    return created.name;
+                  }}
                 />
                 <AdminCreatableSelect
                   label="Categoría"

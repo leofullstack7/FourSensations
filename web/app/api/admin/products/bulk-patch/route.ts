@@ -8,6 +8,7 @@ import {
 } from "@/lib/server/catalog-versioning";
 import { recordCatalogVersionSafe } from "@/lib/server/record-catalog-version";
 import { revalidateStorefrontProducts } from "@/lib/server/revalidate-storefront-products";
+import { upsertProductFamilyByName } from "@/lib/server/product-family";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -18,6 +19,8 @@ const bulkPatchSchema = z
     ids: z.array(z.string().min(1)).min(1).max(500),
     brand: z.string().trim().min(1).max(120).optional(),
     stock: z.coerce.number().int().min(0).optional(),
+    /** false = no sale en la tienda. */
+    active: z.boolean().optional(),
     /** Actualizaciones individuales de stock (tienen prioridad sobre `stock`). */
     stockById: z.record(z.string(), z.coerce.number().int().min(0)).optional(),
     /** Si false, no escribe versión (útil en lotes intermedios). */
@@ -29,8 +32,9 @@ const bulkPatchSchema = z
     (v) =>
       v.brand !== undefined ||
       v.stock !== undefined ||
+      v.active !== undefined ||
       (v.stockById && Object.keys(v.stockById).length > 0),
-    { message: "Indica brand, stock o stockById" }
+    { message: "Indica brand, stock, active o stockById" }
   );
 
 /**
@@ -60,20 +64,31 @@ export async function POST(req: NextRequest) {
   const ids = Array.from(new Set(patch.ids));
   let updatedCount = 0;
 
-  // Marca uniforme: una sola query.
-  if (patch.brand !== undefined && !patch.stockById && patch.stock === undefined) {
+  if (patch.brand !== undefined) {
+    await upsertProductFamilyByName(patch.brand);
+  }
+
+  // Marca u ocultar: una sola query si no hay stock mezclado.
+  if (
+    (patch.brand !== undefined || patch.active !== undefined) &&
+    !patch.stockById &&
+    patch.stock === undefined
+  ) {
+    const data: { brand?: string; active?: boolean } = {};
+    if (patch.brand !== undefined) data.brand = patch.brand;
+    if (patch.active !== undefined) data.active = patch.active;
     const result = await prisma.product.updateMany({
       where: { id: { in: ids } },
-      data: { brand: patch.brand },
+      data,
     });
     updatedCount = result.count;
-  } else if (patch.stock !== undefined && patch.brand === undefined && !patch.stockById) {
+  } else if (patch.stock !== undefined && patch.brand === undefined && patch.active === undefined && !patch.stockById) {
     const result = await prisma.product.updateMany({
       where: { id: { in: ids } },
       data: { stock: patch.stock },
     });
     updatedCount = result.count;
-  } else if (patch.stockById && patch.brand === undefined) {
+  } else if (patch.stockById && patch.brand === undefined && patch.active === undefined) {
     // Agrupar por valor de stock → updateMany por grupo (mucho más rápido).
     const byStock = new Map<number, string[]>();
     for (const id of ids) {
@@ -93,7 +108,7 @@ export async function POST(req: NextRequest) {
   } else {
     // brand + stock / stockById mezclado: update por id en paralelo limitado.
     const CONCURRENCY = 12;
-    const { brand, stock, stockById } = patch;
+    const { brand, stock, stockById, active } = patch;
     let cursor = 0;
     let count = 0;
     async function worker() {
@@ -101,8 +116,9 @@ export async function POST(req: NextRequest) {
         const index = cursor++;
         if (index >= ids.length) break;
         const id = ids[index]!;
-        const data: { brand?: string; stock?: number } = {};
+        const data: { brand?: string; stock?: number; active?: boolean } = {};
         if (brand !== undefined) data.brand = brand;
+        if (active !== undefined) data.active = active;
         if (stockById && Object.prototype.hasOwnProperty.call(stockById, id)) {
           data.stock = stockById[id];
         } else if (stock !== undefined) {
@@ -124,6 +140,8 @@ export async function POST(req: NextRequest) {
     if (patch.recordVersion !== false) {
       const parts: string[] = [];
       if (patch.brand !== undefined) parts.push(`marca «${patch.brand}»`);
+      if (patch.active === false) parts.push("ocultos en tienda");
+      if (patch.active === true) parts.push("visibles en tienda");
       if (patch.stock !== undefined || patch.stockById) parts.push("stock");
       const label =
         patch.versionLabel?.trim() ||
@@ -142,6 +160,7 @@ export async function POST(req: NextRequest) {
               bulk: true,
               updatedCount,
               brand: patch.brand ?? null,
+              active: patch.active ?? null,
               stock: patch.stock ?? null,
               stockByIdCount: patch.stockById ? Object.keys(patch.stockById).length : 0,
               sampleIds: ids.slice(0, 12),

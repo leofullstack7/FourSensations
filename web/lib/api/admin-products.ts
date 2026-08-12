@@ -108,6 +108,7 @@ export async function postAdminProductsBulkPatch(body: {
   ids: string[];
   brand?: string;
   stock?: number;
+  active?: boolean;
   stockById?: Record<string, number>;
   recordVersion?: boolean;
   versionLabel?: string;

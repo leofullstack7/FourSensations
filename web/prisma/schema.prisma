@@ -135,6 +135,14 @@ model TintType {
   products  Product[]
 }
 
+/// Familia / marca comercial (catálogo maestro). El producto guarda el nombre en `brand`.
+model ProductFamily {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 /// Combo promocional creado en el panel (no altera el catálogo público hasta integración explícita).
 model ProductCombo {
   id         String             @id @default(cuid())
