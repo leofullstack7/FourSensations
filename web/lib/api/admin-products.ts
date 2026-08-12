@@ -167,6 +167,26 @@ export async function postAdminProductsMerge(body: {
   return { ...data, product: normalizeAdminProduct(data.product) };
 }
 
+export async function postAdminProductsGroupVariants(body: {
+  primaryId: string;
+  ids: string[];
+}): Promise<{ ok: boolean; grouped: number; variantGroupCode: string; primaryId: string; primaryName: string }> {
+  const res = await fetch("/api/admin/products/group-variants", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return (await res.json()) as {
+    ok: boolean;
+    grouped: number;
+    variantGroupCode: string;
+    primaryId: string;
+    primaryName: string;
+  };
+}
+
 /** Asigna a cada producto la etiqueta de menú (`Subcategory.menuTag`) de su subcategoría. */
 export async function postSyncProductTagsFromMenu(): Promise<{ updated: number; total: number }> {
   const res = await fetch("/api/admin/products/sync-menu-tags", {

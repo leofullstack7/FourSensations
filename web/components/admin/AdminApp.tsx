@@ -24,6 +24,7 @@ import {
   postAdminProductsBulkDelete,
   postAdminProductsNormalizeNames,
   postAdminProductsMerge,
+  postAdminProductsGroupVariants,
   postAdminProductsAiClear,
   updateAdminProduct,
 } from "@/lib/api/admin-products";
@@ -297,6 +298,9 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   const [productMergeNameMode, setProductMergeNameMode] = useState<"pick" | "custom">("pick");
   const [productMergePickedId, setProductMergePickedId] = useState("");
   const [productMergeCustomName, setProductMergeCustomName] = useState("");
+  const [productVariantGroupOpen, setProductVariantGroupOpen] = useState(false);
+  const [productVariantGroupBusy, setProductVariantGroupBusy] = useState(false);
+  const [productVariantPrimaryId, setProductVariantPrimaryId] = useState("");
   const [productAiBusy, setProductAiBusy] = useState(false);
   const [aiBulkModalOpen, setAiBulkModalOpen] = useState(false);
   const [aiBulkPhase, setAiBulkPhase] = useState<"intro" | "running" | "done">("intro");
@@ -782,6 +786,51 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
     productMergePickedId,
     productMergeNameMode,
     productMergeCustomName,
+    showToast,
+    clearProductListSelection,
+    loadProducts,
+  ]);
+
+  const openProductVariantGroupModal = useCallback(() => {
+    if (selectedProductsForMerge.length < 2) {
+      showToast("Selecciona al menos 2 productos para agruparlos como variantes", "default", "ℹ️");
+      return;
+    }
+    setProductBulkMenuOpen(false);
+    setProductVariantPrimaryId(selectedProductsForMerge[0]!.id);
+    setProductVariantGroupOpen(true);
+  }, [selectedProductsForMerge, showToast]);
+
+  const confirmProductVariantGroup = useCallback(() => {
+    if (selectedProductsForMerge.length < 2 || !productVariantPrimaryId) return;
+    if (!selectedProductsForMerge.some((p) => p.id === productVariantPrimaryId)) {
+      showToast("Elige qué producto será la cara principal", "default", "ℹ️");
+      return;
+    }
+    void (async () => {
+      setProductVariantGroupBusy(true);
+      try {
+        const res = await postAdminProductsGroupVariants({
+          primaryId: productVariantPrimaryId,
+          ids: selectedProductsForMerge.map((p) => p.id),
+        });
+        setProductVariantGroupOpen(false);
+        clearProductListSelection();
+        await loadProducts();
+        showToast(
+          `${res.grouped} productos agrupados como variantes. Cara principal: «${res.primaryName}».`,
+          "success",
+          "📦"
+        );
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "No se pudieron agrupar", "danger", "⚠️");
+      } finally {
+        setProductVariantGroupBusy(false);
+      }
+    })();
+  }, [
+    selectedProductsForMerge,
+    productVariantPrimaryId,
     showToast,
     clearProductListSelection,
     loadProducts,
@@ -1356,7 +1405,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                     className={`tab-btn ${productBulkMenuOpen ? "active" : ""}`}
                     aria-expanded={productBulkMenuOpen}
                     aria-haspopup="menu"
-                    disabled={productBulkDeleting || productAiBusy || productNameNormBusy}
+                    disabled={productBulkDeleting || productAiBusy || productNameNormBusy || productVariantGroupBusy}
                     title="Más acciones (lote)"
                     onClick={() => setProductBulkMenuOpen((o) => !o)}
                     style={{ minWidth: 44, padding: "10px 14px" }}
@@ -1526,6 +1575,21 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                         }}
                       >
                         Asignar stock (precio 0) ({zeroPriceProductCount})
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-outline btn-sm"
+                        disabled={
+                          productBulkDeleting ||
+                          productMergeBusy ||
+                          productVariantGroupBusy ||
+                          productListSelectedIds.size < 2
+                        }
+                        style={{ width: "100%", justifyContent: "flex-start", textAlign: "left" }}
+                        onClick={openProductVariantGroupModal}
+                      >
+                        Poner productos como variantes ({productListSelectedIds.size})
                       </button>
                       <button
                         type="button"
@@ -2028,6 +2092,97 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                   </>
                 ) : (
                   "Unir y juntar imágenes"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {productVariantGroupOpen ? (
+        <div
+          className="admin-modal-overlay open"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !productVariantGroupBusy) setProductVariantGroupOpen(false);
+          }}
+        >
+          <div
+            className="admin-modal"
+            style={{ maxWidth: 480, padding: "22px 20px" }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Poner productos como variantes"
+          >
+            <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>Poner productos como variantes</h3>
+            <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
+              Elige la <strong>cara principal</strong>: esa es la que se verá en el catálogo. Los demás
+              quedarán como variantes del mismo producto ({selectedProductsForMerge.length} seleccionados).
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14, maxHeight: 360, overflow: "auto" }}>
+              {selectedProductsForMerge.map((p) => (
+                <label
+                  key={p.id}
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "flex-start",
+                    fontSize: 13,
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border:
+                      productVariantPrimaryId === p.id
+                        ? "1px solid var(--dusty-rose)"
+                        : "1px solid var(--cream)",
+                    background: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="admin-variant-primary"
+                    checked={productVariantPrimaryId === p.id}
+                    onChange={() => setProductVariantPrimaryId(p.id)}
+                  />
+                  <span>
+                    <strong>{p.name}</strong>
+                    <span
+                      style={{
+                        display: "block",
+                        fontFamily: "monospace",
+                        fontSize: 12,
+                        color: "var(--text-muted)",
+                      }}
+                    >
+                      {p.externalRef ?? p.id.slice(0, 8)}
+                      {p.colorName ? ` · ${p.colorName}` : ""}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={productVariantGroupBusy}
+                onClick={() => setProductVariantGroupOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={productVariantGroupBusy || !productVariantPrimaryId}
+                onClick={confirmProductVariantGroup}
+              >
+                {productVariantGroupBusy ? (
+                  <>
+                    <span className="admin-inline-spinner" aria-hidden />
+                    Agrupando…
+                  </>
+                ) : (
+                  "Agrupar como variantes"
                 )}
               </button>
             </div>
