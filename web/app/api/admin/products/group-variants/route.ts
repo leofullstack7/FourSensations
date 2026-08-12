@@ -92,6 +92,22 @@ export async function POST(req: NextRequest) {
         data: { variantGroupCode: groupCode, variantGroupOrder: i + 1 },
       });
     }
+
+    const oldCodes = Array.from(
+      new Set(rows.map((r) => r.variantGroupCode?.trim()).filter((c): c is string => !!c && c !== groupCode))
+    );
+    for (const code of oldCodes) {
+      const leftover = await tx.product.findMany({
+        where: { variantGroupCode: code },
+        select: { id: true },
+      });
+      if (leftover.length < 2) {
+        await tx.product.updateMany({
+          where: { id: { in: leftover.map((x) => x.id) } },
+          data: { variantGroupCode: null, variantGroupOrder: null },
+        });
+      }
+    }
   });
 
   revalidateStorefrontProducts();

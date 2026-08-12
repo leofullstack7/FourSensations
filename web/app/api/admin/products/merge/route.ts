@@ -164,6 +164,21 @@ export async function POST(req: NextRequest) {
       });
     });
 
+    const groupCode = updated.variantGroupCode;
+    if (groupCode) {
+      const leftInGroup = await prisma.product.count({
+        where: { variantGroupCode: groupCode },
+      });
+      if (leftInGroup < 2) {
+        await prisma.product.update({
+          where: { id: survivorId },
+          data: { variantGroupCode: null, variantGroupOrder: null },
+        });
+        updated.variantGroupCode = null;
+        updated.variantGroupOrder = null;
+      }
+    }
+
     const changes: CatalogChangeInput[] = [
       {
         entityType: CatalogEntities.PRODUCT,

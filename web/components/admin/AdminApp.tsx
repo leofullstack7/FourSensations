@@ -2479,8 +2479,8 @@ function AdminProductListTab({
               filteredProducts.map((p) => {
                 const stockStatus = p.stock === 0 ? "status-out" : p.stock < 5 ? "status-low" : "status-active";
                 const stockLabel = p.stock === 0 ? "Sin stock" : p.stock < 5 ? "Stock bajo" : "Disponible";
-                const groupCode = p.variantGroupCode?.trim() ?? "";
-                const variantCount = groupCode ? (variantCountByGroup.get(groupCode) ?? 0) : 0;
+                const groupKey = canonicalVariantGroupCode(p.variantGroupCode);
+                const variantCount = groupKey ? (variantCountByGroup.get(groupKey) ?? 0) : 0;
                 const listThumb = groupListThumbnail(p, primaryByGroup);
                 const isGroupRow = variantCount >= 2;
                 const colorHex = normalizeColorHex(p.colorHex);
@@ -2633,6 +2633,21 @@ function AdminProductListTab({
           }
         }}
         onEditVariantColor={(variant) => setColorModalProduct(variant)}
+        onMergeVariants={async ({ survivorId, absorbedIds, name }) => {
+          try {
+            const res = await postAdminProductsMerge({ survivorId, absorbedIds, name });
+            await onProductsRefresh();
+            showToast(
+              `Juntados ${res.mergedCount} en «${res.product.name}» (${res.imageCount} foto(s)).`,
+              "success",
+              "🔗"
+            );
+            setVariantsModalProduct(res.product.variantGroupCode ? res.product : null);
+          } catch (e) {
+            showToast(e instanceof Error ? e.message : "No se pudieron juntar", "danger", "⚠️");
+            throw e;
+          }
+        }}
       />
       <AdminProductColorModal
         open={colorModalProduct != null}

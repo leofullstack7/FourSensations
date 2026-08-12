@@ -74,6 +74,11 @@ type Props = {
   onDeleteVariant: (id: string) => void | Promise<void>;
   categoryDisplayName: (slug: string, tree: AdminCategoryTree[]) => string;
   onEditVariantColor?: (variant: AdminProduct) => void;
+  onMergeVariants?: (payload: {
+    survivorId: string;
+    absorbedIds: string[];
+    name: string;
+  }) => Promise<void>;
 };
 
 export function AdminProductVariantsModal({
@@ -86,20 +91,77 @@ export function AdminProductVariantsModal({
   onDeleteVariant,
   categoryDisplayName,
   onEditVariantColor,
+  onMergeVariants,
 }: Props) {
   const [mounted, setMounted] = useState(false);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeBusy, setMergeBusy] = useState(false);
+  const [mergeNameMode, setMergeNameMode] = useState<"pick" | "custom">("pick");
+  const [mergePickedId, setMergePickedId] = useState("");
+  const [mergeCustomName, setMergeCustomName] = useState("");
 
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-    if (!open) setExpandedImage(null);
+    if (!open) {
+      setExpandedImage(null);
+      setSelectedIds(new Set());
+      setMergeOpen(false);
+      setMergeCustomName("");
+    }
   }, [open]);
 
   const variants = useMemo(() => {
     if (!anchorProduct?.variantGroupCode?.trim()) return [];
     return listVariantsInGroup(allProducts, anchorProduct.variantGroupCode);
   }, [anchorProduct, allProducts]);
+
+  const selectedVariants = useMemo(
+    () => variants.filter((v) => selectedIds.has(v.id)),
+    [variants, selectedIds]
+  );
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setMergeOpen(false);
+  };
+
+  const openMerge = () => {
+    const first = selectedVariants[0];
+    if (!first || selectedVariants.length < 2) return;
+    const primary = selectedVariants.find((v) => (v.variantGroupOrder ?? 0) === 0) ?? first;
+    setMergePickedId(primary.id);
+    setMergeNameMode("pick");
+    setMergeCustomName("");
+    setMergeOpen(true);
+  };
+
+  const confirmMerge = () => {
+    if (!onMergeVariants || selectedVariants.length < 2) return;
+    const picked = selectedVariants.find((v) => v.id === mergePickedId) ?? selectedVariants[0]!;
+    const name =
+      mergeNameMode === "custom" ? mergeCustomName.trim() : picked.name.trim();
+    if (!name) return;
+    const survivorId = mergeNameMode === "pick" ? picked.id : selectedVariants[0]!.id;
+    const absorbedIds = selectedVariants.map((v) => v.id).filter((id) => id !== survivorId);
+    void (async () => {
+      setMergeBusy(true);
+      try {
+        await onMergeVariants({ survivorId, absorbedIds, name });
+        setSelectedIds(new Set());
+        setMergeOpen(false);
+      } finally {
+        setMergeBusy(false);
+      }
+    })();
+  };
 
   if (!mounted || !open || !anchorProduct || variants.length < 2) return null;
 
@@ -127,9 +189,144 @@ export function AdminProductVariantsModal({
         >
           Variantes del producto
         </div>
-        <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 18 }}>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
           Grupo <strong>{groupLabel}</strong> · {variants.length} variante(s)
         </p>
+        {selectedVariants.length > 0 ? (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+              marginBottom: 14,
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: "white",
+              border: "1px solid var(--line)",
+            }}
+          >
+            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+              {selectedVariants.length} variante(s) seleccionada(s)
+            </span>
+            {selectedVariants.length >= 2 && onMergeVariants ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={mergeBusy}
+                onClick={openMerge}
+              >
+                Juntar en un mismo producto
+              </button>
+            ) : (
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                Selecciona al menos 2 para juntar fotos en un solo producto
+              </span>
+            )}
+          </div>
+        ) : null}
+        {mergeOpen && selectedVariants.length >= 2 ? (
+          <div
+            style={{
+              marginBottom: 14,
+              padding: 14,
+              borderRadius: 12,
+              border: "1px solid var(--dusty-rose)",
+              background: "#fffafc",
+            }}
+          >
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>
+              ¿Con qué nombre se queda el producto?
+            </div>
+            <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45 }}>
+              Las fotografías de las variantes seleccionadas se unen en un solo producto. Los demás se
+              eliminan.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+              {selectedVariants.map((v) => (
+                <label
+                  key={v.id}
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "flex-start",
+                    fontSize: 13,
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border:
+                      mergeNameMode === "pick" && mergePickedId === v.id
+                        ? "1px solid var(--dusty-rose)"
+                        : "1px solid var(--cream)",
+                    background: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="admin-variant-merge-name"
+                    checked={mergeNameMode === "pick" && mergePickedId === v.id}
+                    onChange={() => {
+                      setMergeNameMode("pick");
+                      setMergePickedId(v.id);
+                    }}
+                  />
+                  <span>
+                    <strong>{v.name}</strong>
+                  </span>
+                </label>
+              ))}
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  fontSize: 13,
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  border: mergeNameMode === "custom" ? "1px solid var(--dusty-rose)" : "1px solid var(--cream)",
+                  background: "#fff",
+                }}
+              >
+                <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="radio"
+                    name="admin-variant-merge-name"
+                    checked={mergeNameMode === "custom"}
+                    onChange={() => setMergeNameMode("custom")}
+                  />
+                  Escribir otro nombre
+                </span>
+                <input
+                  className="form-input"
+                  value={mergeCustomName}
+                  disabled={mergeNameMode !== "custom"}
+                  placeholder="Nombre del producto unificado"
+                  onChange={(e) => setMergeCustomName(e.target.value)}
+                  onFocus={() => setMergeNameMode("custom")}
+                />
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={mergeBusy}
+                onClick={() => setMergeOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={mergeBusy}
+                onClick={confirmMerge}
+              >
+                {mergeBusy ? "Juntando…" : "Confirmar y juntar fotos"}
+              </button>
+            </div>
+          </div>
+        ) : null}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {variants.map((v) => {
             const isPrimary = (v.variantGroupOrder ?? 0) === 0;
@@ -254,7 +451,8 @@ export function AdminProductVariantsModal({
                     {deletingId === v.id ? "…" : "🗑️"}
                   </button>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                   {variantColor ? (
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12 }}>
                       <span
@@ -280,6 +478,25 @@ export function AdminProductVariantsModal({
                       {variantColor ? "Editar color" : "Agregar color"}
                     </button>
                   ) : null}
+                  </div>
+                  <label
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: 12,
+                      cursor: "pointer",
+                      marginLeft: "auto",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(v.id)}
+                      onChange={() => toggleSelected(v.id)}
+                      aria-label={`Seleccionar variante ${v.name}`}
+                    />
+                    Juntar
+                  </label>
                 </div>
               </div>
             );
