@@ -18,6 +18,7 @@ export type BulkPreviewResponse = {
   jobId: string;
   preview: BulkPreviewResult;
   expiresAt: string;
+  zipStored?: boolean;
 };
 
 export async function postBulkImportPreview(form: FormData): Promise<BulkPreviewResponse> {
@@ -118,6 +119,26 @@ export async function patchBulkImportJob(
   });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as { preview: BulkPreviewResult };
+}
+
+export async function postBulkImportZip(jobId: string, zip: File): Promise<{ ok: boolean; zipBytes: number }> {
+  const fd = new FormData();
+  fd.append("zip", zip);
+  const res = await fetch(`/api/admin/import/bulk/${jobId}/zip`, {
+    method: "POST",
+    body: fd,
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    if (res.status === 502 || res.status === 504 || res.status === 413) {
+      throw new Error(
+        "No se pudo subir el ZIP (timeout o tamaño). Optimiza a WebP e inténtalo de nuevo.",
+      );
+    }
+    throw new Error(await parseError(res));
+  }
+  return (await res.json()) as { ok: boolean; zipBytes: number };
 }
 
 export async function deleteBulkImportJob(jobId: string): Promise<void> {

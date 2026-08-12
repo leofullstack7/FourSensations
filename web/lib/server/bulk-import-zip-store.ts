@@ -56,6 +56,7 @@ export async function saveBulkImportZip(jobId: string, zipBuffer: Buffer): Promi
       "Content-Length": String(zipBuffer.length),
     },
     body: new Uint8Array(zipBuffer),
+    signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");

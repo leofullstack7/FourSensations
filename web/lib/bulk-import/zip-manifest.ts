@@ -85,46 +85,51 @@ function isIgnoredPath(entryName: string): boolean {
   return false;
 }
 
-/**
- * Lista imágenes del ZIP y agrupa por clave normalizada (basename).
- * @param options.includeBuffers Si false (preview), no lee bytes de cada imagen → mucho menos RAM/CPU.
- */
-export function listZipImages(
-  zipBuffer: Buffer,
-  options?: { includeBuffers?: boolean },
-): {
-  byNormalizedRawCode: Map<string, ZipImageEntry[]>;
-  byNumericPrefixCode: Map<string, ZipImageEntry[]>;
-  byFileName: Map<string, ZipImageEntry>;
-  entries: ZipImageEntry[];
-} {
-  const includeBuffers = options?.includeBuffers !== false;
-  const zip = new AdmZip(zipBuffer);
+export type ZipManifestItem = {
+  entryName: string;
+  fileName?: string;
+};
+
+/** Construye una entrada de match a partir del path (sin leer bytes). */
+export function zipImageEntryFromPath(entryName: string, buffer: Buffer = Buffer.alloc(0)): ZipImageEntry | null {
+  const normalized = entryName.replace(/\\/g, "/");
+  if (isIgnoredPath(normalized)) return null;
+  const ext = path.extname(normalized).toLowerCase();
+  if (!IMAGE_EXT.has(ext)) return null;
+  const fileName = path.basename(normalized);
+  const base = path.basename(normalized, ext);
+  const rawImageCode = toRawImageCode(base);
+  const numericPrefixCode = toNumericPrefixCode(rawImageCode);
+  return {
+    entryName: normalized,
+    fileName,
+    baseName: base,
+    rawImageCode,
+    numericPrefixCode,
+    normalizedRawCode: normalizeKey(rawImageCode),
+    normalizedNumericPrefixCode: numericPrefixCode ? normalizeKey(numericPrefixCode) : null,
+    buffer,
+  };
+}
+
+/** Match CSV↔ZIP sin subir el archivo: solo nombres de imagen. */
+export function listZipImagesFromManifest(items: ZipManifestItem[]): ZipImageEntry[] {
   const entries: ZipImageEntry[] = [];
-  for (const e of zip.getEntries()) {
-    if (e.isDirectory) continue;
-    const entryName = e.entryName.replace(/\\/g, "/");
-    if (isIgnoredPath(entryName)) continue;
-    const ext = path.extname(entryName).toLowerCase();
-    if (!IMAGE_EXT.has(ext)) continue;
-    const buf = includeBuffers ? e.getData() : Buffer.alloc(0);
-    const fileName = path.basename(entryName);
-    const base = path.basename(entryName, ext);
-    const rawImageCode = toRawImageCode(base);
-    const numericPrefixCode = toNumericPrefixCode(rawImageCode);
-    const normalizedRawCode = normalizeKey(rawImageCode);
-    const normalizedNumericPrefixCode = numericPrefixCode ? normalizeKey(numericPrefixCode) : null;
-    entries.push({
-      entryName,
-      fileName,
-      baseName: base,
-      rawImageCode,
-      numericPrefixCode,
-      normalizedRawCode,
-      normalizedNumericPrefixCode,
-      buffer: buf,
-    });
+  const seen = new Set<string>();
+  for (const item of items) {
+    const name = (item.entryName || item.fileName || "").trim();
+    if (!name) continue;
+    const ent = zipImageEntryFromPath(name);
+    if (!ent) continue;
+    const key = ent.entryName.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    entries.push(ent);
   }
+  return entries;
+}
+
+function indexZipEntries(entries: ZipImageEntry[]) {
   const byNormalizedRawCode = new Map<string, ZipImageEntry[]>();
   const byNumericPrefixCode = new Map<string, ZipImageEntry[]>();
   const byFileName = new Map<string, ZipImageEntry>();
@@ -148,6 +153,63 @@ export function listZipImages(
     list.sort((a: ZipImageEntry, b: ZipImageEntry) => a.fileName.localeCompare(b.fileName));
   });
   return { byNormalizedRawCode, byNumericPrefixCode, byFileName, entries };
+}
+
+/**
+ * Lista imágenes del ZIP y agrupa por clave normalizada (basename).
+ * @param options.includeBuffers Si false (preview), no lee bytes de cada imagen → mucho menos RAM/CPU.
+ */
+export function listZipImages(
+  zipBuffer: Buffer,
+  options?: { includeBuffers?: boolean },
+): {
+  byNormalizedRawCode: Map<string, ZipImageEntry[]>;
+  byNumericPrefixCode: Map<string, ZipImageEntry[]>;
+  byFileName: Map<string, ZipImageEntry>;
+  entries: ZipImageEntry[];
+} {
+  const includeBuffers = options?.includeBuffers !== false;
+  try {
+    const zip = new AdmZip(zipBuffer);
+    const entries: ZipImageEntry[] = [];
+    for (const e of zip.getEntries()) {
+      if (e.isDirectory) continue;
+      const buf = includeBuffers ? e.getData() : Buffer.alloc(0);
+      const ent = zipImageEntryFromPath(e.entryName.replace(/\\/g, "/"), buf);
+      if (ent) entries.push(ent);
+    }
+    return indexZipEntries(entries);
+  } catch (admErr) {
+    console.warn("[zip-manifest] AdmZip falló; se reintenta con JSZip.", admErr);
+    throw admErr;
+  }
+}
+
+/** Igual que listZipImages, pero si AdmZip no puede leer el ZIP (p. ej. generado con JSZip) usa JSZip. */
+export async function listZipImagesAsync(
+  zipBuffer: Buffer,
+  options?: { includeBuffers?: boolean },
+): Promise<{
+  byNormalizedRawCode: Map<string, ZipImageEntry[]>;
+  byNumericPrefixCode: Map<string, ZipImageEntry[]>;
+  byFileName: Map<string, ZipImageEntry>;
+  entries: ZipImageEntry[];
+}> {
+  const includeBuffers = options?.includeBuffers !== false;
+  try {
+    return listZipImages(zipBuffer, options);
+  } catch {
+    const JSZip = (await import("jszip")).default;
+    const zip = await JSZip.loadAsync(zipBuffer);
+    const entries: ZipImageEntry[] = [];
+    for (const [entryName, file] of Object.entries(zip.files)) {
+      if (file.dir) continue;
+      const buf = includeBuffers ? Buffer.from(await file.async("uint8array")) : Buffer.alloc(0);
+      const ent = zipImageEntryFromPath(entryName, buf);
+      if (ent) entries.push(ent);
+    }
+    return indexZipEntries(entries);
+  }
 }
 
 export function computeOrphanFiles(

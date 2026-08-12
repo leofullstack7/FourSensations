@@ -5,6 +5,17 @@ export function stripBom(text: string): string {
   return text;
 }
 
+/** Decodifica CSV desde buffer (UTF-8, BOM, o UTF-16 de Excel en Windows). */
+export function decodeCsvBuffer(buf: Buffer): string {
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+    return stripBom(buf.toString("utf16le"));
+  }
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+    return buf.slice(3).toString("utf8");
+  }
+  return stripBom(buf.toString("utf8"));
+}
+
 /** Heurística: cuenta comas vs punto y coma en la primera línea no vacía. */
 export function detectDelimiter(firstLine: string): "," | ";" {
   const commas = (firstLine.match(/,/g) ?? []).length;

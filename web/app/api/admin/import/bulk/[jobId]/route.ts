@@ -215,12 +215,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   }
 
   const tintCatalogDb = await withPrismaRetry(() => fetchTintCatalogFromDb(prisma));
-  let zipBuffer: Buffer;
+  let zipBuffer: Buffer | null = null;
   try {
     zipBuffer = await resolveBulkImportZipBuffer(jobId, job.zipBlob);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "ZIP no disponible";
-    return noStoreJson({ error: msg }, { status: 409 });
+  } catch {
+    zipBuffer = null;
   }
 
   const preview = rebuildBulkPreview({

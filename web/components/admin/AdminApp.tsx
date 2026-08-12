@@ -87,6 +87,7 @@ import {
   postBulkImportCommit,
   postBulkImportPreview,
   postBulkImportRowImage,
+  postBulkImportZip,
   postBulkZipOptimize,
   type BulkPreviewResponse,
 } from "@/lib/api/admin-bulk-import";
@@ -2828,6 +2829,8 @@ function AdminBulkTab({
   const [zipInspecting, setZipInspecting] = useState(false);
   const [zipOptimizing, setZipOptimizing] = useState(false);
   const [zipOptimized, setZipOptimized] = useState(false);
+  const [zipUploading, setZipUploading] = useState(false);
+  const zipFileRef = useRef<File | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [preview, setPreview] = useState<BulkPreviewResult | null>(null);
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
@@ -2928,6 +2931,8 @@ function AdminBulkTab({
     setZipInspecting(false);
     setZipOptimizing(false);
     setZipOptimized(false);
+    setZipUploading(false);
+    zipFileRef.current = null;
     setSelectedRowIds([]);
     setExistingPolicy(bulkLoadMode === "update" ? "replace" : "skip");
     setShowNewCategoriesModal(false);
@@ -4570,7 +4575,9 @@ function AdminBulkTab({
             className="form-input"
             disabled={saving || isAnalyzing || zipOptimizing}
             onChange={(e) => {
-              setZipFile(e.target.files?.[0] ?? null);
+              const f = e.target.files?.[0] ?? null;
+              zipFileRef.current = f;
+              setZipFile(f);
               setZipOptimized(false);
             }}
           />
@@ -4639,6 +4646,7 @@ function AdminBulkTab({
                             }
                           });
                           bulkProgress.finish();
+                          zipFileRef.current = result.file;
                           setZipFile(result.file);
                           setZipOptimized(true);
                           void postAdminAiSpendRecord({
@@ -4658,6 +4666,7 @@ function AdminBulkTab({
                             bulkProgress.start("optimize");
                             const serverResult = await postBulkZipOptimize(zipFile);
                             bulkProgress.finish();
+                            zipFileRef.current = serverResult.file;
                             setZipFile(serverResult.file);
                             setZipOptimized(true);
                             showToast(
@@ -4713,8 +4722,10 @@ function AdminBulkTab({
           disabled={
             isAnalyzing ||
             saving ||
+            zipInspecting ||
             !csvFile ||
             (bulkLoadMode === "new" && !zipFile) ||
+            (bulkLoadMode === "new" && !!zipFile && !zipInspect) ||
             sortedCats.length === 0
           }
           onClick={() => {
@@ -4732,12 +4743,67 @@ function AdminBulkTab({
               );
               bulkProgress.start("analyze");
               try {
+                let inspect = zipInspect;
+                if (zipFile && !inspect && !zipInspecting) {
+                  try {
+                    inspect = await inspectZipFileClient(zipFile);
+                    setZipInspect(inspect);
+                  } catch {
+                    inspect = null;
+                  }
+                }
                 const fd = new FormData();
                 fd.append("csv", csvFile);
                 fd.append("mode", bulkLoadMode === "update" ? "update" : "new");
-                if (zipFile) fd.append("zip", zipFile);
+                if (inspect?.images?.length) {
+                  fd.append(
+                    "zipManifest",
+                    JSON.stringify(
+                      inspect.images.map((img) => ({
+                        entryName: img.path || img.fileName,
+                        fileName: img.fileName,
+                      })),
+                    ),
+                  );
+                } else if (bulkLoadMode === "new" && zipFile) {
+                  // Fallback: ZIP pequeño inline si el inspect falló.
+                  if (zipFile.size <= 8 * 1024 * 1024) fd.append("zip", zipFile);
+                }
                 const res = await postBulkImportPreview(fd);
                 bulkProgress.finish();
+                zipFileRef.current = zipFile;
+                if (zipFile && bulkLoadMode === "new" && res.zipStored !== true) {
+                  const toUpload = zipFile;
+                  void (async () => {
+                    setZipUploading(true);
+                    try {
+                      let file = toUpload;
+                      if (!zipOptimized && file.size > 12 * 1024 * 1024) {
+                        try {
+                          const optimized = await optimizeZipFileClient(file);
+                          file = optimized.file;
+                          zipFileRef.current = file;
+                          setZipFile(file);
+                          setZipOptimized(true);
+                        } catch {
+                          /* subir original */
+                        }
+                      }
+                      await postBulkImportZip(res.jobId, file);
+                    } catch (uploadErr) {
+                      console.warn("[bulk] ZIP en segundo plano falló", uploadErr);
+                      showToast(
+                        uploadErr instanceof Error
+                          ? uploadErr.message
+                          : "El análisis listo, pero el ZIP no se subió. Optimízalo e importa de nuevo.",
+                        "danger",
+                        "⚠️",
+                      );
+                    } finally {
+                      setZipUploading(false);
+                    }
+                  })();
+                }
                 // Tintes: el match por «Nivel» solo se activa tras elegir tipo+familia.
                 // Un match bajo en el primer analyze es esperado; no bloquear con el modal.
                 if (
@@ -4786,6 +4852,11 @@ function AdminBulkTab({
             "🔍 Analizar CSV y ZIP"
           )}
         </button>
+        {zipUploading ? (
+          <span style={{ fontSize: 12, color: "var(--text-muted)", alignSelf: "center" }}>
+            Subiendo imágenes al servidor…
+          </span>
+        ) : null}
         {jobId && (
           <button
             type="button"
@@ -5996,6 +6067,7 @@ function AdminBulkTab({
               className="btn btn-outline"
               disabled={
                 saving ||
+                zipUploading ||
                 combineModeActive ||
                 (needsTintSelection && !tintsExplicitlySkipped) ||
                 (pendingNewCategories.length > 0 && !newCategoriesModalAcknowledged) ||

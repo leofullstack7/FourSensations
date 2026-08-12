@@ -8,7 +8,7 @@ import { getBunnyStorageConfig } from "@/lib/server/bunny-config";
 import { uploadImageToBunny } from "@/lib/server/bunny-storage";
 import { allocateUniqueProductSlug } from "@/lib/server/product-slug";
 import { prismaProductToAdmin } from "@/lib/mappers/admin-product";
-import { listZipImages } from "@/lib/bulk-import/zip-manifest";
+import { listZipImagesAsync } from "@/lib/bulk-import/zip-manifest";
 import { mimeFromImagePath } from "@/lib/bulk-import/mime";
 import { bulkImportStableRowId } from "@/lib/bulk-import/bulk-import-row-id";
 import {
@@ -282,7 +282,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     return noStoreJson({ error: msg }, { status: 409 });
   }
 
-  const { byFileName } = listZipImages(zipBuffer, { includeBuffers: true });
+  const { byFileName } = await listZipImagesAsync(zipBuffer, { includeBuffers: true });
   const createdProducts: ReturnType<typeof prismaProductToAdmin>[] = [];
   const errors: string[] = [];
   let skippedExistingDuplicates = 0;
