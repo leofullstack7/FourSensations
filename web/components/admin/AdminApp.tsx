@@ -357,9 +357,10 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   );
 
   useEffect(() => {
+    const timers = toastTimersRef.current;
     return () => {
-      for (const timer of toastTimersRef.current.values()) clearTimeout(timer);
-      toastTimersRef.current.clear();
+      for (const timer of timers.values()) clearTimeout(timer);
+      timers.clear();
     };
   }, []);
 
@@ -490,16 +491,14 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
     sidebarAutoCollapseDone.current = true;
     const t = window.setTimeout(() => setSidebarExpanded(false), 4000);
     return () => window.clearTimeout(t);
-  }, [status, session?.user?.role]);
-
-  const titles = ADMIN_PAGE_TITLES;
+  }, [sessionReady, status, session?.user?.role]);
 
   const goPage = useCallback(
     (p: AdminPageId, opts?: GoPageOptions) => {
       if (p === page && !opts?.productTab) return;
 
       setPage(p);
-      setPageTitle(titles[p]);
+      setPageTitle(ADMIN_PAGE_TITLES[p]);
       if (opts?.productTab) setProductTab(opts.productTab);
 
       if (p === "products" || p === "stock" || p === "dashboard") void loadProducts();
@@ -3404,7 +3403,7 @@ function AdminBulkTab({
     });
   }, [preview, jobId, existingPolicy, bulkLoadMode]);
 
-  const resetSession = () => {
+  const resetSession = useCallback(() => {
     setJobId(null);
     setPreview(null);
     setExpiresAt(null);
@@ -3452,7 +3451,8 @@ function AdminBulkTab({
     setAiCombineAnalyzing(false);
     bulkProgress.reset();
     setFileInputKey((k) => k + 1);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset es estable; el wrapper bulkProgress no
+  }, [bulkLoadMode, bulkProgress.reset]);
 
   useEffect(() => {
     zipImageCacheRef.current?.revokeAll();
@@ -4544,7 +4544,7 @@ function AdminBulkTab({
       });
     }
     showToast("Carga masiva cancelada. Puedes subir un nuevo CSV y ZIP.", "default", "🗑️");
-  }, [jobId, showToast]);
+  }, [jobId, resetSession, showToast]);
 
   const exitBulkSessionQuiet = useCallback(() => {
     const id = jobId;
@@ -4554,7 +4554,7 @@ function AdminBulkTab({
         /* ignore */
       });
     }
-  }, [jobId]);
+  }, [jobId, resetSession]);
 
   const commitGroupAsVariants = useCallback(
     async (groupKey: string, rowIds: string[]) => {
@@ -9609,15 +9609,6 @@ function AdminProductDetailModal({
     showToast,
   ]);
 
-  if (!open || !product) return null;
-
-  const ownTags = productOwnTags(product);
-  const productMenuTag = menuTagForProduct(product, categoryTree);
-
-  const canMutateImages = editingMode && !saving;
-  const canToggleFeatured = editingMode && !saving;
-  const editBusy = saving || descriptionGenerating;
-
   const productImageChoices = useMemo(() => {
     if (!product) return [] as Array<{ key: string; url: string; galleryId?: string; isMain: boolean }>;
     const out: Array<{ key: string; url: string; galleryId?: string; isMain: boolean }> = [];
@@ -9705,6 +9696,15 @@ function AdminProductDetailModal({
     },
     [product, onProductRefresh, showToast]
   );
+
+  if (!open || !product) return null;
+
+  const ownTags = productOwnTags(product);
+  const productMenuTag = menuTagForProduct(product, categoryTree);
+
+  const canMutateImages = editingMode && !saving;
+  const canToggleFeatured = editingMode && !saving;
+  const editBusy = saving || descriptionGenerating;
 
   return (
     <div className={`admin-modal-overlay${open ? " open" : ""}`} onClick={(e) => e.target === e.currentTarget && onClose()} role="presentation">

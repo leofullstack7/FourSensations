@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useReveal } from "@/hooks/useReveal";
 import { useStoreNavigation } from "@/components/store/StoreNavigationProvider";
@@ -77,16 +77,16 @@ export function TintCategoryPageClient({
     };
   }, []);
 
-  const syncFiltersFromUrl = (params: URLSearchParams | null) => {
+  const syncFiltersFromUrl = useCallback((params: URLSearchParams | null) => {
     const sub = params?.get("sub") ?? defaultSub;
     const tipo = params?.get("tipo");
     if (sub.trim()) setActiveSubcategory(sub.trim());
     if (tipo?.trim()) setActiveType(tipo.trim());
-  };
+  }, [defaultSub]);
 
   useEffect(() => {
     syncFiltersFromUrl(searchParams);
-  }, [searchParams, defaultSub]);
+  }, [searchParams, syncFiltersFromUrl]);
 
   useEffect(() => {
     if (!categoryNavFilters) return;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { MotionDiv, MotionSpan } from "@/components/store/store-framer-motion";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import {
@@ -219,7 +219,10 @@ export function BeautyAiAdvisor() {
     [typing, pushReply],
   );
 
-  const productMap = new Map(catalogProducts.map((p) => [p.id, p]));
+  const productMap = useMemo(
+    () => new Map(catalogProducts.map((p) => [p.id, p])),
+    [catalogProducts],
+  );
 
   const scrollToCatalog = useCallback(() => {
     document.getElementById("products-grid-main")?.scrollIntoView({ behavior: "smooth", block: "start" });

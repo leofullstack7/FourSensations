@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useReveal } from "@/hooks/useReveal";
 import { useStoreNavigation } from "@/components/store/StoreNavigationProvider";
@@ -561,7 +562,15 @@ export function CategoryLandingClient({
       >
         {bannerSrc ? (
           <div className="category-landing-hero-stage">
-            <img src={bannerSrc} alt="" className="category-landing-hero-banner" decoding="async" />
+            <Image
+              src={bannerSrc}
+              alt=""
+              width={1920}
+              height={720}
+              className="category-landing-hero-banner"
+              priority
+              sizes="100vw"
+            />
             <div className="category-landing-hero-inner category-landing-hero-inner--banner">{heroCopy}</div>
           </div>
         ) : (
