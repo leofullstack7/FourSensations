@@ -9459,6 +9459,8 @@ function AdminProductDetailModal({
   const [editingMode, setEditingMode] = useState(false);
   const [uploadingMain, setUploadingMain] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
+  const [mainImagePickerOpen, setMainImagePickerOpen] = useState(false);
+  const [settingMainImage, setSettingMainImage] = useState(false);
 
   const [editName, setEditName] = useState("");
   const [editBrand, setEditBrand] = useState("");
@@ -9494,10 +9496,15 @@ function AdminProductDetailModal({
   useEffect(() => {
     if (!open || !product) return;
     setEditingMode(false);
+    setMainImagePickerOpen(false);
     setDescriptionGenerating(false);
     applyProductToForm(product);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset al cambiar de producto
   }, [open, product?.id]);
+
+  useEffect(() => {
+    if (!editingMode) setMainImagePickerOpen(false);
+  }, [editingMode]);
 
   useEffect(() => {
     if (!open || !product || editingMode) return;
@@ -9611,6 +9618,94 @@ function AdminProductDetailModal({
   const canToggleFeatured = editingMode && !saving;
   const editBusy = saving || descriptionGenerating;
 
+  const productImageChoices = useMemo(() => {
+    if (!product) return [] as Array<{ key: string; url: string; galleryId?: string; isMain: boolean }>;
+    const out: Array<{ key: string; url: string; galleryId?: string; isMain: boolean }> = [];
+    const seen = new Set<string>();
+    const push = (url: string | null | undefined, galleryId?: string, isMain = false) => {
+      const u = url?.trim();
+      if (!u || !isHttpImageUrl(u) || seen.has(u)) return;
+      seen.add(u);
+      out.push({ key: galleryId ?? `main-${u}`, url: u, galleryId, isMain });
+    };
+    push(product.imageUrl, undefined, true);
+    for (const im of product.images ?? []) push(im.url, im.id, false);
+    return out;
+  }, [product]);
+
+  const promoteImageToMain = useCallback(
+    async (url: string, fromGalleryId?: string) => {
+      if (!product) return;
+      const next = url.trim();
+      if (!next || !isHttpImageUrl(next)) return;
+      if (product.imageUrl?.trim() === next) {
+        showToast("Esa ya es la imagen principal", "default", "ℹ️");
+        return;
+      }
+      setSettingMainImage(true);
+      try {
+        const previousMain = product.imageUrl?.trim() || null;
+        let updated = await updateAdminProduct(product.id, { imageUrl: next });
+
+        if (fromGalleryId) {
+          try {
+            updated = await removeProductGalleryImage(product.id, fromGalleryId);
+          } catch {
+            /* si falla el borrado de galería, la principal ya quedó */
+          }
+        }
+
+        const galleryHasPrevious = (updated.images ?? []).some((im) => im.url === previousMain);
+        if (
+          previousMain &&
+          isHttpImageUrl(previousMain) &&
+          previousMain !== next &&
+          !galleryHasPrevious
+        ) {
+          updated = await addProductGalleryImage(product.id, previousMain);
+        }
+
+        onProductRefresh?.(updated);
+        setMainImagePickerOpen(false);
+        showToast("Imagen principal actualizada", "success", "🖼️");
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "No se pudo cambiar la imagen", "danger", "⚠️");
+      } finally {
+        setSettingMainImage(false);
+      }
+    },
+    [product, onProductRefresh, showToast]
+  );
+
+  const uploadNewMainImage = useCallback(
+    async (file: File) => {
+      if (!product) return;
+      setUploadingMain(true);
+      try {
+        const previousMain = product.imageUrl?.trim() || null;
+        const url = await uploadAdminProductImage(file);
+        let updated = await updateAdminProduct(product.id, { imageUrl: url });
+        const galleryHasPrevious = (updated.images ?? []).some((im) => im.url === previousMain);
+        if (
+          previousMain &&
+          isHttpImageUrl(previousMain) &&
+          previousMain !== url &&
+          !galleryHasPrevious
+        ) {
+          updated = await addProductGalleryImage(product.id, previousMain);
+        }
+        onProductRefresh?.(updated);
+        setMainImagePickerOpen(false);
+        showToast("Imagen principal actualizada", "success", "🖼️");
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Error al subir", "danger", "⚠️");
+      } finally {
+        setUploadingMain(false);
+      }
+    },
+    [product, onProductRefresh, showToast]
+  );
+
   return (
     <div className={`admin-modal-overlay${open ? " open" : ""}`} onClick={(e) => e.target === e.currentTarget && onClose()} role="presentation">
       <div className="admin-modal admin-product-detail-modal" style={{ maxWidth: 980 }}>
@@ -9631,34 +9726,118 @@ function AdminProductDetailModal({
               )}
             </div>
             {editingMode && (
-              <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <label className="btn btn-outline btn-sm" style={{ cursor: uploadingMain || saving ? "wait" : "pointer" }}>
-                  {uploadingMain ? "Subiendo…" : "📤 Cambiar principal"}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
-                    style={{ display: "none" }}
-                    disabled={!canMutateImages || uploadingMain}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = "";
-                      if (!f) return;
-                      setUploadingMain(true);
-                      void (async () => {
-                        try {
-                          const url = await uploadAdminProductImage(f);
-                          const updated = await updateAdminProduct(product.id, { imageUrl: url });
-                          onProductRefresh?.(updated);
-                          showToast("Imagen principal actualizada", "success", "🖼️");
-                        } catch (err) {
-                          showToast(err instanceof Error ? err.message : "Error al subir", "danger", "⚠️");
-                        } finally {
-                          setUploadingMain(false);
-                        }
-                      })();
+              <div style={{ marginTop: 12 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${mainImagePickerOpen ? "btn-primary" : "btn-outline"}`}
+                    disabled={!canMutateImages || uploadingMain || settingMainImage}
+                    onClick={() => setMainImagePickerOpen((v) => !v)}
+                  >
+                    {mainImagePickerOpen ? "Cerrar selector" : "🖼️ Cambiar principal"}
+                  </button>
+                  <label
+                    className="btn btn-outline btn-sm"
+                    style={{ cursor: uploadingMain || saving ? "wait" : "pointer", margin: 0 }}
+                  >
+                    {uploadingMain ? "Subiendo…" : "📤 Subir"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      style={{ display: "none" }}
+                      disabled={!canMutateImages || uploadingMain || settingMainImage}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = "";
+                        if (!f) return;
+                        void uploadNewMainImage(f);
+                      }}
+                    />
+                  </label>
+                </div>
+
+                {mainImagePickerOpen ? (
+                  <div
+                    className="admin-card"
+                    style={{
+                      marginTop: 10,
+                      padding: 12,
+                      border: "1px solid rgba(201, 145, 139, 0.35)",
+                      background: "rgba(255,252,250,0.95)",
                     }}
-                  />
-                </label>
+                  >
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
+                      Elige una imagen que ya tiene el producto
+                    </div>
+                    <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--text-muted)", lineHeight: 1.4 }}>
+                      Toca una miniatura para ponerla como principal. La foto anterior se guarda en imágenes extra.
+                      Usa <strong>Subir</strong> solo si quieres una imagen nueva desde tu PC.
+                    </p>
+                    {productImageChoices.length === 0 ? (
+                      <p style={{ margin: 0, fontSize: 13, color: "var(--text-muted)" }}>
+                        Este producto aún no tiene imágenes. Usa «Subir» para agregar la primera.
+                      </p>
+                    ) : (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                        {productImageChoices.map((img) => {
+                          const selected = product.imageUrl?.trim() === img.url;
+                          return (
+                            <button
+                              key={img.key}
+                              type="button"
+                              disabled={!canMutateImages || uploadingMain || settingMainImage}
+                              title={selected ? "Imagen principal actual" : "Usar como principal"}
+                              onClick={() => void promoteImageToMain(img.url, img.galleryId)}
+                              style={{
+                                position: "relative",
+                                width: 72,
+                                height: 72,
+                                padding: 0,
+                                borderRadius: 10,
+                                overflow: "hidden",
+                                border: selected
+                                  ? "2px solid var(--dusty-rose)"
+                                  : "1px solid var(--line)",
+                                boxShadow: selected ? "0 0 0 3px rgba(201,145,139,0.25)" : "none",
+                                cursor: selected ? "default" : "pointer",
+                                background: "var(--ivory)",
+                              }}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={img.url}
+                                alt=""
+                                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                              />
+                              {selected ? (
+                                <span
+                                  style={{
+                                    position: "absolute",
+                                    left: 4,
+                                    bottom: 4,
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    color: "#fff",
+                                    background: "rgba(180,80,90,0.92)",
+                                    borderRadius: 999,
+                                    padding: "2px 6px",
+                                  }}
+                                >
+                                  Principal
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {settingMainImage ? (
+                      <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--text-muted)" }}>
+                        Actualizando imagen principal…
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
