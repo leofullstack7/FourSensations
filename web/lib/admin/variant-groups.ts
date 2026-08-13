@@ -15,6 +15,34 @@ export function buildVariantCountByGroup(products: AdminProduct[]): Map<string, 
   return counts;
 }
 
+/**
+ * Expande IDs seleccionados (p. ej. caras de grupo en la lista) a todos los
+ * miembros de sus grupos de variantes. Productos sin grupo quedan solos.
+ */
+export function expandSelectionToAllVariantMembers(
+  selectedIds: ReadonlySet<string> | string[],
+  allProducts: AdminProduct[],
+): AdminProduct[] {
+  const idSet = selectedIds instanceof Set ? selectedIds : new Set(selectedIds);
+  const selected = allProducts.filter((p) => idSet.has(p.id));
+  const codes = new Set(
+    selected
+      .map((p) => canonicalVariantGroupCode(p.variantGroupCode))
+      .filter((c): c is string => Boolean(c)),
+  );
+  if (codes.size === 0) return selected;
+
+  const byId = new Map<string, AdminProduct>();
+  for (const p of selected) byId.set(p.id, p);
+  for (const p of allProducts) {
+    const code = canonicalVariantGroupCode(p.variantGroupCode);
+    if (!code) continue;
+    if (![...codes].some((c) => variantGroupCodesMatch(c, code))) continue;
+    byId.set(p.id, p);
+  }
+  return Array.from(byId.values());
+}
+
 /** Variante principal del grupo (menor variantGroupOrder; fallback al primero encontrado). */
 export function buildPrimaryVariantByGroup(products: AdminProduct[]): Map<string, AdminProduct> {
   const primaries = new Map<string, AdminProduct>();

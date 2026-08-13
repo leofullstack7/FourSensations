@@ -40,6 +40,7 @@ import {
   buildPrimaryVariantByGroup,
   buildVariantCountByGroup,
   collapseProductsForAdminList,
+  expandSelectionToAllVariantMembers,
   groupListThumbnail,
   listVariantsInGroup,
   resolveAdminListRowsAfterFilter,
@@ -856,6 +857,12 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
     return products.filter((p) => productListSelectedIds.has(p.id));
   }, [products, productListSelectedIds]);
 
+  /** Incluye hermanas de cada grupo seleccionado (para unir dos productos con variantes). */
+  const expandedVariantMembersForSelection = useMemo(
+    () => expandSelectionToAllVariantMembers(productListSelectedIds, products),
+    [productListSelectedIds, products]
+  );
+
   const openProductMergeModal = useCallback(() => {
     if (selectedProductsForMerge.length < 2) {
       showToast("Selecciona al menos 2 productos para unirlos", "default", "ℹ️");
@@ -943,7 +950,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
         clearProductListSelection();
         await loadProducts();
         showToast(
-          `${res.grouped} productos agrupados como variantes. Cara principal: «${res.primaryName}».`,
+          `${res.grouped} variantes en un solo producto. Cara principal: «${res.primaryName}».`,
           "success",
           "📦"
         );
@@ -2329,8 +2336,18 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
           >
             <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>Poner productos como variantes</h3>
             <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
-              Elige la <strong>cara principal</strong>: esa es la que se verá en el catálogo. Los demás
-              quedarán como variantes del mismo producto ({selectedProductsForMerge.length} seleccionados).
+              Elige la <strong>cara principal</strong>: esa es la que se verá en el catálogo.
+              {expandedVariantMembersForSelection.length > selectedProductsForMerge.length ? (
+                <>
+                  {" "}
+                  Como alguno ya tiene variantes, se unirán{" "}
+                  <strong>todas</strong> en un solo grupo:{" "}
+                  <strong>{expandedVariantMembersForSelection.length} variantes</strong> en total
+                  (desde {selectedProductsForMerge.length} seleccionados).
+                </>
+              ) : (
+                <> Los demás quedarán como variantes del mismo producto ({selectedProductsForMerge.length} seleccionados).</>
+              )}
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14, maxHeight: 360, overflow: "auto" }}>
               {selectedProductsForMerge.map((p) => (
@@ -2369,6 +2386,10 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                     >
                       {p.externalRef ?? p.id.slice(0, 8)}
                       {p.colorName ? ` · ${p.colorName}` : ""}
+                      {(() => {
+                        const n = expandSelectionToAllVariantMembers([p.id], products).length;
+                        return n > 1 ? ` · ${n} variantes` : "";
+                      })()}
                     </span>
                   </span>
                 </label>

@@ -171,7 +171,14 @@ export async function postAdminProductsMerge(body: {
 export async function postAdminProductsGroupVariants(body: {
   primaryId: string;
   ids: string[];
-}): Promise<{ ok: boolean; grouped: number; variantGroupCode: string; primaryId: string; primaryName: string }> {
+}): Promise<{
+  ok: boolean;
+  grouped: number;
+  selected?: number;
+  variantGroupCode: string;
+  primaryId: string;
+  primaryName: string;
+}> {
   const res = await fetch("/api/admin/products/group-variants", {
     method: "POST",
     credentials: "include",
@@ -182,6 +189,7 @@ export async function postAdminProductsGroupVariants(body: {
   return (await res.json()) as {
     ok: boolean;
     grouped: number;
+    selected?: number;
     variantGroupCode: string;
     primaryId: string;
     primaryName: string;
