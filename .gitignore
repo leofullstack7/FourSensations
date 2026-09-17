@@ -14,6 +14,15 @@ out/
 .env.local
 .env.*.local
 
+# Neon CLI
+.neon/
+.neon
+.neon.local.json
+
+# Editor / AI local
+.claude/
+.cursor/
+
 # Prisma local artifacts
 prisma/dev.db
 prisma/dev.db-journal
