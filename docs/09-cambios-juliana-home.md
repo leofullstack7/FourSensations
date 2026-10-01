@@ -235,4 +235,4 @@ Crear en catálogo (admin/seed): Pre-Shampoo = Dulce Renacer + Repolarizador.
 | Fecha | Ítems | Commit |
 |-------|-------|--------|
 | 2026-09-30 | 01–04, 06, 08–20 (lote home/footer/cuenta/sobre nosotros). Quedan 05, 07, 21 | `240a11d` |
-| 2026-09-30 | 05 subcats + títulos, 07 Emma quiz+motor, 21 Bomba Capilar | pendiente push |
+| 2026-09-30 | 05 subcats + títulos, 07 Emma quiz+motor, 21 Bomba Capilar | `aa1c5df` |
