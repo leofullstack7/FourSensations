@@ -733,35 +733,50 @@ footer::before {
   overflow: hidden;
   padding: 12px 0 8px;
 }
-.cat-showcase-track {
+.cat-showcase-track--desktop {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: clamp(12px, 2vw, 20px);
-  max-width: 1240px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: clamp(8px, 1.1vw, 14px);
+  max-width: 100%;
   margin: 0 auto;
+  align-items: stretch;
 }
 .cat-showcase-track--mobile {
   display: flex;
-  width: 300%;
-  gap: 0;
-  transition: transform 0.85s cubic-bezier(0.45, 0, 0.2, 1);
-  will-change: transform;
+  width: max-content;
+  gap: 10px;
+  padding: 0 4px 4px;
+}
+.cat-showcase-viewport--mobile {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  margin: 0 -12px;
+  padding: 12px 12px 8px;
+}
+.cat-showcase-viewport--mobile::-webkit-scrollbar {
+  display: none;
 }
 .cat-showcase-track--mobile .cat-showcase-card {
-  flex: 0 0 calc(100% / 6);
-  max-width: calc(100% / 6);
-  padding: 0 8px;
+  flex: 0 0 calc((100vw - 48px) / 3);
+  max-width: calc((100vw - 48px) / 3);
+  scroll-snap-align: start;
   box-sizing: border-box;
 }
 .cat-showcase-card {
   position: relative;
   display: block;
   width: 100%;
+  min-width: 0;
   padding: 0;
   border: none;
   background: transparent;
   text-decoration: none;
-  border-radius: 20px;
+  border-radius: 16px;
   outline: none;
   cursor: pointer;
   font: inherit;
@@ -771,8 +786,8 @@ footer::before {
 }
 .cat-showcase-card__glow {
   position: absolute;
-  inset: -6px;
-  border-radius: 24px;
+  inset: -4px;
+  border-radius: 18px;
   pointer-events: none;
   z-index: 0;
   animation: cat-showcase-glow-pulse 3.2s ease-in-out infinite;
@@ -794,9 +809,9 @@ footer::before {
   position: relative;
   z-index: 1;
   display: block;
-  border-radius: 20px;
+  border-radius: 16px;
   overflow: hidden;
-  aspect-ratio: 420 / 520;
+  aspect-ratio: 3 / 4;
   animation: cat-showcase-levitate 4.2s ease-in-out infinite;
   animation-delay: var(--float-delay, 0s);
   box-shadow: 0 14px 36px rgba(138, 95, 176, 0.14);
@@ -809,12 +824,13 @@ footer::before {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   display: block;
 }
 .cat-showcase-card__shade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, transparent 52%, rgba(0, 0, 0, 0.35) 78%, rgba(0, 0, 0, 0.55) 100%);
+  background: linear-gradient(180deg, transparent 48%, rgba(0, 0, 0, 0.38) 78%, rgba(0, 0, 0, 0.62) 100%);
   pointer-events: none;
 }
 .cat-showcase-card__label {
@@ -822,15 +838,17 @@ footer::before {
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 18px 12px 16px;
+  padding: 12px 6px 10px;
   text-align: center;
   font-family: var(--font-body);
-  font-size: clamp(11px, 1.4vw, 13px);
+  font-size: clamp(8px, 0.72vw, 11px);
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
   color: #fff;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   z-index: 2;
+  hyphens: auto;
 }
 .cat-showcase-dots {
   display: flex;
@@ -859,8 +877,17 @@ footer::before {
   .categories-showcase-title {
     margin-bottom: 24px;
   }
-  .cat-showcase-viewport {
-    margin: 0 -8px;
+  .cat-showcase-track--mobile .cat-showcase-card {
+    flex: 0 0 calc((100vw - 44px) / 3);
+    max-width: calc((100vw - 44px) / 3);
+  }
+  .cat-showcase-card__label {
+    font-size: clamp(9px, 2.6vw, 11px);
+    letter-spacing: 0.03em;
+    padding: 14px 6px 12px;
+  }
+  .cat-showcase-card__body {
+    border-radius: 14px;
   }
   .cat-showcase-dots {
     gap: 20px;
@@ -882,10 +909,13 @@ footer::before {
     box-shadow: 0 0 0 3px rgba(201, 166, 232, 0.22);
   }
 }
-@media (min-width: 768px) and (max-width: 1024px) {
-  .cat-showcase-track {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    row-gap: 20px;
+@media (min-width: 768px) and (max-width: 1100px) {
+  .cat-showcase-track--desktop {
+    gap: 8px;
+  }
+  .cat-showcase-card__label {
+    font-size: clamp(8px, 0.9vw, 10px);
+    padding: 10px 4px 8px;
   }
 }
 

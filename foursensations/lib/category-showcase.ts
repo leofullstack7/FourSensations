@@ -68,5 +68,5 @@ export const CATEGORY_SHOWCASE_ITEMS: CategoryShowcaseItem[] = [
   },
 ];
 
-export const CATEGORY_SHOWCASE_MOBILE_PAGE_SIZE = 2;
-export const CATEGORY_SHOWCASE_AUTO_MS = 5000;
+export const CATEGORY_SHOWCASE_MOBILE_PAGE_SIZE = 3;
+export const CATEGORY_SHOWCASE_AUTO_MS = 5200;
