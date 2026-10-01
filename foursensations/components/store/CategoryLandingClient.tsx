@@ -480,7 +480,7 @@ export function CategoryLandingClient({
             <div className="category-filter-title">Filtrar el catálogo</div>
             {hairMode ? (
               <p className="fs-cat-filter-lead">
-                Elige una familia (Tratamientos, Rutinas, Finalizadores, Tónicos, Fragancias o Multiuso) y, si quieres,
+                Elige una familia (Tratamientos, Shampoo y Acondicionador, Crecimiento, Detox, Finalizadores, Hair Mist, Puntas o Pre-Shampoo) y, si quieres,
                 una línea concreta.
               </p>
             ) : accessoryMode ? (

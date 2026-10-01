@@ -32,9 +32,9 @@
 | 02 | Header · categorías | Añadir **Cuidado Corporal** (orden: Capilar → Corporal → Accesorios → Mayorista) | `@img2` | hecho (menú fallback + promo; DB menú puede necesitar sync) |
 | 03 | Header · iconos | Carrito = supermercado (no bolsa/basurero); **quitar panel admin** del público | — | hecho |
 | 04 | Marquee bajo banners | Solo la lista de 9 frases de marca | — | hecho |
-| 05 | Subcategorías capilar | Nuevo set + mapping producto → subcat; título/subtítulo por producto | — | pendiente |
+| 05 | Subcategorías capilar | Nuevo set + mapping producto → subcat; título/subtítulo por producto | — | hecho |
 | 06 | Home preview 5 productos | Quitar bloque de 5 productos al azar bajo las cards de subcats | — | hecho |
-| 07 | Asesor IA | Renombrar Juli → **EMMA**; copy; corazones; flujo de 6 preguntas; sin productos hasta el final; reacciones; motor Excel | — | pendiente |
+| 07 | Asesor IA | Renombrar Juli → **EMMA**; copy; corazones; flujo de 6 preguntas; sin productos hasta el final; reacciones; motor Excel | — | hecho |
 | 08 | Franja morada + trust | Quitar `@img1` (innovation + envío/garantía/originales); poner ahí las mismas 9 frases de marca | `@img1` | hecho |
 | 09 | Promo cards | Añadir card **Cuidado Corporal** | `@img2` | hecho |
 | 10 | Productos Destacados | Quitar chips de subcats; copy “LOS FAVORITOS DEL CLUB”; lista fija de favoritos | `@img3` | hecho |
@@ -48,7 +48,7 @@
 | 18 | Footer · Ayuda WA | Mensaje personalizado de atención | — | hecho |
 | 19 | FAB WhatsApp | Mensaje sticky/burbuja | — | hecho |
 | 20 | Cuenta · pedidos | Nuevo hero sin “Club…” repetido | `@img9` | hecho |
-| 21 | Catálogo | Crear producto **Bomba Capilar** (Dulce Renacer + Repolarizador) | — | pendiente |
+| 21 | Catálogo | Crear producto **Bomba Capilar** (Dulce Renacer + Repolarizador) | — | hecho (DB Neon + script) |
 
 ---
 
@@ -235,3 +235,4 @@ Crear en catálogo (admin/seed): Pre-Shampoo = Dulce Renacer + Repolarizador.
 | Fecha | Ítems | Commit |
 |-------|-------|--------|
 | 2026-09-30 | 01–04, 06, 08–20 (lote home/footer/cuenta/sobre nosotros). Quedan 05, 07, 21 | `240a11d` |
+| 2026-09-30 | 05 subcats + títulos, 07 Emma quiz+motor, 21 Bomba Capilar | pendiente push |

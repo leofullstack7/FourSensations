@@ -5,12 +5,19 @@ export const defaultMenuConfig: MenuConfig = {
   "Cuidado capilar": {
     icon: "💇",
     subs: {
-      Tratamientos: ["Proteína 10 en 1", "Dulce Renacer", "Sensación Primaveral", "Shots"],
-      Rutinas: ["Botanical", "Scalp Therapy", "Tentación Nutrición", "Tentación Equilibrio"],
-      Finalizadores: ["Shine Gloss", "Fantasía Natural"],
-      Tónicos: ["Secreto de Primavera"],
-      Fragancias: ["Bloom Shine", "Sweet Love", "Scarlette", "Golden Glow"],
-      Multiuso: ["Suspiros", "Luna Llena"],
+      Tratamientos: ["Dulce Renacer", "Sensación Primaveral", "Proteína Capilar"],
+      "Shampoo y Acondicionador": [
+        "Botanical",
+        "Kit Tentación Equilibrio",
+        "Kit Tentación Nutrición",
+        "Kit Scalp Therapy",
+      ],
+      "Crecimiento y Fortalecimiento": ["Secreto de Primavera", "Shots Capilares"],
+      "Detox y Cuero Cabelludo": ["Scrub Glow", "Kit Scalp Therapy", "Cepillo"],
+      "Finalizadores y Protección": ["Fantasía Natural", "Shine Gloss"],
+      "Hair Mist": ["Sweet Love", "BloomShine", "Scarlette", "Golden Glow"],
+      "Reparación de Puntas": ["Luna Llena", "Suspiros"],
+      "Pre - Shampoo": ["Bomba Capilar"],
     },
   },
   "Cuidado corporal": {

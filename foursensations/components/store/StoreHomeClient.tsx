@@ -18,6 +18,7 @@ import {
   resolveStorefrontDisplayAfterFilter,
 } from "@/lib/store/variant-groups";
 import { isHomeClubFavoriteProduct } from "@/lib/home-club-favorites";
+import { productMatchesHairSubcategory } from "@/lib/hair-subcategories";
 import { STOREFRONT_BRAND_MARQUEE_MESSAGES } from "@/lib/store-brand-marquee-messages";
 import type { StoreProduct } from "@/lib/types/product";
 import type { StoreCombo } from "@/lib/types/store-combo";
@@ -65,6 +66,7 @@ export function StoreHomeClient({
   const products = catalogProducts.length > 0 ? catalogProducts : initialProducts;
 
   const [sortValue, setSortValue] = useState<string>("default");
+  const [manualSub, setManualSub] = useState<string | null>(null);
   const [heroBannerIndex, setHeroBannerIndex] = useState(0);
   const [visibleCount, setVisibleCount] = useState(DESKTOP_INITIAL_VISIBLE_PRODUCTS);
   const [loadMoreStep, setLoadMoreStep] = useState(DESKTOP_LOAD_MORE_PRODUCTS);
@@ -79,9 +81,12 @@ export function StoreHomeClient({
   }, []);
 
   const filteredProducts = useMemo(() => {
-    let list = products.filter((p) => isHomeClubFavoriteProduct(p.name));
-    if (list.length === 0) {
-      list = [...products];
+    let list: StoreProduct[];
+    if (manualSub) {
+      list = products.filter((p) => productMatchesHairSubcategory(p, manualSub));
+    } else {
+      list = products.filter((p) => isHomeClubFavoriteProduct(p.name));
+      if (list.length === 0) list = [...products];
     }
 
     if (sortValue === "default") {
@@ -98,7 +103,7 @@ export function StoreHomeClient({
     else if (sortValue === "rating") copy.sort((a, b) => b.rating - a.rating);
     else if (sortValue === "new") copy.sort((a, b) => Number(b.isNew) - Number(a.isNew));
     return enrichStorefrontDisplayProducts(resolveStorefrontDisplayAfterFilter(copy, products), products);
-  }, [products, sortValue]);
+  }, [products, sortValue, manualSub]);
 
   useEffect(() => {
     const mq = window.matchMedia(`(max-width: ${MOBILE_FEATURED_BREAKPOINT}px)`);
@@ -115,7 +120,7 @@ export function StoreHomeClient({
   useEffect(() => {
     const mobile = window.matchMedia(`(max-width: ${MOBILE_FEATURED_BREAKPOINT}px)`).matches;
     setVisibleCount(mobile ? MOBILE_INITIAL_VISIBLE_PRODUCTS : DESKTOP_INITIAL_VISIBLE_PRODUCTS);
-  }, [sortValue]);
+  }, [sortValue, manualSub]);
 
   return (
     <>
@@ -161,10 +166,10 @@ export function StoreHomeClient({
 
       <CategoryShowcaseStrip
         onSelectSubcategory={(sub) => {
+          setManualSub(sub);
           document.getElementById("featured")?.scrollIntoView({ behavior: "smooth", block: "start" });
-          void sub;
         }}
-        activeSubcategory={null}
+        activeSubcategory={manualSub}
       />
 
       <BeautyAiAdvisor />
@@ -272,14 +277,33 @@ export function StoreHomeClient({
       <section className="products-section section-pad" id="featured">
         <div className="container">
           <div className="section-header reveal">
-            <div className="section-eyebrow">Productos Destacados</div>
+            <div className="section-eyebrow">{manualSub ? "Subcategoría" : "Productos Destacados"}</div>
             <h2 className="section-title">
-              Los favoritos del <em>Club</em> 💗
+              {manualSub ? (
+                <>
+                  {manualSub}
+                </>
+              ) : (
+                <>
+                  Los favoritos del <em>Club</em> 💗
+                </>
+              )}
             </h2>
             <p className="section-sub">
-              Nuestros productos más amados, elegidos para transformar tu rutina y darle a tu cabello exactamente ese
-              algo que le estaba faltando. ✨
+              {manualSub
+                ? "Productos Four Sensations de esta línea. Toca otra subcategoría arriba o vuelve a los favoritos."
+                : "Nuestros productos más amados, elegidos para transformar tu rutina y darle a tu cabello exactamente ese algo que le estaba faltando. ✨"}
             </p>
+            {manualSub ? (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                style={{ marginTop: 12 }}
+                onClick={() => setManualSub(null)}
+              >
+                Ver favoritos del Club
+              </button>
+            ) : null}
           </div>
 
           <div className="filter-row reveal" style={{ justifyContent: "flex-end" }}>

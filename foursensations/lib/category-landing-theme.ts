@@ -31,11 +31,11 @@ const bySlug: Record<string, Partial<CategoryLandingCopy>> = {
     eyebrow: "Cuidado capilar · Club de los Cabellos Perfectos",
     headline: "Tu cabello, con ciencia y encanto",
     subtitle:
-      "Tratamientos que reconstruyen, rutinas que equilibran, finalizadores con brillo, tónicos, fragancias y multiusos. Cada línea Four Sensations nace para un gesto concreto: nutrir, reparar, alisar la fibra o vestir el peinado.",
+      "Tratamientos, shampoo y acondicionador, crecimiento, detox, finalizadores, Hair Mist, puntas y pre-shampoo. Cada línea Four Sensations nace para un gesto concreto.",
     ctaExplore: "Ver todo el cuidado capilar",
     commercialLine: "Arma tu protocolo: proteína, nutrición, cuero cabelludo o un aceite que selle el look.",
     benefits: [
-      { icon: "🧬", title: "Protocolos reales", text: "Seis familias: Tratamientos, Rutinas, Finalizadores, Tónicos, Fragancias y Multiuso." },
+      { icon: "🧬", title: "Protocolos reales", text: "Ocho familias: Tratamientos, Shampoo y Acondicionador, Crecimiento, Detox, Finalizadores, Hair Mist, Puntas y Pre-Shampoo." },
       { icon: "✨", title: "Resultado que se ve", text: "Menos frizz, más brillo, fibra nutrida y cuero cabelludo en calma." },
       { icon: "🚚", title: "De Manizales a tu casa", text: "Pedidos preparados en máximo 2 días hábiles, con cobertura nacional." },
     ],
@@ -86,9 +86,11 @@ export function getCategoryLandingCopy(categoryLabel: string, slug: string): Cat
 
 export const HAIR_FILTER_GROUPS: HairSubcategoryName[] = [
   "Tratamientos",
-  "Rutinas",
-  "Finalizadores",
-  "Tónicos",
-  "Fragancias",
-  "Multiuso",
+  "Shampoo y Acondicionador",
+  "Crecimiento y Fortalecimiento",
+  "Detox y Cuero Cabelludo",
+  "Finalizadores y Protección",
+  "Hair Mist",
+  "Reparación de Puntas",
+  "Pre - Shampoo",
 ];

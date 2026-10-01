@@ -1,295 +1,258 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MotionDiv, MotionSpan } from "@/components/store/store-framer-motion";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
-import {
-  ADVISOR_QUICK_PROMPTS,
-  ADVISOR_RULES_LLM_THRESHOLD,
-  buildAdvisorReply,
-  buildAdvisorReplyForQuickPrompt,
-  type AdvisorHistoryTurn,
-  type AdvisorQuickPromptId,
-  type AiAdvisorAction,
-  type AiAdvisorReply,
-  type AiChatMessage,
-} from "@/lib/ai-advisor";
-import { ADVISOR_MAX_TURNS } from "@/lib/ai-advisor-context";
-import { FS_WELCOME_MESSAGE } from "@/lib/ai-advisor-persona";
 import { JuliProductSlider } from "@/components/store/JuliProductSlider";
-import { getWhatsAppHref, WHATSAPP_DEFAULT_MESSAGE } from "@/lib/storefront-contact";
-import { preloadStorefrontProductImages } from "@/lib/preload-storefront-image";
+import {
+  EMMA_INTRO,
+  EMMA_LEFT_COPY,
+  EMMA_QUESTIONS,
+  EMMA_START_BUTTON,
+  buildEmmaRoutine,
+  emmaReactionForAnswer,
+  matchCatalogProductId,
+  type EmmaAnswers,
+} from "@/lib/emma/flow";
+import type { StoreProduct } from "@/lib/types/product";
 
-const QUICK_PROMPTS = ADVISOR_QUICK_PROMPTS;
-const CHAT_STORAGE_KEY = "fs-juli-chat-v1";
+type Phase = "intro" | "question" | "loading" | "result";
 
-const WELCOME: AiChatMessage = {
-  id: "welcome",
-  role: "bot",
-  text: FS_WELCOME_MESSAGE,
+type ChatLine = {
+  id: string;
+  role: "bot" | "user";
+  text: string;
+  productIds?: string[];
 };
 
-function nextId(): string {
-  return `ai-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+function nid() {
+  return `emma-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
-
-function toHistoryTurns(messages: AiChatMessage[]): AdvisorHistoryTurn[] {
-  return messages
-    .filter((m) => m.id !== "welcome")
-    .map((m) => ({
-      role: m.role,
-      text: m.text,
-      ...(m.productIds?.length ? { productIds: m.productIds } : {}),
-    }));
-}
-
-function loadStoredMessages(): AiChatMessage[] | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = sessionStorage.getItem(CHAT_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as AiChatMessage[];
-    if (!Array.isArray(parsed) || parsed.length === 0) return null;
-    return parsed.slice(-ADVISOR_MAX_TURNS);
-  } catch {
-    return null;
-  }
-}
-
-async function fetchAdvisorReply(message: string, history: AdvisorHistoryTurn[]): Promise<AiAdvisorReply | null> {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 12_000);
-  try {
-    const res = await fetch("/api/store/advisor", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      signal: controller.signal,
-      body: JSON.stringify({ message, history }),
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as AiAdvisorReply;
-  } catch {
-    return null;
-  } finally {
-    window.clearTimeout(timeout);
-  }
-}
-
-function rulesReplyHasProducts(reply: AiAdvisorReply): boolean {
-  return reply.messages.some((m) => (m.productIds?.length ?? 0) > 0);
-}
-
-type PushReplyOptions = {
-  /** Chip predeterminado: respuesta local instantánea, cero tokens. */
-  quickPromptId?: AdvisorQuickPromptId;
-};
 
 export function BeautyAiAdvisor() {
   const {
     catalogProducts,
     ensureFullCatalog,
     openProductModal,
-    openSearchWithQuery,
     addToCart,
     toggleFavorite,
     favorites,
     showToast,
   } = useStorefrontUi();
-  const [messages, setMessages] = useState<AiChatMessage[]>([WELCOME]);
-  const [hydrated, setHydrated] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [typing, setTyping] = useState(false);
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const chatThreadRef = useRef<HTMLDivElement>(null);
+
+  const [phase, setPhase] = useState<Phase>("intro");
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [answers, setAnswers] = useState<Partial<EmmaAnswers>>({});
+  const [lines, setLines] = useState<ChatLine[]>([{ id: "intro", role: "bot", text: EMMA_INTRO }]);
+  const [resultIds, setResultIds] = useState<string[]>([]);
+  const [resultReasons, setResultReasons] = useState<Record<string, string>>({});
+  const [extraIds, setExtraIds] = useState<string[]>([]);
+  const threadRef = useRef<HTMLDivElement>(null);
   const catalogEnsured = useRef(false);
-  const inputId = useId();
-  const whatsappHref = getWhatsAppHref(WHATSAPP_DEFAULT_MESSAGE);
-
-  useEffect(() => {
-    const stored = loadStoredMessages();
-    if (stored?.length) setMessages(stored);
-    setHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages.slice(-ADVISOR_MAX_TURNS)));
-    } catch {
-      /* quota / private mode */
-    }
-  }, [messages, hydrated]);
 
   useEffect(() => {
     if (catalogProducts.length > 0 || catalogEnsured.current) return;
     catalogEnsured.current = true;
-    setCatalogLoading(true);
-    void ensureFullCatalog().finally(() => setCatalogLoading(false));
+    void ensureFullCatalog();
   }, [catalogProducts.length, ensureFullCatalog]);
 
-  const scrollThreadToBottom = useCallback(() => {
-    const thread = chatThreadRef.current;
-    if (!thread) return;
-    thread.scrollTop = thread.scrollHeight;
+  useEffect(() => {
+    const el = threadRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [lines, phase, selected]);
+
+  const question = EMMA_QUESTIONS[questionIndex];
+  const productMap = useMemo(() => new Map(catalogProducts.map((p) => [p.id, p])), [catalogProducts]);
+
+  const toggleOption = useCallback(
+    (id: string) => {
+      if (!question) return;
+      if (question.mode === "single") {
+        setSelected([id]);
+        return;
+      }
+      // multi rules
+      if (question.id === 2) {
+        if (id === "natural") {
+          setSelected(["natural"]);
+          return;
+        }
+        setSelected((prev) => {
+          const withoutNatural = prev.filter((x) => x !== "natural");
+          return withoutNatural.includes(id) ? withoutNatural.filter((x) => x !== id) : [...withoutNatural, id];
+        });
+        return;
+      }
+      if (question.id === 4) {
+        if (id === "ninguna") {
+          setSelected(["ninguna"]);
+          return;
+        }
+        setSelected((prev) => {
+          const without = prev.filter((x) => x !== "ninguna");
+          return without.includes(id) ? without.filter((x) => x !== id) : [...without, id];
+        });
+        return;
+      }
+      if (question.id === 6) {
+        if (id === "ninguna") {
+          setSelected(["ninguna"]);
+          return;
+        }
+        setSelected((prev) => {
+          const without = prev.filter((x) => x !== "ninguna");
+          return without.includes(id) ? without.filter((x) => x !== id) : [...without, id];
+        });
+        return;
+      }
+      setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    },
+    [question],
+  );
+
+  const startQuiz = useCallback(() => {
+    setLines((prev) => [
+      ...prev,
+      { id: nid(), role: "user", text: EMMA_START_BUTTON },
+      { id: nid(), role: "bot", text: EMMA_QUESTIONS[0]!.prompt },
+    ]);
+    setPhase("question");
+    setQuestionIndex(0);
+    setSelected([]);
   }, []);
 
-  useEffect(() => {
-    scrollThreadToBottom();
-  }, [messages, typing, scrollThreadToBottom]);
+  const finishAndRecommend = useCallback(
+    (finalAnswers: EmmaAnswers) => {
+      setPhase("loading");
+      setLines((prev) => [...prev, { id: nid(), role: "bot", text: "🪄Emma está armando tu rutina✨" }]);
 
-  useEffect(() => {
-    const byId = new Map(catalogProducts.map((p) => [p.id, p]));
-    for (const msg of messages) {
-      for (const id of msg.productIds ?? []) {
-        preloadStorefrontProductImages(byId.get(id));
-      }
-    }
-  }, [messages, catalogProducts]);
-
-  const pushReply = useCallback(
-    (userText: string, options?: PushReplyOptions) => {
-      const userMsg: AiChatMessage = { id: nextId(), role: "user", text: userText };
-      let historyForApi: AdvisorHistoryTurn[] = [];
-
-      setMessages((prev) => {
-        const withUser = [...prev, userMsg].slice(-ADVISOR_MAX_TURNS);
-        historyForApi = toHistoryTurns(withUser);
-        return withUser;
-      });
-
-      setTyping(true);
-
-      const historyTurns = historyForApi;
-      const isInstant = Boolean(options?.quickPromptId);
-      const isFirstTurn = historyTurns.length <= 1;
-
-      void (async () => {
-        if (isInstant && isFirstTurn) {
-          await new Promise((r) => window.setTimeout(r, 90));
-        }
-
-        let reply: AiAdvisorReply | null = null;
-
-        if (options?.quickPromptId && catalogProducts.length > 0 && isFirstTurn) {
-          reply = buildAdvisorReplyForQuickPrompt(options.quickPromptId, catalogProducts, historyTurns);
-        } else if (catalogProducts.length > 0) {
-          const localRules = buildAdvisorReply(userText, catalogProducts, {
-            historyTurns,
-            engine: "rules",
-          });
-          if (localRules.confidence >= ADVISOR_RULES_LLM_THRESHOLD && rulesReplyHasProducts(localRules)) {
-            reply = localRules;
+      window.setTimeout(() => {
+        const built = buildEmmaRoutine(finalAnswers);
+        const ids: string[] = [];
+        const reasons: Record<string, string> = {};
+        for (const item of built.primary) {
+          const id = matchCatalogProductId(catalogProducts, item.productKey);
+          if (id) {
+            ids.push(id);
+            reasons[id] = `${item.step}: ${item.reason}`;
           }
         }
-
-        if (!reply) {
-          reply = await fetchAdvisorReply(userText, historyTurns);
+        const extras: string[] = [];
+        for (const item of built.extras) {
+          const id = matchCatalogProductId(catalogProducts, item.productKey);
+          if (id && !ids.includes(id)) {
+            extras.push(id);
+            reasons[id] = `${item.step}: ${item.reason}`;
+          }
         }
-
-        if (!reply) {
-          reply = buildAdvisorReply(userText, catalogProducts, {
-            historyTurns,
-            engine: "rules",
-          });
-        }
-
-        const botMsgs: AiChatMessage[] = reply.messages.map((m) => ({
-          ...m,
-          id: nextId(),
-        }));
-
-        setMessages((current) => [...current, ...botMsgs].slice(-ADVISOR_MAX_TURNS));
-        setTyping(false);
-      })();
+        setResultIds(ids);
+        setExtraIds(extras);
+        setResultReasons(reasons);
+        setLines((prev) => [
+          ...prev,
+          { id: nid(), role: "bot", text: built.summary, productIds: ids },
+          ...(extras.length
+            ? [
+                {
+                  id: nid(),
+                  role: "bot" as const,
+                  text: "Y ahora la cerecita del helado 🍒💗: un Hair Mist Four Sensations para cerrar con ese toque que obsesiona. Un spray y todo cambia ✨",
+                  productIds: extras,
+                },
+              ]
+            : []),
+          {
+            id: nid(),
+            role: "bot",
+            text: "Si quieres, te explico por qué elegí cada uno o agregamos la rutina al carrito 💗",
+          },
+        ]);
+        setPhase("result");
+      }, 1600);
     },
     [catalogProducts],
   );
 
-  const handleSend = useCallback(() => {
-    const text = draft.trim();
-    if (!text || typing) return;
-    setDraft("");
-    pushReply(text);
-  }, [draft, typing, pushReply]);
+  const confirmAnswer = useCallback(() => {
+    if (!question || selected.length === 0) return;
+    const labels = question.options.filter((o) => selected.includes(o.id)).map((o) => o.label);
+    const reaction = emmaReactionForAnswer(question.id, selected);
 
-  const handleQuickPrompt = useCallback(
-    (promptId: AdvisorQuickPromptId, text: string) => {
-      if (typing) return;
-      pushReply(text, { quickPromptId: promptId });
-    },
-    [typing, pushReply],
-  );
+    const nextAnswers: Partial<EmmaAnswers> = { ...answers };
+    if (question.id === 1) nextAnswers.hairType = selected[0];
+    if (question.id === 2) nextAnswers.processes = selected;
+    if (question.id === 3) nextAnswers.feelings = selected;
+    if (question.id === 4) nextAnswers.scalp = selected;
+    if (question.id === 5) nextAnswers.priority = selected[0];
+    if (question.id === 6) nextAnswers.exposure = selected;
+    setAnswers(nextAnswers);
 
-  const productMap = useMemo(
-    () => new Map(catalogProducts.map((p) => [p.id, p])),
-    [catalogProducts],
-  );
+    setLines((prev) => [
+      ...prev,
+      { id: nid(), role: "user", text: labels.join(" · ") },
+      { id: nid(), role: "bot", text: reaction },
+    ]);
 
-  const scrollToCatalog = useCallback(() => {
-    document.getElementById("products-grid-main")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const nextIndex = questionIndex + 1;
+    if (nextIndex >= EMMA_QUESTIONS.length) {
+      const finalAnswers: EmmaAnswers = {
+        hairType: (nextAnswers.hairType as string) || "normal",
+        processes: nextAnswers.processes || [],
+        feelings: nextAnswers.feelings || [],
+        scalp: nextAnswers.scalp || [],
+        priority: (nextAnswers.priority as string) || "nutrir",
+        exposure: nextAnswers.exposure || [],
+      };
+      finishAndRecommend(finalAnswers);
+      return;
+    }
+
+    setQuestionIndex(nextIndex);
+    setSelected([]);
+    setLines((prev) => [...prev, { id: nid(), role: "bot", text: EMMA_QUESTIONS[nextIndex]!.prompt }]);
+  }, [question, selected, answers, questionIndex, finishAndRecommend]);
+
+  const addRoutineToCart = useCallback(() => {
+    for (const id of resultIds) {
+      const p = productMap.get(id);
+      addToCart(id, p);
+    }
+    showToast("Rutina agregada al carrito 💗", "success", "🛒");
+  }, [resultIds, productMap, addToCart, showToast]);
+
+  const restart = useCallback(() => {
+    setPhase("intro");
+    setQuestionIndex(0);
+    setSelected([]);
+    setAnswers({});
+    setResultIds([]);
+    setExtraIds([]);
+    setResultReasons({});
+    setLines([{ id: "intro", role: "bot", text: EMMA_INTRO }]);
   }, []);
 
-  const renderAction = useCallback(
-    (action: AiAdvisorAction, key: string) => {
-      if (action.kind === "whatsapp" && whatsappHref) {
-        return (
-          <a key={key} href={whatsappHref} className="gb-ai-msg-action" target="_blank" rel="noopener noreferrer">
-            {action.label}
-          </a>
-        );
-      }
-      if (action.kind === "search" && action.query) {
-        return (
-          <button key={key} type="button" className="gb-ai-msg-action" onClick={() => openSearchWithQuery(action.query!)}>
-            {action.label}
-          </button>
-        );
-      }
-      if (action.kind === "catalog") {
-        return (
-          <button key={key} type="button" className="gb-ai-msg-action" onClick={scrollToCatalog}>
-            {action.label}
-          </button>
-        );
-      }
-      if (action.kind === "cart" && action.productId) {
-        return (
-          <button
-            key={key}
-            type="button"
-            className="gb-ai-msg-action"
-            onClick={() => {
-              const p = productMap.get(action.productId!);
-              addToCart(action.productId!, p);
-            }}
-          >
-            {action.label}
-          </button>
-        );
-      }
-      if (action.kind === "wishlist" && action.productId) {
-        return (
-          <button
-            key={key}
-            type="button"
-            className="gb-ai-msg-action"
-            onClick={() => {
-              toggleFavorite(action.productId!);
-              showToast("Guardado en favoritos", "success", "♡");
-            }}
-          >
-            {action.label}
-          </button>
-        );
-      }
-      return null;
-    },
-    [whatsappHref, openSearchWithQuery, scrollToCatalog, addToCart, toggleFavorite, showToast, productMap],
-  );
+  const renderProducts = (ids: string[]) => {
+    const products = ids.map((id) => productMap.get(id)).filter((p): p is StoreProduct => Boolean(p));
+    if (!products.length) return null;
+    return (
+      <JuliProductSlider
+        products={products}
+        hints={Object.fromEntries(ids.map((id) => [id, resultReasons[id] || ""]))}
+        favorites={favorites}
+        onOpen={openProductModal}
+        onAddCart={(id, product) => addToCart(id, product)}
+        onToggleFav={(id, isFav) => {
+          toggleFavorite(id);
+          showToast(isFav ? "Quitado de favoritos" : "Guardado en favoritos", "success", isFav ? "♡" : "♥");
+        }}
+      />
+    );
+  };
 
   return (
-    <section className="gb-ai-section section-pad juli-ai" aria-labelledby="gb-ai-title">
+    <section className="gb-ai-section section-pad juli-ai emma-ai" aria-labelledby="gb-ai-title">
       <div className="gb-ai-bg" aria-hidden>
         <div className="gb-ai-orb gb-ai-orb--1" />
         <div className="gb-ai-orb gb-ai-orb--2" />
@@ -305,26 +268,20 @@ export function BeautyAiAdvisor() {
             transition={{ duration: 0.5 }}
           >
             <span className="gb-ai-pulse" aria-hidden />
-            Juli AI · en vivo
+            Emma · en vivo
           </MotionSpan>
           <h2 id="gb-ai-title" className="gb-ai-title">
-            Hola, soy <em>Juli</em>
+            Hola, soy <em>Emma</em>
           </h2>
-          <p className="gb-ai-kicker">Tu aliada capilar Four Sensations</p>
-          <p className="gb-ai-desc">
-            Cuéntame qué sientes: sequedad, frizz, caída, cuero cabelludo… Yo te escucho y te recomiendo
-            productos reales de la tienda, de la misma casa, para armar tu ritual.
-          </p>
-          <ul className="gb-ai-features">
-            <li>Te entiende</li>
-            <li>Te recomienda lo nuestro</li>
-            <li>Te lleva al carrito</li>
+          <p className="gb-ai-kicker">{EMMA_LEFT_COPY.greeting}</p>
+          <p className="gb-ai-desc">{EMMA_LEFT_COPY.body}</p>
+          <ul className="gb-ai-features emma-hearts">
+            {EMMA_LEFT_COPY.hearts.map((label) => (
+              <li key={label}>
+                <span aria-hidden>💗</span> {label}
+              </li>
+            ))}
           </ul>
-          {catalogLoading ? (
-            <p className="gb-ai-catalog-hint" style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
-              Sincronizando catálogo…
-            </p>
-          ) : null}
         </div>
 
         <MotionDiv
@@ -336,105 +293,114 @@ export function BeautyAiAdvisor() {
         >
           <div className="gb-ai-console-header">
             <span className="gb-ai-avatar-mark" aria-hidden>
-              ♡
+              💗
             </span>
             <div className="gb-ai-console-who">
-              <strong>Juli</strong>
+              <strong>Emma</strong>
               <span>Four Sensations · en línea</span>
             </div>
           </div>
 
-          <div
-            ref={chatThreadRef}
-            className="gb-ai-chat gb-ai-chat--thread"
-            role="log"
-            aria-live="polite"
-            aria-relevant="additions"
-          >
-            {messages.map((msg) => (
+          <div ref={threadRef} className="gb-ai-chat gb-ai-chat--thread" role="log" aria-live="polite">
+            {lines.map((msg) => (
               <div key={msg.id} className={`gb-ai-msg gb-ai-msg--${msg.role}`}>
-                {msg.role === "bot" && <span className="gb-ai-msg-avatar" aria-hidden>♡</span>}
+                {msg.role === "bot" && (
+                  <span className="gb-ai-msg-avatar" aria-hidden>
+                    💗
+                  </span>
+                )}
                 <div className="gb-ai-msg-body">
                   <p>{msg.text}</p>
-                  {msg.productIds && msg.productIds.length > 0 && (
-                    <JuliProductSlider
-                      products={msg.productIds
-                        .map((id) => productMap.get(id))
-                        .filter((p): p is NonNullable<typeof p> => Boolean(p))}
-                      hints={msg.productHints}
-                      favorites={favorites}
-                      onOpen={openProductModal}
-                      onAddCart={(id, product) => addToCart(id, product)}
-                      onToggleFav={(id, isFav) => {
-                        toggleFavorite(id);
-                        showToast(
-                          isFav ? "Quitado de favoritos" : "Guardado en favoritos",
-                          "success",
-                          isFav ? "♡" : "♥",
-                        );
-                      }}
-                    />
-                  )}
-                  {(msg.actions?.length || msg.action) && (
-                    <div className="gb-ai-msg-actions">
-                      {msg.actions?.map((a, i) => renderAction(a, `a-${msg.id}-${i}`))}
-                      {msg.action ? renderAction(msg.action, `a-${msg.id}-single`) : null}
-                    </div>
-                  )}
+                  {msg.productIds?.length ? renderProducts(msg.productIds) : null}
                 </div>
               </div>
             ))}
-            {typing && (
-              <div className="gb-ai-msg gb-ai-msg--bot gb-ai-msg--typing">
-                <span className="gb-ai-msg-avatar" aria-hidden>♡</span>
+            {phase === "loading" ? (
+              <div className="gb-ai-msg gb-ai-msg--bot gb-ai-msg--typing emma-loading">
+                <span className="gb-ai-msg-avatar" aria-hidden>
+                  💗
+                </span>
                 <div className="gb-ai-msg-body">
-                  <span className="gb-ai-typing-bubble" aria-label="Escribiendo">
-                    <span /><span /><span />
-                  </span>
+                  <div className="emma-hearts-loader" aria-label="Emma está armando tu rutina">
+                    <span>💗</span>
+                    <span>💖</span>
+                    <span>💗</span>
+                  </div>
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
 
-          <div className="gb-ai-chips">
-            {QUICK_PROMPTS.map((p) => (
+          {phase === "intro" ? (
+            <div className="gb-ai-chips">
+              <button type="button" className="gb-ai-chip gb-ai-chip--primary" onClick={startQuiz}>
+                {EMMA_START_BUTTON}
+              </button>
+            </div>
+          ) : null}
+
+          {phase === "question" && question ? (
+            <div className="emma-quiz">
+              <div className="gb-ai-chips emma-options">
+                {question.options.map((opt) => {
+                  const active = selected.includes(opt.id);
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      className={`gb-ai-chip${active ? " is-active" : ""}`}
+                      onClick={() => toggleOption(opt.id)}
+                    >
+                      {opt.label}
+                      {opt.hint ? <small className="emma-option-hint">{opt.hint}</small> : null}
+                    </button>
+                  );
+                })}
+              </div>
               <button
-                key={p.id}
+                type="button"
+                className="btn btn-primary emma-continue"
+                disabled={selected.length === 0}
+                onClick={confirmAnswer}
+              >
+                Continuar 💗
+              </button>
+            </div>
+          ) : null}
+
+          {phase === "result" ? (
+            <div className="gb-ai-chips emma-result-actions">
+              <button type="button" className="gb-ai-chip gb-ai-chip--primary" onClick={addRoutineToCart}>
+                Agregar mi rutina al carrito 💗
+              </button>
+              <button
                 type="button"
                 className="gb-ai-chip"
-                disabled={typing}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => handleQuickPrompt(p.id, p.text)}
+                onClick={() =>
+                  setLines((prev) => [
+                    ...prev,
+                    {
+                      id: nid(),
+                      role: "bot",
+                      text:
+                        resultIds
+                          .map((id) => {
+                            const p = productMap.get(id);
+                            return p ? `• ${p.name}: ${resultReasons[id] || "Porque encaja con lo que me contaste."}` : "";
+                          })
+                          .filter(Boolean)
+                          .join("\n") || "Cada producto responde a lo que me contaste en el cuestionario 💗",
+                    },
+                  ])
+                }
               >
-                {p.label}
+                ¿Por qué para mí?
               </button>
-            ))}
-          </div>
-
-          <form
-            className="gb-ai-composer"
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend();
-            }}
-          >
-            <label htmlFor={inputId} className="sr-only">
-              Escribe a Juli
-            </label>
-            <input
-              id={inputId}
-              type="text"
-              className="gb-ai-input"
-              placeholder="Ej. tengo frizz y las puntas muy secas…"
-              value={draft}
-              disabled={typing}
-              onChange={(e) => setDraft(e.target.value)}
-              autoComplete="off"
-            />
-            <button type="submit" className="gb-ai-send" disabled={typing || !draft.trim()} aria-label="Enviar">
-              ↑
-            </button>
-          </form>
+              <button type="button" className="gb-ai-chip" onClick={restart}>
+                Empezar de nuevo
+              </button>
+            </div>
+          ) : null}
         </MotionDiv>
       </div>
     </section>

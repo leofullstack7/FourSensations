@@ -12,6 +12,7 @@ import { isDisplayableImageUrl } from "@/lib/util/image-url";
 import { productHeroThemeFromSlug } from "@/lib/store/product-hero-theme";
 import { getCategoryLabel } from "@/lib/category-labels";
 import { getCatalogProductCopy } from "@/lib/catalog-product-copy";
+import { getProductDisplayName } from "@/lib/product-display-names";
 
 function galleryPool(product: StoreProduct): string[] {
   const seen = new Set<string>();
@@ -29,6 +30,7 @@ export function ProductLandingClient({ product }: { product: StoreProduct }) {
   const { addToCart, toggleFavorite, favorites } = useStorefrontUi();
   const theme = productHeroThemeFromSlug(product.slug || product.id);
   const copy = getCatalogProductCopy(product.name);
+  const displayName = getProductDisplayName(product.name);
   const images = useMemo(() => galleryPool(product), [product]);
   const [activeSrc, setActiveSrc] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -67,7 +69,8 @@ export function ProductLandingClient({ product }: { product: StoreProduct }) {
           <div className="product-hero__fade" aria-hidden />
           <div className="product-hero__copy">
             <p className="product-hero__kicker">{kicker}</p>
-            <h1 className="product-hero__title">{product.name}</h1>
+            <h1 className="product-hero__title">{displayName.title}</h1>
+            {displayName.subtitle ? <p className="product-hero__subtitle">{displayName.subtitle}</p> : null}
             {lead ? <p className="product-hero__hook">{lead}</p> : null}
             <div className="product-hero__pills">
               {copy?.content ? <span>{copy.content}</span> : null}
@@ -95,7 +98,8 @@ export function ProductLandingClient({ product }: { product: StoreProduct }) {
                 </div>
               ) : null}
               <p className="product-buy__brand">{product.brand}</p>
-              <h2 className="product-buy__name">{product.name}</h2>
+              <h2 className="product-buy__name">{displayName.title}</h2>
+              {displayName.subtitle ? <p className="product-buy__subtitle">{displayName.subtitle}</p> : null}
               <div className="product-buy__price">
                 <StoreProductPrice product={product} currentStyle={{ fontSize: 30 }} />
               </div>
