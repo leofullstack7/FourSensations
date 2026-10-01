@@ -66,7 +66,7 @@
 | 05 | Subcategorías + título/subtítulo | **hecho** | `aa1c5df` |
 | 07 | Emma quiz + motor | **hecho** (lettering a mano pendiente de asset) | `aa1c5df` |
 | 21 | Bomba Capilar | **hecho** (Neon + script) | `aa1c5df` |
-| 22–24 | Cuenta pedidos: copy gate + sidebar ayuda + 3 fotos collage | **hecho** | (push siguiente) |
+| 22–24 | Cuenta pedidos: copy gate + sidebar ayuda + 3 fotos collage | **hecho** | `e41000b` |
 
 **Pendientes menores (no bloquean el lote):**
 
@@ -302,4 +302,4 @@
 | 2026-09-30 | 01–04, 06, 08–20 (lote home/footer/cuenta/sobre nosotros) | `240a11d` / `aa86beb` |
 | 2026-09-30 | 05 subcats + títulos, 07 Emma quiz+motor, 21 Bomba Capilar | `aa1c5df` |
 | 2026-09-30 | Doc: mapa de rutas de revisión por ítem | (este archivo) |
-| 2026-09-30 | 22–24 cuenta pedidos: copy, sidebar ayuda, collage | pendiente push |
+| 2026-09-30 | 22–24 cuenta pedidos: copy, sidebar ayuda, collage | `e41000b` |
