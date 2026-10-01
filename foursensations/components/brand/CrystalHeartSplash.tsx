@@ -2,19 +2,22 @@
 
 import Image from "next/image";
 import type { CSSProperties } from "react";
-import heartMark from "@/assets/foursensations/corazon2.png";
+import clubMark from "@/assets/foursensations/el-club-cabellos-perfectos.png";
+import logoOnDark from "@/assets/foursensations/logo2.png";
 
 const SPARKS = [
-  { x: "18%", y: "22%", d: "0s" },
-  { x: "78%", y: "18%", d: "0.35s" },
-  { x: "88%", y: "48%", d: "0.7s" },
-  { x: "12%", y: "58%", d: "0.15s" },
-  { x: "72%", y: "78%", d: "1s" },
-  { x: "28%", y: "82%", d: "0.5s" },
-  { x: "50%", y: "12%", d: "0.9s" },
-  { x: "8%", y: "36%", d: "1.2s" },
-  { x: "92%", y: "70%", d: "0.25s" },
-  { x: "42%", y: "88%", d: "1.4s" },
+  { x: "8%", y: "14%", d: "0s" },
+  { x: "22%", y: "78%", d: "0.4s" },
+  { x: "36%", y: "22%", d: "0.9s" },
+  { x: "48%", y: "88%", d: "0.2s" },
+  { x: "62%", y: "16%", d: "1.1s" },
+  { x: "74%", y: "72%", d: "0.55s" },
+  { x: "88%", y: "28%", d: "0.75s" },
+  { x: "14%", y: "48%", d: "1.3s" },
+  { x: "92%", y: "58%", d: "0.15s" },
+  { x: "58%", y: "42%", d: "1.5s" },
+  { x: "30%", y: "62%", d: "0.65s" },
+  { x: "80%", y: "86%", d: "1.05s" },
 ] as const;
 
 type CrystalHeartSplashProps = {
@@ -30,21 +33,23 @@ export function CrystalHeartSplash({
 }: CrystalHeartSplashProps) {
   const aria =
     mode === "intro"
-      ? "Four Sensations"
+      ? "Four Sensations — El Club de los Cabellos Perfectos"
       : label
         ? `Cargando ${label}`
         : "Cargando Four Sensations";
 
   return (
     <div
-      className={`fs-heart-splash${mode === "page" ? " fs-heart-splash--page" : ""}${exiting ? " is-out" : ""}`}
+      className={`fs-heart-splash fs-heart-splash--${mode}${exiting ? " is-out" : ""}`}
       role="status"
       aria-live="polite"
       aria-busy="true"
       aria-label={aria}
     >
       <div className="fs-heart-splash__void" aria-hidden />
-      <div className="fs-heart-splash__aurora" aria-hidden />
+      <div className="fs-heart-splash__glow fs-heart-splash__glow--a" aria-hidden />
+      <div className="fs-heart-splash__glow fs-heart-splash__glow--b" aria-hidden />
+      <div className="fs-heart-splash__veil" aria-hidden />
       <div className="fs-heart-splash__sparks" aria-hidden>
         {SPARKS.map((s) => (
           <span
@@ -55,31 +60,32 @@ export function CrystalHeartSplash({
         ))}
       </div>
 
-      <div className="fs-heart-splash__stage">
-        <span className="fs-heart-splash__orbit fs-heart-splash__orbit--a" aria-hidden />
-        <span className="fs-heart-splash__orbit fs-heart-splash__orbit--b" aria-hidden />
-        <span className="fs-heart-splash__orbit fs-heart-splash__orbit--c" aria-hidden />
-        <div className="fs-heart-splash__core">
-          <span className="fs-heart-splash__bloom" aria-hidden />
-          <div className="fs-heart-splash__heart-wrap">
-            <Image
-              src={heartMark}
-              alt=""
-              className="fs-heart-splash__heart"
-              width={520}
-              height={520}
-              priority
-            />
-            <span className="fs-heart-splash__sheen" aria-hidden />
-          </div>
-          <span className="fs-heart-splash__diamond" aria-hidden />
+      <div className="fs-heart-splash__brand">
+        <div className="fs-heart-splash__logo-wrap">
+          <Image
+            src={logoOnDark}
+            alt="Four Sensations"
+            className="fs-heart-splash__logo"
+            width={640}
+            height={220}
+            priority
+          />
         </div>
-      </div>
 
-      <div className="fs-heart-splash__copy">
-        <p className="fs-heart-splash__wordmark">Four Sensations</p>
-        <p className="fs-heart-splash__whisper">El Club de los Cabellos Perfectos</p>
-        {label ? <p className="fs-heart-splash__label">{label}</p> : null}
+        <span className="fs-heart-splash__rule" aria-hidden />
+
+        <div className="fs-heart-splash__club-wrap">
+          <Image
+            src={clubMark}
+            alt="El Club de los Cabellos Perfectos"
+            className="fs-heart-splash__club"
+            width={1200}
+            height={720}
+            priority
+          />
+        </div>
+
+        {label && mode !== "intro" ? <p className="fs-heart-splash__label">{label}</p> : null}
       </div>
     </div>
   );

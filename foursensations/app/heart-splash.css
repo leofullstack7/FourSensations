@@ -1,4 +1,4 @@
-/* Splash cristalino Four Sensations — sin barras de progreso. */
+/* Intro / route splash — marca a pantalla completa */
 .fs-heart-splash {
   position: fixed;
   inset: 0;
@@ -7,98 +7,71 @@
   place-items: center;
   overflow: hidden;
   pointer-events: all;
-  background: #5c2d91;
+  background: #3a1658;
   isolation: isolate;
 }
 
 .fs-heart-splash--page {
-  position: fixed;
   min-height: 100dvh;
   z-index: 39990;
 }
 
 .fs-heart-splash.is-out {
-  animation: fs-heart-veil-out 0.55s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: fs-splash-out 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .fs-heart-splash__void {
   position: absolute;
-  inset: -20%;
+  inset: 0;
   background:
-    radial-gradient(ellipse 50% 40% at 50% 42%, rgba(255, 255, 255, 0.18) 0%, transparent 58%),
-    radial-gradient(ellipse 40% 36% at 22% 78%, rgba(196, 84, 122, 0.28) 0%, transparent 55%),
-    radial-gradient(ellipse 36% 32% at 82% 18%, rgba(232, 200, 246, 0.22) 0%, transparent 50%),
-    #5c2d91;
+    radial-gradient(ellipse 70% 55% at 50% 40%, rgba(138, 70, 180, 0.55) 0%, transparent 62%),
+    radial-gradient(ellipse 50% 45% at 15% 85%, rgba(196, 84, 122, 0.28) 0%, transparent 55%),
+    radial-gradient(ellipse 45% 40% at 90% 10%, rgba(232, 200, 246, 0.18) 0%, transparent 50%),
+    linear-gradient(165deg, #4a1d6e 0%, #2e1048 48%, #3a1658 100%);
 }
 
-.fs-heart-splash__aurora {
+.fs-heart-splash__glow {
   position: absolute;
-  width: 55vmax;
-  height: 55vmax;
-  left: 50%;
-  top: 46%;
-  translate: -50% -50%;
   border-radius: 50%;
-  background: conic-gradient(
-    from 0deg,
-    rgba(255, 255, 255, 0.22),
-    rgba(232, 200, 246, 0.2),
-    rgba(196, 84, 122, 0.18),
-    rgba(255, 255, 255, 0.22)
-  );
-  filter: blur(42px);
-  animation: fs-heart-aurora 14s linear infinite;
-  opacity: 0.85;
-}
-
-.fs-heart-splash__stage {
-  position: relative;
-  z-index: 2;
-  width: min(72vw, 460px);
-  aspect-ratio: 1;
-  display: grid;
-  place-items: center;
-}
-
-.fs-heart-splash__orbit {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  translate: -50% -50%;
-  border-radius: 50%;
+  filter: blur(60px);
   pointer-events: none;
+  opacity: 0.55;
 }
 
-.fs-heart-splash__orbit--a {
-  width: 74%;
-  height: 74%;
-  background: conic-gradient(from 80deg, transparent 0 62%, rgba(232, 214, 255, 0.9) 72%, transparent 82%);
-  animation: fs-heart-spin 7.5s linear infinite;
-  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+.fs-heart-splash__glow--a {
+  width: min(90vw, 720px);
+  height: min(90vw, 720px);
+  left: 50%;
+  top: 42%;
+  margin-left: calc(min(90vw, 720px) / -2);
+  margin-top: calc(min(90vw, 720px) / -2);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.22) 0%, rgba(201, 166, 232, 0.18) 35%, transparent 70%);
+  animation: fs-splash-breathe 5.5s ease-in-out infinite;
 }
 
-.fs-heart-splash__orbit--b {
-  width: 94%;
-  height: 94%;
-  background: conic-gradient(from 200deg, transparent 0 68%, rgba(196, 84, 122, 0.75) 78%, transparent 88%);
-  animation: fs-heart-spin 12s linear infinite reverse;
-  opacity: 0.75;
-  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+.fs-heart-splash__glow--b {
+  width: min(70vw, 480px);
+  height: min(70vw, 480px);
+  right: -8%;
+  bottom: -12%;
+  background: radial-gradient(circle, rgba(196, 84, 122, 0.35) 0%, transparent 68%);
+  animation: fs-splash-breathe 7s ease-in-out infinite reverse;
 }
 
-.fs-heart-splash__orbit--c {
-  width: 52%;
-  height: 52%;
-  border: 1px dashed rgba(165, 129, 187, 0.32);
-  animation: fs-heart-spin 18s linear infinite;
+.fs-heart-splash__veil {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(20, 6, 36, 0.35) 0%, transparent 28%, transparent 72%, rgba(20, 6, 36, 0.45) 100%),
+    radial-gradient(ellipse 80% 70% at 50% 50%, transparent 40%, rgba(18, 4, 32, 0.45) 100%);
+  pointer-events: none;
 }
 
 .fs-heart-splash__sparks {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 1;
 }
 
 .fs-heart-splash__spark {
@@ -108,216 +81,143 @@
   left: var(--x);
   top: var(--y);
   border-radius: 50%;
-  background: #f4e9ff;
-  box-shadow: 0 0 10px 2px rgba(232, 214, 255, 0.8);
-  animation: fs-heart-spark 2.8s ease-in-out infinite;
+  background: #fff;
+  box-shadow: 0 0 12px 3px rgba(255, 240, 255, 0.75);
+  animation: fs-splash-spark 3.2s ease-in-out infinite;
   animation-delay: var(--d);
   opacity: 0;
 }
 
-.fs-heart-splash__core {
+.fs-heart-splash__brand {
   position: relative;
   z-index: 2;
-  width: min(58vw, 280px);
-  aspect-ratio: 1;
-  display: grid;
-  place-items: center;
+  width: min(92vw, 720px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(18px, 3.5vh, 36px);
+  padding: clamp(24px, 5vh, 48px) 16px;
+  text-align: center;
 }
 
-.fs-heart-splash__bloom {
-  position: absolute;
-  inset: 8%;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, transparent 68%);
-  filter: blur(18px);
-  animation: fs-heart-bloom 2.4s ease-in-out infinite;
+.fs-heart-splash__logo-wrap {
+  width: min(78vw, 420px);
+  animation: fs-splash-logo-in 1.15s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.fs-heart-splash__heart-wrap {
-  position: relative;
-  z-index: 2;
-  width: 78%;
-  animation: fs-heart-arrive 1.15s cubic-bezier(0.16, 1, 0.3, 1) both,
-    fs-heart-beat 2.2s ease-in-out 1.15s infinite;
-}
-
-.fs-heart-splash__heart {
+.fs-heart-splash__logo {
   display: block;
   width: 100%;
   height: auto;
+  filter: drop-shadow(0 8px 32px rgba(0, 0, 0, 0.35)) drop-shadow(0 0 28px rgba(255, 255, 255, 0.18));
+}
+
+.fs-heart-splash__rule {
+  display: block;
+  width: min(42vw, 180px);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.85), transparent);
+  transform-origin: center;
+  animation: fs-splash-rule 1s cubic-bezier(0.16, 1, 0.3, 1) 0.45s both;
+}
+
+.fs-heart-splash__club-wrap {
+  width: min(88vw, 560px);
+  animation: fs-splash-club-in 1.25s cubic-bezier(0.16, 1, 0.3, 1) 0.55s both;
+}
+
+.fs-heart-splash__club {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* PNG: tipografía blanca sobre negro → elimina el negro sobre el fondo morado */
   mix-blend-mode: screen;
-  filter: drop-shadow(0 0 32px rgba(255, 255, 255, 0.45)) drop-shadow(0 8px 28px rgba(42, 12, 72, 0.35));
-}
-
-.fs-heart-splash__sheen {
-  position: absolute;
-  inset: -8%;
-  background: linear-gradient(
-    115deg,
-    transparent 32%,
-    rgba(255, 255, 255, 0.18) 46%,
-    rgba(232, 214, 255, 0.55) 50%,
-    rgba(255, 255, 255, 0.12) 54%,
-    transparent 68%
-  );
-  mix-blend-mode: screen;
-  animation: fs-heart-sheen 2.6s ease-in-out 0.4s infinite;
-  pointer-events: none;
-}
-
-.fs-heart-splash__diamond {
-  position: absolute;
-  z-index: 3;
-  width: 14px;
-  height: 14px;
-  rotate: 45deg;
-  background: linear-gradient(135deg, #fff 0%, #cbb4e0 42%, #8d6aab 100%);
-  box-shadow:
-    0 0 16px rgba(255, 255, 255, 0.85),
-    0 0 32px rgba(165, 129, 187, 0.7);
-  animation: fs-heart-diamond 1.8s ease-in-out infinite;
-}
-
-.fs-heart-splash__copy {
-  position: absolute;
-  z-index: 2;
-  left: 50%;
-  bottom: max(8vh, 36px);
-  translate: -50% 0;
-  text-align: center;
-  width: min(90vw, 420px);
-}
-
-.fs-heart-splash__wordmark {
-  margin: 0;
-  font-family: var(--font-body, Nunito, system-ui, sans-serif);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.46em;
-  text-indent: 0.46em;
-  text-transform: uppercase;
-  color: #f7f0ff;
-  animation: fs-heart-text 1s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;
-}
-
-.fs-heart-splash__whisper {
-  margin: 10px 0 0;
-  font-family: var(--font-accent, "Great Vibes", cursive);
-  font-size: clamp(1.35rem, 4vw, 1.85rem);
-  font-weight: 400;
-  color: #e8c8d6;
-  animation: fs-heart-text 1s cubic-bezier(0.16, 1, 0.3, 1) 0.55s both;
+  filter: drop-shadow(0 10px 36px rgba(0, 0, 0, 0.28));
 }
 
 .fs-heart-splash__label {
-  margin: 14px 0 0;
+  margin: 4px 0 0;
+  font-family: var(--font-body, Nunito, system-ui, sans-serif);
   font-size: 11px;
-  letter-spacing: 0.22em;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-indent: 0.28em;
   text-transform: uppercase;
-  color: rgba(247, 240, 255, 0.55);
-  animation: fs-heart-text 0.8s ease 0.7s both;
+  color: rgba(247, 240, 255, 0.62);
+  animation: fs-splash-fade-up 0.8s ease 0.85s both;
 }
 
-@keyframes fs-heart-arrive {
+/* Intro: composición más amplia, más aire vertical */
+.fs-heart-splash--intro .fs-heart-splash__brand {
+  min-height: min(78dvh, 720px);
+  gap: clamp(22px, 4.5vh, 44px);
+}
+
+.fs-heart-splash--intro .fs-heart-splash__logo-wrap {
+  width: min(82vw, 480px);
+}
+
+.fs-heart-splash--intro .fs-heart-splash__club-wrap {
+  width: min(92vw, 640px);
+}
+
+/* Route: un poco más compacto */
+.fs-heart-splash--route .fs-heart-splash__logo-wrap {
+  width: min(62vw, 300px);
+}
+
+.fs-heart-splash--route .fs-heart-splash__club-wrap {
+  width: min(72vw, 380px);
+}
+
+.fs-heart-splash--route .fs-heart-splash__logo-wrap,
+.fs-heart-splash--route .fs-heart-splash__club-wrap,
+.fs-heart-splash--route .fs-heart-splash__rule {
+  animation-duration: 0.7s;
+}
+
+@keyframes fs-splash-logo-in {
   0% {
     opacity: 0;
-    transform: scale(0.55) rotate(-8deg);
+    transform: translateY(18px) scale(0.92);
+    filter: blur(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes fs-splash-club-in {
+  0% {
+    opacity: 0;
+    transform: translateY(28px) scale(0.94);
     filter: blur(8px);
   }
-  70% {
-    opacity: 1;
-    filter: blur(0);
-  }
   100% {
     opacity: 1;
-    transform: scale(1) rotate(0deg);
+    transform: translateY(0) scale(1);
     filter: blur(0);
   }
 }
 
-@keyframes fs-heart-beat {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  40% {
-    transform: scale(1.045);
-  }
-  55% {
-    transform: scale(1.01);
-  }
-}
-
-@keyframes fs-heart-sheen {
+@keyframes fs-splash-rule {
   0% {
-    transform: translateX(-70%) rotate(12deg);
     opacity: 0;
+    transform: scaleX(0);
   }
-  25% {
+  100% {
     opacity: 1;
-  }
-  100% {
-    transform: translateX(70%) rotate(12deg);
-    opacity: 0;
+    transform: scaleX(1);
   }
 }
 
-@keyframes fs-heart-bloom {
-  0%,
-  100% {
-    opacity: 0.45;
-    transform: scale(0.92);
-  }
-  50% {
-    opacity: 0.9;
-    transform: scale(1.08);
-  }
-}
-
-@keyframes fs-heart-diamond {
-  0%,
-  100% {
-    transform: rotate(45deg) scale(0.75);
-    opacity: 0.65;
-  }
-  50% {
-    transform: rotate(45deg) scale(1.15);
-    opacity: 1;
-  }
-}
-
-@keyframes fs-heart-spin {
-  to {
-    rotate: 360deg;
-  }
-}
-
-@keyframes fs-heart-aurora {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes fs-heart-spark {
-  0%,
-  100% {
-    opacity: 0;
-    transform: scale(0.4);
-  }
-  40% {
-    opacity: 1;
-    transform: scale(1.3);
-  }
-  70% {
-    opacity: 0.2;
-  }
-}
-
-@keyframes fs-heart-text {
+@keyframes fs-splash-fade-up {
   from {
     opacity: 0;
-    transform: translateY(12px);
-    letter-spacing: 0.7em;
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -325,10 +225,60 @@
   }
 }
 
-@keyframes fs-heart-veil-out {
-  to {
+@keyframes fs-splash-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.7;
+  }
+}
+
+.fs-heart-splash__glow--b {
+  animation-name: fs-splash-breathe-b;
+}
+
+@keyframes fs-splash-breathe-b {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.65;
+  }
+}
+
+@keyframes fs-splash-spark {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.4);
+  }
+  70% {
+    opacity: 0.15;
+  }
+}
+
+@keyframes fs-splash-out {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+  100% {
     opacity: 0;
     visibility: hidden;
+    filter: blur(12px);
+    transform: scale(1.04);
   }
 }
 
@@ -336,21 +286,30 @@ body.fs-heart-lock {
   overflow: hidden;
 }
 
+@media (max-width: 640px) {
+  .fs-heart-splash--intro .fs-heart-splash__logo-wrap {
+    width: min(78vw, 320px);
+  }
+
+  .fs-heart-splash--intro .fs-heart-splash__club-wrap {
+    width: min(90vw, 420px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .fs-heart-splash__aurora,
-  .fs-heart-splash__orbit,
-  .fs-heart-splash__spark,
-  .fs-heart-splash__sheen,
-  .fs-heart-splash__bloom,
-  .fs-heart-splash__diamond {
+  .fs-heart-splash__glow,
+  .fs-heart-splash__spark {
     animation: none;
   }
 
-  .fs-heart-splash__heart-wrap {
-    animation: fs-heart-text 0.4s ease both;
+  .fs-heart-splash__logo-wrap,
+  .fs-heart-splash__club-wrap,
+  .fs-heart-splash__rule,
+  .fs-heart-splash__label {
+    animation: fs-splash-fade-up 0.35s ease both;
   }
 
   .fs-heart-splash.is-out {
-    animation-duration: 0.2s;
+    animation-duration: 0.25s;
   }
 }

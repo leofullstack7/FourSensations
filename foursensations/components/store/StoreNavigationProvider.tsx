@@ -27,8 +27,8 @@ type StoreNavigationContextValue = {
 
 const StoreNavigationContext = createContext<StoreNavigationContextValue | null>(null);
 
-const INTRO_MS = 2800;
-const INTRO_OUT_MS = 550;
+const INTRO_MS = 3400;
+const INTRO_OUT_MS = 700;
 const ROUTE_MIN_MS = 1500;
 const ROUTE_OUT_MS = 450;
 
