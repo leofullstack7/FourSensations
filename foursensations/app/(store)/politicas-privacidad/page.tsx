@@ -15,7 +15,7 @@ export default function PoliticasPrivacidadPage() {
     <LegalPageShell
       slug="politicas-privacidad"
       heroTitle="Protección de datos personales"
-      heroSubtitle="Tratamos tu información con el cuidado que merece tu cabello"
+      heroSubtitle="Tu información, tus derechos y nuestra responsabilidad."
       footerNote="Política de FOUR SENSATIONS S.A.S. · NIT 901.038.691-2"
     >
       <div className="legal-intro">
@@ -50,51 +50,70 @@ export default function PoliticasPrivacidadPage() {
         </p>
       </LegalRevealSection>
 
-      <LegalRevealSection number={4} title="Datos sensibles y menores" variant="blush">
+      <LegalRevealSection number={4} title="Datos sensibles" variant="blush">
         <p>
-          Los datos sensibles se tratan solo cuando es indispensable, informando finalidad y carácter opcional cuando
-          aplique, con autorización explícita si la ley lo exige. Nunca se condiciona un servicio a dar información
-          sensible innecesaria.
-        </p>
-        <p>
-          La recolección no está dirigida específicamente a menores. Si excepcionalmente aplica, se siguen las reglas
-          especiales de la ley colombiana (interés superior del menor y autorización del representante legal).
+          El tratamiento de datos sensibles se realizará únicamente cuando sea necesario y exista una base legal que lo
+          permita. Cuando se requiera autorización, esta será previa, expresa e informada, indicando la finalidad del
+          tratamiento y el carácter facultativo de suministrar este tipo de información.
         </p>
       </LegalRevealSection>
 
-      <LegalRevealSection number={5} title="Derechos del titular (Ley 1581 de 2012)" variant="light">
-        <ul>
-          <li>Conocer, acceder, actualizar y rectificar tus datos.</li>
-          <li>Pedir prueba de la autorización y ser informado del uso.</li>
-          <li>Consultar, reclamar, suprimir cuando proceda y revocar autorización.</li>
-          <li>Quejarte ante la SIC y abstenerte de responder preguntas sobre información sensible facultativa.</li>
+      <LegalRevealSection number={5} title="Datos de niños, niñas y adolescentes" variant="light">
+        <p>
+          La recolección de información de menores de edad no constituye una finalidad habitual de Four Sensations.
+          Cuando excepcionalmente sea necesario tratar estos datos, se respetará su interés superior y sus derechos
+          fundamentales, aplicando las condiciones y autorizaciones exigidas por la legislación colombiana.
+        </p>
+      </LegalRevealSection>
+
+      <LegalRevealSection number={6} title="Derechos del titular (Ley 1581 de 2012)" variant="blush">
+        <p>Como titular de tus datos personales puedes:</p>
+        <ul className="legal-mt-md">
+          <li>Conocer, actualizar y rectificar tus datos personales.</li>
+          <li>Solicitar prueba de la autorización, cuando corresponda.</li>
+          <li>Solicitar información sobre el uso dado a tus datos.</li>
+          <li>Acceder gratuitamente a tus datos personales objeto de tratamiento.</li>
+          <li>Solicitar la supresión de tus datos o revocar la autorización cuando legalmente proceda.</li>
+          <li>
+            Presentar quejas ante la Superintendencia de Industria y Comercio, una vez cumplidos los requisitos legales
+            aplicables.
+          </li>
+          <li>
+            Abstenerte de responder preguntas sobre datos sensibles o datos de niños, niñas y adolescentes cuando
+            tengan carácter facultativo.
+          </li>
         </ul>
       </LegalRevealSection>
 
-      <LegalRevealSection number={6} title="Consultas y reclamos" variant="blush">
+      <LegalRevealSection number={7} title="Consultas y reclamos" variant="light">
         <ul>
           <li>
-            <strong>Consultas:</strong> respuesta en máximo 10 días hábiles (prorrogable 5 días hábiles adicionales
-            informando el motivo).
+            <strong>Consultas:</strong> respuesta en máximo 10 días hábiles; si no puede atenderse en ese plazo, se
+            informa la demora y la nueva fecha no puede exceder 5 días hábiles adicionales.
           </li>
           <li>
-            <strong>Reclamos:</strong> si está incompleto, se requiere completar en 5 días hábiles (se entiende
-            desistido si pasan 2 meses sin respuesta). Completo: respuesta en máximo 15 días hábiles (prorrogable 8
-            días hábiles adicionales informando el motivo).
+            <strong>Reclamos:</strong> si está incompleto, se requiere al interesado dentro de 5 días hábiles; si pasan
+            2 meses sin aportar lo solicitado, se entiende desistido. El término para resolver un reclamo completo es
+            máximo 15 días hábiles, prorrogables hasta 8 días hábiles adicionales informando la razón.
           </li>
         </ul>
         <p className="legal-muted legal-mt-md">
-          Canal: el mismo correo, WhatsApp y dirección de arriba. Aplicamos medidas técnicas, administrativas y humanas
-          razonables; la confidencialidad puede mantenerse tras terminar la relación.
+          Canales de atención: puedes presentar tus consultas o reclamos a través de nuestro correo electrónico,
+          WhatsApp o en nuestra dirección física indicada al inicio de esta política. Aplicamos medidas técnicas,
+          administrativas y humanas razonables; la confidencialidad puede mantenerse tras terminar la relación.
         </p>
       </LegalRevealSection>
 
-      <LegalRevealSection number={7} title="Encargados y terceros" variant="light">
-        <ul>
-          <li>Transportadoras (Envía, Interrapidísimo) con los datos necesarios para la entrega.</li>
-          <li>Pasarelas de pago habilitadas (hoy ePayco) para procesar transacciones. No almacenamos datos de tarjeta.</li>
-          <li>No vendemos tu información a terceros para publicidad de terceros.</li>
-        </ul>
+      <LegalRevealSection number={8} title="Encargados del tratamiento y terceros" variant="blush">
+        <p>
+          Para prestar nuestros servicios podemos compartir únicamente la información necesaria con terceros o
+          encargados que intervienen en la operación, como transportadoras, proveedores tecnológicos, plataformas de
+          comercio electrónico, pasarelas de pago y otros proveedores necesarios para procesar compras, pagos, entregas
+          y comunicaciones autorizadas.
+        </p>
+        <p className="legal-mt-md">
+          Four Sensations no vende tus datos personales a terceros con fines publicitarios.
+        </p>
       </LegalRevealSection>
     </LegalPageShell>
   );

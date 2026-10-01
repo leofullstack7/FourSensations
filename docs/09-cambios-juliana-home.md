@@ -56,6 +56,7 @@
 | 23 | Cuenta · sidebar ayuda | [/cuenta/pedidos](https://foursensations.onrender.com/cuenta/pedidos) (columna der.) | ¿Necesitas ayuda? + WA + envío + puntos físicos Manizales |
 | 24 | Cuenta · collage hero | [/cuenta/pedidos](https://foursensations.onrender.com/cuenta/pedidos) (hero der.) | 3 fotos nuevas Juliana (`/cuenta/hero-collage-*.jpg`) |
 | 25 | Políticas envío · copy | [/politicas-envio](https://foursensations.onrender.com/politicas-envio) | Subtítulo, cobertura, tono suave en novedades/cambios/garantía/retracto/reversión |
+| 26 | Políticas privacidad · copy | [/politicas-privacidad](https://foursensations.onrender.com/politicas-privacidad) | Subtítulo serio; sensibles/menores separados; derechos; canales; encargados |
 
 ---
 
@@ -69,6 +70,7 @@
 | 21 | Bomba Capilar | **hecho** (Neon + script) | `aa1c5df` |
 | 22–24 | Cuenta pedidos: copy gate + sidebar ayuda + 3 fotos collage | **hecho** | `e41000b` |
 | 25 | Políticas de envío: tono + cobertura + textos Juliana | **hecho** | `222c767` |
+| 26 | Políticas de privacidad: tono serio + textos Juliana | **hecho** | pendiente push |
 
 **Pendientes menores (no bloquean el lote):**
 
@@ -308,6 +310,18 @@
 - **Archivos:** `app/(store)/politicas-envio/page.tsx`, `lib/storefront-policies.ts`  
 - **Estado:** hecho  
 
+### 26 — Políticas de privacidad (tono serio)
+
+- **Revisar:** https://foursensations.onrender.com/politicas-privacidad  
+- **Esperado:**
+  1. Subtítulo: *Tu información, tus derechos y nuestra responsabilidad.* (sin frase del cabello)  
+  2. **Datos sensibles** y **Datos de niños, niñas y adolescentes** como secciones separadas  
+  3. Derechos del titular ampliados (lista Juliana)  
+  4. Canales de atención reformulados  
+  5. Título **Encargados del tratamiento y terceros** + párrafo operativo + “no vende datos”  
+- **Archivo:** `app/(store)/politicas-privacidad/page.tsx`  
+- **Estado:** hecho  
+
 ---
 
 ## Log de avance
@@ -319,3 +333,4 @@
 | 2026-09-30 | Doc: mapa de rutas de revisión por ítem | (este archivo) |
 | 2026-09-30 | 22–24 cuenta pedidos: copy, sidebar ayuda, collage | `e41000b` |
 | 2026-09-30 | 25 políticas de envío (tono Juliana) | `222c767` |
+| 2026-09-30 | 26 políticas de privacidad (tono Juliana) | pendiente push |
