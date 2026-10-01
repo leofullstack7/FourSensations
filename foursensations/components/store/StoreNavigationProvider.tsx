@@ -7,6 +7,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -27,10 +28,10 @@ type StoreNavigationContextValue = {
 
 const StoreNavigationContext = createContext<StoreNavigationContextValue | null>(null);
 
-const INTRO_MS = 3400;
-const INTRO_OUT_MS = 700;
-const ROUTE_MIN_MS = 1500;
-const ROUTE_OUT_MS = 450;
+const INTRO_MS = 2000;
+const INTRO_OUT_MS = 400;
+const ROUTE_MIN_MS = 900;
+const ROUTE_OUT_MS = 350;
 
 export function useStoreNavigation(): StoreNavigationContextValue {
   const ctx = useContext(StoreNavigationContext);
@@ -193,7 +194,7 @@ export function StoreNavigationProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const hold = reduce ? 700 : INTRO_MS;
+    const hold = reduce ? 500 : INTRO_MS;
     const t = window.setTimeout(() => {
       setIntroExiting(true);
       window.setTimeout(() => setIntroOpen(false), INTRO_OUT_MS);
@@ -201,7 +202,7 @@ export function StoreNavigationProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(t);
   }, []);
 
-  useEffect(() => setPortalReady(true), []);
+  useLayoutEffect(() => setPortalReady(true), []);
 
   useEffect(() => () => clearTimers(), [clearTimers]);
 

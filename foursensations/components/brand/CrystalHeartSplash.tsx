@@ -1,24 +1,21 @@
 "use client";
 
-import Image from "next/image";
 import type { CSSProperties } from "react";
-import clubMark from "@/assets/foursensations/el-club-cabellos-perfectos.png";
-import logoOnDark from "@/assets/foursensations/logo2.png";
 
 const SPARKS = [
-  { x: "8%", y: "14%", d: "0s" },
-  { x: "22%", y: "78%", d: "0.4s" },
-  { x: "36%", y: "22%", d: "0.9s" },
-  { x: "48%", y: "88%", d: "0.2s" },
-  { x: "62%", y: "16%", d: "1.1s" },
-  { x: "74%", y: "72%", d: "0.55s" },
-  { x: "88%", y: "28%", d: "0.75s" },
-  { x: "14%", y: "48%", d: "1.3s" },
-  { x: "92%", y: "58%", d: "0.15s" },
-  { x: "58%", y: "42%", d: "1.5s" },
-  { x: "30%", y: "62%", d: "0.65s" },
-  { x: "80%", y: "86%", d: "1.05s" },
+  { x: "10%", y: "16%", d: "0s" },
+  { x: "24%", y: "78%", d: "0.35s" },
+  { x: "48%", y: "12%", d: "0.7s" },
+  { x: "72%", y: "74%", d: "0.2s" },
+  { x: "88%", y: "28%", d: "0.55s" },
+  { x: "16%", y: "48%", d: "0.9s" },
+  { x: "84%", y: "58%", d: "0.15s" },
+  { x: "58%", y: "86%", d: "1s" },
 ] as const;
+
+/** Assets livianos en /public (sin pasar por el optimizador de Next). */
+const LOGO_SRC = "/brand/splash/logo-fs.webp";
+const CLUB_SRC = "/brand/splash/el-club.webp";
 
 type CrystalHeartSplashProps = {
   mode?: "intro" | "route" | "page";
@@ -62,26 +59,22 @@ export function CrystalHeartSplash({
 
       <div className="fs-heart-splash__brand">
         <div className="fs-heart-splash__logo-wrap">
-          <Image
-            src={logoOnDark}
-            alt="Four Sensations"
-            className="fs-heart-splash__logo"
-            width={640}
-            height={220}
-            priority
-          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={LOGO_SRC} alt="Four Sensations" className="fs-heart-splash__logo" width={520} height={180} decoding="async" fetchPriority="high" />
         </div>
 
         <span className="fs-heart-splash__rule" aria-hidden />
 
         <div className="fs-heart-splash__club-wrap">
-          <Image
-            src={clubMark}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={CLUB_SRC}
             alt="El Club de los Cabellos Perfectos"
             className="fs-heart-splash__club"
-            width={1200}
-            height={720}
-            priority
+            width={900}
+            height={540}
+            decoding="async"
+            fetchPriority="high"
           />
         </div>
 

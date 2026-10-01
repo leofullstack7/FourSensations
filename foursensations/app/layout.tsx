@@ -15,6 +15,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
+      <head>
+        <link rel="preload" as="image" href="/brand/splash/logo-fs.webp" type="image/webp" />
+        <link rel="preload" as="image" href="/brand/splash/el-club.webp" type="image/webp" />
+      </head>
       <body>
         <Providers>{children}</Providers>
       </body>

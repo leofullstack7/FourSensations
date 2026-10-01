@@ -17,7 +17,7 @@
 }
 
 .fs-heart-splash.is-out {
-  animation: fs-splash-out 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: fs-splash-out 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .fs-heart-splash__void {
@@ -103,7 +103,7 @@
 
 .fs-heart-splash__logo-wrap {
   width: min(78vw, 420px);
-  animation: fs-splash-logo-in 1.15s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fs-splash-logo-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .fs-heart-splash__logo {
@@ -119,20 +119,19 @@
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.85), transparent);
   transform-origin: center;
-  animation: fs-splash-rule 1s cubic-bezier(0.16, 1, 0.3, 1) 0.45s both;
+  animation: fs-splash-rule 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both;
 }
 
 .fs-heart-splash__club-wrap {
   width: min(88vw, 560px);
-  animation: fs-splash-club-in 1.25s cubic-bezier(0.16, 1, 0.3, 1) 0.55s both;
+  animation: fs-splash-club-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.22s both;
 }
 
 .fs-heart-splash__club {
   display: block;
   width: 100%;
   height: auto;
-  /* PNG: tipografía blanca sobre negro → elimina el negro sobre el fondo morado */
-  mix-blend-mode: screen;
+  /* PNG ya convertido a blanco con alpha — sin mix-blend (más rápido y nítido) */
   filter: drop-shadow(0 10px 36px rgba(0, 0, 0, 0.28));
 }
 
