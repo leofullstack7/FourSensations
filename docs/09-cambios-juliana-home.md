@@ -57,6 +57,7 @@
 | 24 | Cuenta · collage hero | [/cuenta/pedidos](https://foursensations.onrender.com/cuenta/pedidos) (hero der.) | 3 fotos nuevas Juliana (`/cuenta/hero-collage-*.jpg`) |
 | 25 | Políticas envío · copy | [/politicas-envio](https://foursensations.onrender.com/politicas-envio) | Subtítulo, cobertura, tono suave en novedades/cambios/garantía/retracto/reversión |
 | 26 | Políticas privacidad · copy | [/politicas-privacidad](https://foursensations.onrender.com/politicas-privacidad) | Subtítulo serio; sensibles/menores separados; derechos; canales; encargados |
+| 27 | Capilar · hero + 3 cards | [/categoria/cuidado-capilar](https://foursensations.onrender.com/categoria/cuidado-capilar) | Copy antojo Juliana + CTA DESCUBRE TODO! |
 
 ---
 
@@ -71,6 +72,7 @@
 | 22–24 | Cuenta pedidos: copy gate + sidebar ayuda + 3 fotos collage | **hecho** | `e41000b` |
 | 25 | Políticas de envío: tono + cobertura + textos Juliana | **hecho** | `222c767` |
 | 26 | Políticas de privacidad: tono serio + textos Juliana | **hecho** | `4d96fb9` |
+| 27 | Cuidado capilar: hero antojo + 3 cards + CTA | **hecho** | pendiente push |
 
 **Pendientes menores (no bloquean el lote):**
 
@@ -322,6 +324,17 @@
 - **Archivo:** `app/(store)/politicas-privacidad/page.tsx`  
 - **Estado:** hecho  
 
+### 27 — Cuidado capilar · hero + 3 cuadros (`@img1`, `@img2`)
+
+- **Revisar:** https://foursensations.onrender.com/categoria/cuidado-capilar  
+- **Esperado:**
+  - Headline: *Tu cabello está a punto de conocer sus nuevas obsesiones 💗*  
+  - Párrafo fórmulas + línea *HAIR GLOW UP*  
+  - CTA: **DESCUBRE TODO!**  
+  - 3 cards antojo: PARA CADA HAIR MOOD · TU PELO EN SU BEST ERA · ENCUENTRA TU NUEVA OBSESIÓN  
+- **Archivo:** `lib/category-landing-theme.ts`  
+- **Estado:** hecho  
+
 ---
 
 ## Log de avance
@@ -334,3 +347,4 @@
 | 2026-09-30 | 22–24 cuenta pedidos: copy, sidebar ayuda, collage | `e41000b` |
 | 2026-09-30 | 25 políticas de envío (tono Juliana) | `222c767` |
 | 2026-09-30 | 26 políticas de privacidad (tono Juliana) | `4d96fb9` |
+| 2026-09-30 | 27 cuidado capilar hero + cards | pendiente push |

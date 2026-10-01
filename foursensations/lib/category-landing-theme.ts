@@ -29,15 +29,28 @@ const defaults = (label: string): CategoryLandingCopy => ({
 const bySlug: Record<string, Partial<CategoryLandingCopy>> = {
   "cuidado-capilar": {
     eyebrow: "Cuidado capilar · Club de los Cabellos Perfectos",
-    headline: "Tu cabello, con ciencia y encanto",
+    headline: "Tu cabello está a punto de conocer sus nuevas obsesiones 💗",
     subtitle:
-      "Tratamientos, shampoo y acondicionador, crecimiento, detox, finalizadores, Hair Mist, puntas y pre-shampoo. Cada línea Four Sensations nace para un gesto concreto.",
-    ctaExplore: "Ver todo el cuidado capilar",
-    commercialLine: "Arma tu protocolo: proteína, nutrición, cuero cabelludo o un aceite que selle el look.",
+      "Fórmulas creadas para nutrir, reparar, proteger, fortalecer y transformar tu rutina capilar, con ingredientes increíbles, texturas que vas a amar y resultados que se sienten desde el primer uso✨",
+    ctaExplore: "DESCUBRE TODO!",
+    commercialLine:
+      "Desde la raíz hasta las puntas, aquí empieza ese HAIR GLOW UP que tu cabello estaba pidiendo.",
     benefits: [
-      { icon: "🧬", title: "Protocolos reales", text: "Ocho familias: Tratamientos, Shampoo y Acondicionador, Crecimiento, Detox, Finalizadores, Hair Mist, Puntas y Pre-Shampoo." },
-      { icon: "✨", title: "Resultado que se ve", text: "Menos frizz, más brillo, fibra nutrida y cuero cabelludo en calma." },
-      { icon: "🚚", title: "De Manizales a tu casa", text: "Pedidos preparados en máximo 2 días hábiles, con cobertura nacional." },
+      {
+        icon: "👩🏼‍🦱",
+        title: "PARA CADA HAIR MOOD",
+        text: "Resequedad, frizz, daño, grasa, caída o falta de brillo… aquí hay un favorito esperando por tu cabello.",
+      },
+      {
+        icon: "🌸✨",
+        title: "TU PELO EN SU BEST ERA",
+        text: "Productos pensados para llevar tu rutina a otro nivel y sacar la mejor versión de tu cabello",
+      },
+      {
+        icon: "🎀",
+        title: "ENCUENTRA TU NUEVA OBSESIÓN",
+        text: "Una Four Girl nunca tiene demasiados favoritos 💗 Prepárate para encontrar el próximo que no vas a querer soltar.",
+      },
     ],
   },
   accesorios: {
