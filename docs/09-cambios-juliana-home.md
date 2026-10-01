@@ -74,7 +74,7 @@
 | 25 | Políticas de envío: tono + cobertura + textos Juliana | **hecho** | `222c767` |
 | 26 | Políticas de privacidad: tono serio + textos Juliana | **hecho** | `4d96fb9` |
 | 27 | Cuidado capilar: hero antojo + 3 cards + CTA | **hecho** | `a642aae` |
-| 28 | Loader intro: logo + Club PNG fullscreen | **hecho** | pendiente push |
+| 28 | Loader intro: logo + Club PNG fullscreen | **hecho** | `6f25d9d` |
 
 **Pendientes menores (no bloquean el lote):**
 
@@ -358,4 +358,4 @@
 | 2026-09-30 | 25 políticas de envío (tono Juliana) | `222c767` |
 | 2026-09-30 | 26 políticas de privacidad (tono Juliana) | `4d96fb9` |
 | 2026-09-30 | 27 cuidado capilar hero + cards | `a642aae` |
-| 2026-09-30 | 28 loader intro logo + Club PNG | pendiente push |
+| 2026-09-30 | 28 loader intro logo + Club PNG | `6f25d9d` |
