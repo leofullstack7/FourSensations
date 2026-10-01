@@ -3,11 +3,41 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import collageA from "@/assets/productos/FS001 Proteína 10 en 1/FS001-1.webp";
-import collageB from "@/assets/productos/FS002 Dulce Renacer/FS002-1.webp";
-import collageC from "@/assets/productos/FS005 Botanical/FS005-1.webp";
 import { ProductCollage } from "@/components/store/ProductCollage";
 import { getWhatsAppDisplayNumber, getWhatsAppHref } from "@/lib/storefront-contact";
+
+/** Fotos Juliana (@img4–6) para el collage de cuenta. */
+const ACCOUNT_COLLAGE = [
+  "/cuenta/hero-collage-1.jpg",
+  "/cuenta/hero-collage-2.jpg",
+  "/cuenta/hero-collage-3.jpg",
+] as const;
+
+const WA_ORDER_HELP =
+  "Holaaa Four Sensations 💗 Tengo una duda sobre mi pedido, envío o entrega. ¿Me ayudan? ✨";
+
+const STORE_POINTS = [
+  {
+    name: "Centro Comercial Fundadores",
+    lines: ["Local C-101 / Primer piso", "Enseguida de Totto"],
+    hours: ["Lunes a sábado 10:00 a. m. – 8:00 p. m.", "Domingos 11:00 a. m. – 8:00 p. m."],
+  },
+  {
+    name: "Centro Comercial Mall Plaza",
+    lines: ["Segundo piso", "Al frente de Pink Rose"],
+    hours: ["Domingo a jueves 10:30 a. m. – 8:00 p. m.", "Viernes y sábado 10:30 a. m. – 9:00 p. m."],
+  },
+  {
+    name: "Centro Comercial Parque Caldas",
+    lines: ["Entrada principal carrera 22", "Al frente de McDonald's"],
+    hours: ["Domingo a jueves 10:00 a. m. – 7:00 p. m.", "Viernes y sábado 10:00 a. m. – 8:00 p. m."],
+  },
+  {
+    name: "El Cable · Glorieta de Guayacanes",
+    lines: ["Calle 65A #23A-15"],
+    hours: ["Lunes a viernes 9:00 a. m. – 12:30 p. m.", "3:00 p. m. – 6:00 p. m."],
+  },
+] as const;
 
 export function AccountFrame({
   title,
@@ -23,6 +53,7 @@ export function AccountFrame({
 }) {
   const pathname = usePathname();
   const wa = getWhatsAppDisplayNumber();
+  const waHref = getWhatsAppHref(WA_ORDER_HELP);
 
   return (
     <div className="fs-account">
@@ -32,7 +63,7 @@ export function AccountFrame({
           <h1>{title}</h1>
           <p>{subtitle}</p>
         </div>
-        <ProductCollage sources={[collageA, collageB, collageC]} />
+        <ProductCollage sources={[...ACCOUNT_COLLAGE]} />
       </section>
 
       <div className="fs-account-wrap">
@@ -54,33 +85,60 @@ export function AccountFrame({
         <div className="fs-account-grid">
           <div className="fs-account-panel">{children}</div>
           <aside className="fs-account-aside">
-            <h2>La tienda</h2>
-            <p className="fs-account-lead">Cuidado capilar con ciencia y encanto, despachado desde Manizales.</p>
+            <h2>¿Necesitas ayuda? 💗</h2>
+            <p className="fs-account-lead">
+              Estamos para ayudarte con tu pedido.
+              <br />
+              Si tienes alguna duda sobre tu compra, envío o entrega, escríbenos y una de nuestras asesoras te ayudará. ✨
+            </p>
+
             <div className="fs-store-card">
-              <h3>Envíos</h3>
-              <p>Preparación en máximo 2 días hábiles. Cobertura a todo Colombia con Envía e Interrapidísimo. El tránsito no es una fecha de entrega prometida.</p>
-            </div>
-            <div className="fs-store-card">
-              <h3>Posventa</h3>
+              <h3>💬 WhatsApp</h3>
               <p>
-                Sin cambios por gusto (productos de uso personal). Sí garantía legal. Novedades de transporte: 24 horas.{" "}
-                <Link href="/politicas-envio">Ver políticas</Link>.
-              </p>
-            </div>
-            <div className="fs-store-card">
-              <h3>Origen</h3>
-              <p>FOUR SENSATIONS S.A.S. · Calle 65A #23A-15, Manizales, Caldas.</p>
-            </div>
-            <div className="fs-store-card">
-              <h3>Atención</h3>
-              <p>
-                WhatsApp{" "}
-                <a href={getWhatsAppHref("Hola Four Sensations, escribo desde mi cuenta.")} target="_blank" rel="noreferrer">
+                <a href={waHref} target="_blank" rel="noreferrer">
                   {wa}
                 </a>
                 <br />
-                atencionalcliente.befs@gmail.com
+                Lunes a sábado · 9:00 a. m. – 6:00 p. m.
               </p>
+            </div>
+
+            <div className="fs-store-card">
+              <h3>📦 Sobre tu envío</h3>
+              <p>
+                Preparamos tu pedido en máximo 2 días hábiles y el tiempo de entrega corre por cuenta de la
+                transportadora.
+              </p>
+            </div>
+
+            <div className="fs-store-card">
+              <h3>💌 ¿Algo pasó con tu pedido?</h3>
+              <p>
+                Cuéntanos por WhatsApp y revisaremos tu caso contigo.
+                <br />
+                <a className="fs-account-wa-cta" href={waHref} target="_blank" rel="noreferrer">
+                  HABLAR CON NOSOTRAS 💗
+                </a>
+              </p>
+            </div>
+
+            <div className="fs-store-card fs-store-card--points">
+              <h3>🛒 Puntos de venta físicos en Manizales</h3>
+              <ul className="fs-store-points">
+                {STORE_POINTS.map((point) => (
+                  <li key={point.name}>
+                    <strong>{point.name}</strong>
+                    {point.lines.map((line) => (
+                      <span key={line}>{line}</span>
+                    ))}
+                    {point.hours.map((h) => (
+                      <span key={h} className="fs-store-points__hours">
+                        {h}
+                      </span>
+                    ))}
+                  </li>
+                ))}
+              </ul>
             </div>
           </aside>
         </div>

@@ -355,6 +355,66 @@
   text-decoration: none;
 }
 
+.fs-account-wa-cta {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--primary, #8a5fb0);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.fs-account-wa-cta:hover {
+  opacity: 0.85;
+}
+
+.fs-store-card--points {
+  padding-bottom: 4px;
+}
+
+.fs-store-points {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.fs-store-points li {
+  display: grid;
+  gap: 2px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(201, 166, 232, 0.16);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-light);
+}
+
+.fs-store-points li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.fs-store-points strong {
+  color: var(--dark);
+  font-size: 13.5px;
+  margin-bottom: 2px;
+}
+
+.fs-store-points__hours {
+  color: var(--dusty-rose, #a67c8a);
+  font-size: 12.5px;
+}
+
+.fs-account-gate__lead {
+  margin: 0 0 10px !important;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--dark) !important;
+  line-height: 1.45 !important;
+}
+
 .fs-orders {
   display: grid;
   gap: 16px;

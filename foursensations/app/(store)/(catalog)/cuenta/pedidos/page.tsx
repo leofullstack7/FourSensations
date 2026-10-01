@@ -22,7 +22,11 @@ export default async function AccountOrdersPage() {
   if (!customer) {
     return (
       <AccountFrame title={ORDERS_HERO.title} subtitle={ORDERS_HERO.subtitle}>
-        <AccountGate heading="Mis pedidos" />
+        <AccountGate
+          heading="Mis pedidos"
+          lead="Tus favoritos, tus compras y tus próximas obsesiones 💗"
+          body="Inicia sesión para consultar tus pedidos, guardar tus favoritos y hacer tus próximas compras mucho más fácil."
+        />
       </AccountFrame>
     );
   }
