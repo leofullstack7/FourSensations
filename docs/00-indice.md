@@ -35,6 +35,7 @@ FourSensations/
 | 01–06 | Guías de fases ya hechas en código (textos, visual, menú, catálogo, legales, contacto) | **No escritas aún** — pídelas si las quieres documentadas |
 | **07** | [07-cuentas-de-servicio.md](./07-cuentas-de-servicio.md) | **En curso** — cuentas propias, sin usar las de GinnaBeauty |
 | **08** | [08-estado-propuesta.md](./08-estado-propuesta.md) | **Activo** — qué está hecho y qué falta (guía + sesiones) |
+| **09** | [09-cambios-juliana-home.md](./09-cambios-juliana-home.md) | **En curso** — feedback WhatsApp Juliana (home, Emma, footer) |
 
 ---
 

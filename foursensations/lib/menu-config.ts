@@ -1,6 +1,6 @@
 import type { MenuConfig } from "@/lib/types/admin";
 
-/** Categorías públicas al lanzar: catálogo PDF = capilar + accesorios + mayorista. */
+/** Categorías públicas al lanzar. */
 export const defaultMenuConfig: MenuConfig = {
   "Cuidado capilar": {
     icon: "💇",
@@ -11,6 +11,12 @@ export const defaultMenuConfig: MenuConfig = {
       Tónicos: ["Secreto de Primavera"],
       Fragancias: ["Bloom Shine", "Sweet Love", "Scarlette", "Golden Glow"],
       Multiuso: ["Suspiros", "Luna Llena"],
+    },
+  },
+  "Cuidado corporal": {
+    icon: "🧴",
+    subs: {
+      Corporal: ["Explosión de Chocolate", "Exfoliante Corporal"],
     },
   },
   Accesorios: {

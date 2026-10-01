@@ -11,14 +11,17 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+const ORDERS_HERO = {
+  title: "¡Tu historial de obsesiones!",
+  subtitle:
+    "¿Quieres saber qué pediste, volver por un favorito o consultar tus compras? Inicia sesión y encuentra todos tus pedidos Four Sensations aquí. ✨",
+} as const;
+
 export default async function AccountOrdersPage() {
   const customer = await getStoreCustomerSession();
   if (!customer) {
     return (
-      <AccountFrame
-        title="Tus pedidos"
-        subtitle="Inicia sesión para ver el historial de compras ligado a tu cuenta."
-      >
+      <AccountFrame title={ORDERS_HERO.title} subtitle={ORDERS_HERO.subtitle}>
         <AccountGate heading="Mis pedidos" />
       </AccountFrame>
     );
@@ -28,8 +31,8 @@ export default async function AccountOrdersPage() {
 
   return (
     <AccountFrame
-      title="Mis pedidos"
-      subtitle="Cada compra queda guardada aquí: estado, productos y total, con la misma calidez de la tienda."
+      title={ORDERS_HERO.title}
+      subtitle="Cada compra queda guardada aquí: estado, productos y total. Vuelve cuando quieras por un favorito. ✨"
     >
       <h2>Historial</h2>
       <p className="fs-account-lead">

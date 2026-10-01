@@ -853,23 +853,14 @@ export function StorefrontShell({
                 </button>
                 <button type="button" className="icon-btn icon-btn--cart" style={{ position: "relative" }} title="Carrito" onClick={openCart}>
                   <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <path d="M16 10a4 4 0 0 1-8 0" />
+                    <circle cx="9" cy="20" r="1.4" fill="currentColor" stroke="none" />
+                    <circle cx="17" cy="20" r="1.4" fill="currentColor" stroke="none" />
+                    <path d="M3 3h2l.8 3.2L7.5 14h10.2l1.8-7H6.2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M7.5 14h10" strokeLinecap="round" />
                   </svg>
                   <span className="badge cart-badge" style={{ display: cartCount > 0 ? "flex" : "none" }}>
                     {cartCount}
                   </span>
-                </button>
-                <button
-                  type="button"
-                  className="icon-btn icon-btn--admin"
-                  title="Panel Admin"
-                  onClick={() => {
-                    window.location.href = "/admin";
-                  }}
-                >
-                  ⚙️
                 </button>
               </div>
             </div>

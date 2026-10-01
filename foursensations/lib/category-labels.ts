@@ -2,6 +2,7 @@ const map: Record<string, string> = {
   maquillaje: "Maquillaje",
   "cuidado-piel": "Cuidado piel",
   "cuidado-capilar": "Cuidado capilar",
+  "cuidado-corporal": "Cuidado corporal",
   unas: "Uñas",
   hombres: "Hombres",
   accesorios: "Accesorios",

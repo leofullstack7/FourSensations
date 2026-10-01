@@ -8,30 +8,28 @@ import { BrandLogo } from "@/components/brand/BrandLogo";
 import { useReveal } from "@/hooks/useReveal";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { BeautyAiAdvisor } from "@/components/store/BeautyAiAdvisor";
-import { BrandInnovationStrip } from "@/components/store/BrandInnovationStrip";
 import { StoreProductCard } from "@/components/store/store-product-card";
 import { CategoryShowcaseStrip } from "@/components/store/CategoryShowcaseStrip";
 import { TechAmbient } from "@/components/ui/TechAmbient";
 import { TintHomePreview } from "@/components/store/tints/TintHomePreview";
-import { productHasStorePhoto, sortProductsForHomeDisplay } from "@/lib/storefront-product-order";
+import { sortProductsForHomeDisplay } from "@/lib/storefront-product-order";
 import {
   enrichStorefrontDisplayProducts,
   resolveStorefrontDisplayAfterFilter,
 } from "@/lib/store/variant-groups";
-import { HAIR_SUBCATEGORY_ORDER } from "@/lib/hair-subcategories";
+import { isHomeClubFavoriteProduct } from "@/lib/home-club-favorites";
+import { STOREFRONT_BRAND_MARQUEE_MESSAGES } from "@/lib/store-brand-marquee-messages";
 import type { StoreProduct } from "@/lib/types/product";
 import type { StoreCombo } from "@/lib/types/store-combo";
 import type { TintBubbleItem } from "@/lib/tints";
 import { HomeCombosPromo } from "@/components/store/CombosPromo";
-import { getWhatsAppHref } from "@/lib/storefront-contact";
+import { getWhatsAppHref, WHATSAPP_SUPPORT_MESSAGE } from "@/lib/storefront-contact";
+import { pickRotatingTestimonials } from "@/lib/store-testimonials";
 import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
 import { formatPrice } from "@/lib/format";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { StaticImageData } from "next/image";
-import proteinaCover from "@/assets/productos/FS001 Proteína 10 en 1/FS001-1.webp";
 import dulceRenacerCover from "@/assets/productos/FS002 Dulce Renacer/FS002-1.webp";
-import primaveralCover from "@/assets/productos/FS003 Sensación Primaveral/FS003-1.webp";
-import scalpCover from "@/assets/productos/FS006 Scalp Therapy/FS006-1.webp";
 import accesoriosCover from "@/assets/productos/FS027 Accesorios/FS027-1.webp";
 
 const HERO_SLIDES: readonly StaticImageData[] = [hero1Image, hero2Image];
@@ -40,6 +38,7 @@ const MOBILE_INITIAL_VISIBLE_PRODUCTS = 10;
 const DESKTOP_LOAD_MORE_PRODUCTS = 20;
 const MOBILE_LOAD_MORE_PRODUCTS = 10;
 const MOBILE_FEATURED_BREAKPOINT = 768;
+const HOME_TESTIMONIALS_ROTATION = pickRotatingTestimonials(3);
 
 type StoreHomeClientProps = {
   tintItems?: TintBubbleItem[];
@@ -65,8 +64,6 @@ export function StoreHomeClient({
 
   const products = catalogProducts.length > 0 ? catalogProducts : initialProducts;
 
-  const [activeCategory, setActiveCategory] = useState<string>("all");
-  const [manualSub, setManualSub] = useState<string | null>(null);
   const [sortValue, setSortValue] = useState<string>("default");
   const [heroBannerIndex, setHeroBannerIndex] = useState(0);
   const [visibleCount, setVisibleCount] = useState(DESKTOP_INITIAL_VISIBLE_PRODUCTS);
@@ -82,13 +79,9 @@ export function StoreHomeClient({
   }, []);
 
   const filteredProducts = useMemo(() => {
-    let list: StoreProduct[];
-    if (activeCategory === "__sub__" && manualSub != null) {
-      list = products.filter((p) => p.subcategory === manualSub);
-    } else if (activeCategory === "all") {
+    let list = products.filter((p) => isHomeClubFavoriteProduct(p.name));
+    if (list.length === 0) {
       list = [...products];
-    } else {
-      list = products.filter((p) => p.category === activeCategory);
     }
 
     if (sortValue === "default") {
@@ -105,7 +98,7 @@ export function StoreHomeClient({
     else if (sortValue === "rating") copy.sort((a, b) => b.rating - a.rating);
     else if (sortValue === "new") copy.sort((a, b) => Number(b.isNew) - Number(a.isNew));
     return enrichStorefrontDisplayProducts(resolveStorefrontDisplayAfterFilter(copy, products), products);
-  }, [products, activeCategory, manualSub, sortValue]);
+  }, [products, sortValue]);
 
   useEffect(() => {
     const mq = window.matchMedia(`(max-width: ${MOBILE_FEATURED_BREAKPOINT}px)`);
@@ -122,32 +115,7 @@ export function StoreHomeClient({
   useEffect(() => {
     const mobile = window.matchMedia(`(max-width: ${MOBILE_FEATURED_BREAKPOINT}px)`).matches;
     setVisibleCount(mobile ? MOBILE_INITIAL_VISIBLE_PRODUCTS : DESKTOP_INITIAL_VISIBLE_PRODUCTS);
-  }, [activeCategory, manualSub, sortValue]);
-
-  const scrollToFeaturedProducts = useCallback(() => {
-    document.getElementById("featured")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
-
-  const [previewProducts, setPreviewProducts] = useState<StoreProduct[]>([]);
-
-  useEffect(() => {
-    const pool = enrichStorefrontDisplayProducts(
-      resolveStorefrontDisplayAfterFilter(products, products),
-      products,
-    ).filter(productHasStorePhoto);
-    if (pool.length === 0) {
-      setPreviewProducts([]);
-      return;
-    }
-    const copy = [...pool];
-    for (let i = copy.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      const tmp = copy[i]!;
-      copy[i] = copy[j]!;
-      copy[j] = tmp;
-    }
-    setPreviewProducts(copy.slice(0, 5));
-  }, [products]);
+  }, [sortValue]);
 
   return (
     <>
@@ -183,95 +151,35 @@ export function StoreHomeClient({
 
       <div className="marquee-strip">
         <div className="marquee-track" id="marquee-track">
-          <span className="marquee-item">✨ El Club de los Cabellos Perfectos</span>
-          <span className="marquee-item">💆 Fórmulas con intención</span>
-          <span className="marquee-item">
-            <span>NUEVO</span> Belleza que se siente
-          </span>
-          <span className="marquee-item">🌿 Resultados reales para tu cabello</span>
-          <span className="marquee-item">💜 Ciencia con encanto</span>
-          <span className="marquee-item">📦 Programa mayorista</span>
-          <span className="marquee-item">🚚 Envíos a todo Colombia</span>
-          <span className="marquee-item">✨ El Club de los Cabellos Perfectos</span>
-          <span className="marquee-item">💆 Fórmulas con intención</span>
-          <span className="marquee-item">
-            <span>NUEVO</span> Belleza que se siente
-          </span>
-          <span className="marquee-item">🌿 Resultados reales para tu cabello</span>
-          <span className="marquee-item">💜 Ciencia con encanto</span>
-          <span className="marquee-item">📦 Programa mayorista</span>
-          <span className="marquee-item">🚚 Envíos a todo Colombia</span>
+          {[...STOREFRONT_BRAND_MARQUEE_MESSAGES, ...STOREFRONT_BRAND_MARQUEE_MESSAGES].map((text, i) => (
+            <span key={`${text}-${i}`} className="marquee-item">
+              {text}
+            </span>
+          ))}
         </div>
       </div>
 
       <CategoryShowcaseStrip
         onSelectSubcategory={(sub) => {
-          setActiveCategory("__sub__");
-          setManualSub(sub);
           document.getElementById("featured")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          void sub;
         }}
-        activeSubcategory={manualSub}
+        activeSubcategory={null}
       />
-
-      {previewProducts.length > 0 ? (
-        <section className="gb-home-preview-products section-pad" aria-label="Productos destacados rápidos">
-          <div className="container">
-            <div className="gb-home-preview-products__grid">
-              {previewProducts.map((p, i) => (
-                <StoreProductCard
-                  key={p.id}
-                  product={p}
-                  isFav={favorites.includes(p.id)}
-                  onOpen={openProductModal}
-                  onToggleFav={toggleFavorite}
-                  onAddCart={addToCart}
-                  imagePriority={i < 2}
-                  compact
-                />
-              ))}
-            </div>
-            <div className="gb-home-preview-products__cta">
-              <button type="button" className="btn btn-primary btn-lg" onClick={scrollToFeaturedProducts}>
-                Ver Más Productos
-              </button>
-            </div>
-          </div>
-        </section>
-      ) : null}
 
       <BeautyAiAdvisor />
 
       {tintItems.length > 0 && <TintHomePreview items={tintItems} />}
 
-      <BrandInnovationStrip />
-
-      <section className="trust-section">
-        <div className="container">
-          <div className="trust-grid">
-            <div className="trust-item">
-              <div className="trust-icon">🚚</div>
-              <div>
-                <div className="trust-title">Envío a toda Colombia</div>
-                <div className="trust-desc">Despacho desde Manizales · Máx. 2 días hábiles de preparación</div>
-              </div>
-            </div>
-            <div className="trust-item">
-              <div className="trust-icon">🔄</div>
-              <div>
-                <div className="trust-title">Garantía legal</div>
-                <div className="trust-desc">Sin cambios por gusto · Calidad e idoneidad según la ley</div>
-              </div>
-            </div>
-            <div className="trust-item">
-              <div className="trust-icon">✅</div>
-              <div>
-                <div className="trust-title">Productos originales</div>
-                <div className="trust-desc">Fórmulas Four Sensations, con trazabilidad de origen</div>
-              </div>
-            </div>
-          </div>
+      <div className="marquee-strip marquee-strip--brand">
+        <div className="marquee-track">
+          {[...STOREFRONT_BRAND_MARQUEE_MESSAGES, ...STOREFRONT_BRAND_MARQUEE_MESSAGES].map((text, i) => (
+            <span key={`brand-${text}-${i}`} className="marquee-item">
+              {text}
+            </span>
+          ))}
         </div>
-      </section>
+      </div>
 
       <HomeCombosPromo combos={initialCombos} />
 
@@ -298,6 +206,27 @@ export function StoreHomeClient({
                 Ver colección →
               </Link>
               <div className="promo-deco">💜</div>
+            </div>
+            <div
+              className="promo-card"
+              style={{
+                backgroundImage: `linear-gradient(135deg, rgba(255, 228, 220, 0.7) 0%, rgba(232, 180, 184, 0.55) 100%), url(${dulceRenacerCover.src})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }}
+            >
+              <div>
+                <div className="promo-label">🧴 Piel y sensaciones</div>
+                <div className="promo-title">
+                  Cuidado
+                  <br />
+                  <em>corporal</em>
+                </div>
+              </div>
+              <Link href={`/categoria/${categoryPath("Cuidado corporal")}`} className="btn btn-primary btn-sm" prefetch>
+                Explorar →
+              </Link>
+              <div className="promo-deco">✨</div>
             </div>
             <div
               className="promo-card"
@@ -343,39 +272,17 @@ export function StoreHomeClient({
       <section className="products-section section-pad" id="featured">
         <div className="container">
           <div className="section-header reveal">
-            <div className="section-eyebrow">Nuestra Colección</div>
+            <div className="section-eyebrow">Productos Destacados</div>
             <h2 className="section-title">
-              Productos <em>Destacados</em>
+              Los favoritos del <em>Club</em> 💗
             </h2>
-            <p className="section-sub">Líneas Four Sensations para nutrir, reconstruir y vestir tu cabello. Calidad de casa, resultados que se sienten.</p>
+            <p className="section-sub">
+              Nuestros productos más amados, elegidos para transformar tu rutina y darle a tu cabello exactamente ese
+              algo que le estaba faltando. ✨
+            </p>
           </div>
 
-          <div className="filter-row reveal">
-            <div className="filter-chips">
-              <button
-                type="button"
-                className={`chip ${activeCategory === "all" && !manualSub ? "active" : ""}`}
-                onClick={() => {
-                  setActiveCategory("all");
-                  setManualSub(null);
-                }}
-              >
-                Todos
-              </button>
-              {HAIR_SUBCATEGORY_ORDER.map((sub) => (
-                <button
-                  key={sub}
-                  type="button"
-                  className={`chip ${activeCategory === "__sub__" && manualSub === sub ? "active" : ""}`}
-                  onClick={() => {
-                    setActiveCategory("__sub__");
-                    setManualSub(sub);
-                  }}
-                >
-                  {sub}
-                </button>
-              ))}
-            </div>
+          <div className="filter-row reveal" style={{ justifyContent: "flex-end" }}>
             <select className="sort-select" id="sort-select" value={sortValue} onChange={(e) => setSortValue(e.target.value)}>
               <option value="default">Ordenar por</option>
               <option value="price-asc">Precio: menor a mayor</option>
@@ -416,67 +323,6 @@ export function StoreHomeClient({
         </div>
       </section>
 
-      <section className="lifestyle-section section-pad">
-        <div className="container reveal">
-          <div className="section-header" style={{ marginBottom: 36 }}>
-            <div className="section-eyebrow">El Club de los Cabellos Perfectos</div>
-            <h2 className="section-title">
-              Rituales para <em>cada momento</em>
-            </h2>
-          </div>
-          <div className="lifestyle-grid">
-            {[
-              {
-                image: dulceRenacerCover,
-                cat: "Tratamientos",
-                name: "Nutrir y reconstruir",
-                href: `/categoria/${categoryPath("Cuidado capilar")}`,
-              },
-              {
-                image: proteinaCover,
-                cat: "Proteína 10 en 1",
-                name: "Fibra con estructura",
-                href: `/categoria/${categoryPath("Cuidado capilar")}`,
-              },
-              {
-                image: primaveralCover,
-                cat: "Rutinas",
-                name: "Equilibrio del cuero cabelludo",
-                href: `/categoria/${categoryPath("Cuidado capilar")}`,
-              },
-              {
-                image: scalpCover,
-                cat: "Tónicos",
-                name: "Scalp en calma",
-                href: `/categoria/${categoryPath("Cuidado capilar")}`,
-              },
-              {
-                image: accesoriosCover,
-                cat: "Accesorios",
-                name: "El detalle que cierra el look",
-                href: `/categoria/${categoryPath("Accesorios")}`,
-              },
-            ].map(({ image, cat, name, href }) => (
-              <Link key={name} href={href} className="lifestyle-card" prefetch>
-                <div
-                  className="lifestyle-card-bg"
-                  style={{
-                    backgroundImage: `url(${image.src})`,
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
-                    backgroundRepeat: "no-repeat",
-                  }}
-                />
-                <div className="lifestyle-card-overlay">
-                  <div className="lifestyle-card-cat">{cat}</div>
-                  <div className="lifestyle-card-name">{name}</div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
       <section className="testimonials-section section-pad">
         <div className="container">
           <div className="section-header reveal">
@@ -486,19 +332,17 @@ export function StoreHomeClient({
             </h2>
           </div>
           <div className="testimonials-grid reveal-stagger">
-            {[
-              ["María Fernanda G.", "Medellín · Cuidado capilar", "M", "Dulce Renacer dejó mi cabello más dócil y con brillo; lo siento nutrido, no pesado."],
-              ["Valentina P.", "Bogotá · Tratamientos", "V", "La Proteína 10 en 1 me armó la fibra después de procesos. Se volvió parte de mi ritual."],
-              ["Camila R.", "Cali · Accesorios", "C", "El cepillo y las ligas acompañan la fórmula: el look queda sujeto sin maltratar."],
-            ].map(([name, detail, av, text]) => (
-              <div key={name as string} className="testimonial-card">
+            {HOME_TESTIMONIALS_ROTATION.map((t) => (
+              <div key={`${t.name}-${t.city}`} className="testimonial-card">
                 <div className="t-stars">★★★★★</div>
-                <p className="t-text">&quot;{text}&quot;</p>
+                <p className="t-text">&quot;{t.text}&quot;</p>
                 <div className="t-user">
-                  <div className="t-avatar">{av}</div>
+                  <div className="t-avatar">{t.initial}</div>
                   <div>
-                    <div className="t-name">{name}</div>
-                    <div className="t-detail">{detail}</div>
+                    <div className="t-name">{t.name}</div>
+                    <div className="t-detail">
+                      {t.city} · {t.tag}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -511,18 +355,29 @@ export function StoreHomeClient({
         <TechAmbient variant="subtle" />
         <div className="container newsletter-content reveal">
           <div className="section-eyebrow" style={{ color: "var(--blush)" }}>
-            Únete a nuestra comunidad
+            ¿Todavía no estás en el Club? 👀💗
           </div>
           <div className="newsletter-title">
-            El Club de los <em>Cabellos Perfectos</em>
+            Esto te va a <em>interesar…</em>
           </div>
-          <p className="newsletter-sub">Novedades de líneas, rituales y despachos desde Manizales. Sin spam: solo lo que suma a tu cabello.</p>
-          <form className="newsletter-form" onSubmit={(e) => e.preventDefault()}>
-            <input type="email" placeholder="tu@correo.com" />
-            <button type="button" onClick={() => showToast("¡Gracias! Revisa tu correo", "success", "💌")}>
+          <p className="newsletter-sub">
+            Ser Four Girl tiene sus privilegios, SIEMPRE TIENEN LAS PRIMICIAS💌 Lanzamientos, ediciones limitadas,
+            sorpresas, secretos capilares y novedades que definitivamente vas a querer tener en el radar.
+          </p>
+          <p className="newsletter-sub" style={{ marginTop: 8 }}>
+            Déjanos tu correo y entra al Club de los Cabellos Perfectos
+          </p>
+          <form className="newsletter-form newsletter-form--club" onSubmit={(e) => e.preventDefault()}>
+            <input type="text" name="name" placeholder="Tu nombre" autoComplete="name" />
+            <input type="tel" name="phone" placeholder="+57 celular" autoComplete="tel" />
+            <input type="email" name="email" placeholder="tu@correo.com" autoComplete="email" />
+            <button type="button" onClick={() => showToast("¡Bienvenida al Club! 💗", "success", "💌")}>
               Suscribirme
             </button>
           </form>
+          <p className="newsletter-legal">
+            Al registrarte aceptas recibir correos electrónicos de marketing y mensajes de texto
+          </p>
         </div>
       </section>
 
@@ -532,7 +387,13 @@ export function StoreHomeClient({
             <div className="footer-brand">
               <BrandLogo variant="store" inverted />
               <p className="footer-desc">
-                Four Sensations — marca colombiana de cuidado capilar. El Club de los Cabellos Perfectos. Envíos a todo Colombia desde Manizales.
+                Four Sensations
+                <br />
+                ¡Creamos nuevas formas de amar, cuidar y disfrutar tu cabello!💗
+                <br />
+                <strong>BE YOU, BE FOUR SENSATIONS</strong>
+                <br />
+                Marca Colombiana 🇨🇴 · Hecho en Colombia
               </p>
             </div>
             <div className="footer-col">
@@ -548,7 +409,7 @@ export function StoreHomeClient({
             <div className="footer-col">
               <h4>Empresa</h4>
               <div className="footer-links">
-                <Link href="/">Sobre nosotros</Link>
+                <Link href="/sobre-nosotros">Sobre nosotros</Link>
                 <Link href="/mayorista">Programa mayorista</Link>
                 <a href={getWhatsAppHref("Hola Four Sensations, quiero información para trabajar con ustedes.")} target="_blank" rel="noreferrer">
                   Trabaja con nosotros
@@ -558,7 +419,7 @@ export function StoreHomeClient({
             <div className="footer-col">
               <h4>Ayuda</h4>
               <div className="footer-links">
-                <a href={getWhatsAppHref("Hola Four Sensations, necesito ayuda con un pedido.")} target="_blank" rel="noreferrer">
+                <a href={getWhatsAppHref(WHATSAPP_SUPPORT_MESSAGE)} target="_blank" rel="noreferrer">
                   WhatsApp de atención
                 </a>
                 <Link href="/cuenta/pedidos">Mis pedidos</Link>
@@ -571,7 +432,7 @@ export function StoreHomeClient({
         </div>
         <div className="container">
           <div className="footer-bottom">
-            <span>© 2026 Four Sensations. Todos los derechos reservados.</span>
+            <span>© 2026 Four Sensations S.A.S. Todos los derechos reservados</span>
             <div className="footer-payments">
               <span className="payment-chip">ePayco</span>
               <span className="payment-chip">PSE</span>

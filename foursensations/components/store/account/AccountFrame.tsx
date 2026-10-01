@@ -13,10 +13,13 @@ export function AccountFrame({
   title,
   subtitle,
   children,
+  eyebrow,
 }: {
   title: string;
   subtitle: string;
   children: ReactNode;
+  /** Si se omite, no se muestra eyebrow (evita repetir el slogan de marca). */
+  eyebrow?: string | null;
 }) {
   const pathname = usePathname();
   const wa = getWhatsAppDisplayNumber();
@@ -25,7 +28,7 @@ export function AccountFrame({
     <div className="fs-account">
       <section className="fs-account-hero">
         <div className="fs-account-hero__copy">
-          <p className="fs-account-hero__eyebrow">Four Sensations · Club de los Cabellos Perfectos</p>
+          {eyebrow ? <p className="fs-account-hero__eyebrow">{eyebrow}</p> : null}
           <h1>{title}</h1>
           <p>{subtitle}</p>
         </div>
@@ -78,10 +81,6 @@ export function AccountFrame({
                 <br />
                 atencionalcliente.befs@gmail.com
               </p>
-            </div>
-            <div className="fs-store-card">
-              <h3>Horario</h3>
-              <p>Lunes a sábado, 9:00 a. m. a 6:00 p. m.</p>
             </div>
           </aside>
         </div>
