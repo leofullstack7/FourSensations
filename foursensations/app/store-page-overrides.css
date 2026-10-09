@@ -16,7 +16,7 @@
   display: block;
   box-sizing: border-box;
   line-height: 0;
-  aspect-ratio: 2172 / 724;
+  aspect-ratio: 5120 / 1730;
 }
 .hero1-discover {
   position: absolute;
@@ -84,16 +84,25 @@
 .hero-banner-layer.active {
   opacity: 1;
   z-index: 2;
+  pointer-events: auto;
 }
 .hero-banner-kenburns {
   object-fit: cover;
   object-position: center center;
-  transform: scale(1);
+  transform: none;
   transform-origin: 50% 50%;
-  will-change: transform;
 }
 .hero-banner-layer.active .hero-banner-kenburns {
-  animation: hero-kenburns 12s cubic-bezier(0.16, 0.84, 0.44, 1) forwards;
+  animation: none;
+}
+.hero-banner-kenburns--mobile {
+  display: none !important;
+}
+.hero-banner-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: auto;
 }
 @keyframes hero-kenburns {
   from {
@@ -294,10 +303,16 @@
 @media (max-width: 768px) {
   .banner-placeholder-wrapper {
     min-height: 0;
-    aspect-ratio: 2172 / 724;
+    aspect-ratio: 1440 / 1800;
     width: 100%;
     max-height: none;
     padding: 0;
+  }
+  .hero-banner-kenburns--desktop {
+    display: none !important;
+  }
+  .hero-banner-kenburns--mobile {
+    display: block !important;
   }
 
   .banner-placeholder-wrapper-secondary {

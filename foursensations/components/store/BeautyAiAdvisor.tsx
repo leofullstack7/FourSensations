@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import emmaLogo from "@/assets/foursensations/emma.PNG";
 import { MotionDiv, MotionSpan } from "@/components/store/store-framer-motion";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import {
@@ -370,18 +372,25 @@ export function BeautyAiAdvisor() {
             transition={{ duration: 0.5 }}
           >
             <span className="gb-ai-pulse" aria-hidden />
-            Emma · en vivo
+            En vivo · aliada capilar
           </MotionSpan>
-          <h2 id="gb-ai-title" className="gb-ai-title">
-            Hola, soy <em className="emma-script">Emma</em>
+          <h2 id="gb-ai-title" className="emma-logo-title">
+            <Image
+              src={emmaLogo}
+              alt="Emma"
+              className="emma-logo emma-logo--hero"
+              sizes="(max-width: 720px) 82vw, 420px"
+              priority
+            />
           </h2>
           <p className="gb-ai-kicker">Tu aliada capilar Four Sensations</p>
           <p className="gb-ai-desc">
-            Hola, soy Emma 💗 Tu aliada capilar Four Sensations.
+            Hola, soy Emma 💗 Te escucho primero y al final te armo una rutina con los productos Four
+            Sensations que mejor se adaptan a tu cabello.
             <br />
             <br />
-            ¿Frizz, resequedad, caída, grasa, caspa o daño? Cuéntame qué necesita tu cabello y juntas
-            encontraremos la rutina y los productos Four Sensations que mejor se adapten a ti 👱🏻‍♀️🌸
+            ¿Frizz, resequedad, caída, grasa, caspa o daño? Cuéntame qué necesita tu pelo y juntas
+            encontramos el ritual 👱🏻‍♀️🌸
           </p>
           <ul className="gb-ai-hearts" aria-label="Cómo te acompaña Emma">
             <li>
@@ -418,11 +427,11 @@ export function BeautyAiAdvisor() {
           transition={{ duration: 0.55, delay: 0.08 }}
         >
           <div className="gb-ai-console-header">
-            <span className="gb-ai-avatar-mark" aria-hidden>
-              ♡
+            <span className="emma-avatar-chip" aria-hidden>
+              <Image src={emmaLogo} alt="" className="emma-logo emma-logo--avatar" sizes="72px" />
             </span>
             <div className="gb-ai-console-who">
-              <strong className="emma-script emma-script--sm">Emma</strong>
+              <strong>Emma</strong>
               <span>Four Sensations · en línea</span>
             </div>
           </div>
@@ -436,7 +445,11 @@ export function BeautyAiAdvisor() {
           >
             {messages.map((msg) => (
               <div key={msg.id} className={`gb-ai-msg gb-ai-msg--${msg.role}`}>
-                {msg.role === "bot" && <span className="gb-ai-msg-avatar" aria-hidden>♡</span>}
+                {msg.role === "bot" && (
+                  <span className="gb-ai-msg-avatar emma-msg-avatar" aria-hidden>
+                    <Image src={emmaLogo} alt="" className="emma-logo emma-logo--msg" sizes="36px" />
+                  </span>
+                )}
                 <div className="gb-ai-msg-body">
                   <p style={{ whiteSpace: "pre-wrap" }}>{msg.text}</p>
                   {quizStep === "done" && msg.productIds && msg.productIds.length > 0 && (
@@ -479,7 +492,9 @@ export function BeautyAiAdvisor() {
             ))}
             {quizStep === "loading" && (
               <div className="gb-ai-msg gb-ai-msg--bot">
-                <span className="gb-ai-msg-avatar" aria-hidden>♡</span>
+                <span className="gb-ai-msg-avatar emma-msg-avatar" aria-hidden>
+                  <Image src={emmaLogo} alt="" className="emma-logo emma-logo--msg" sizes="36px" />
+                </span>
                 <div className="gb-ai-msg-body emma-loading">
                   <div className="emma-loading__orbit" aria-hidden>
                     <span>💗</span>
@@ -492,7 +507,9 @@ export function BeautyAiAdvisor() {
             )}
             {typing && (
               <div className="gb-ai-msg gb-ai-msg--bot gb-ai-msg--typing">
-                <span className="gb-ai-msg-avatar" aria-hidden>♡</span>
+                <span className="gb-ai-msg-avatar emma-msg-avatar" aria-hidden>
+                  <Image src={emmaLogo} alt="" className="emma-logo emma-logo--msg" sizes="36px" />
+                </span>
                 <div className="gb-ai-msg-body">
                   <span className="gb-ai-typing-bubble" aria-label="Escribiendo">
                     <span /><span /><span />

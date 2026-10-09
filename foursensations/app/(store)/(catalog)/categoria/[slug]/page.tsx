@@ -43,6 +43,7 @@ function categoryFromStaticMenu(slug: string): StoreCategoryWithSubs | null {
 
 export default async function CategoryPage({ params, searchParams }: Props) {
   const slug = params.slug;
+  if (slug === "mayorista") redirect("/mayorista");
 
   const lookupName = searchParams?.sub?.trim();
   if (lookupName) {

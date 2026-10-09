@@ -5,56 +5,53 @@ import { useReveal } from "@/hooks/useReveal";
 import { ProductCollage } from "@/components/store/ProductCollage";
 import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
 import { formatPrice } from "@/lib/format";
-import { getWhatsAppDisplayNumber, getWhatsAppHref } from "@/lib/storefront-contact";
+import { getWhatsAppHref } from "@/lib/storefront-contact";
 
-const BENEFITS = [
+const REASONS = [
   {
-    icon: "📍",
-    title: "Origen Manizales",
-    desc: "FOUR SENSATIONS S.A.S. despacha desde Calle 65A #23A-15, Manizales, Caldas, a todo Colombia.",
+    n: "01",
+    title: "EMPIEZA SIN COMPLICARTE 💗",
+    text: "No necesitas una inversión enorme para comenzar. Puedes iniciar con un pedido desde $700.000 y hacer crecer tu inventario a tu ritmo.",
   },
   {
-    icon: "⏱️",
-    title: "Preparación ágil",
-    desc: "Máximo 2 días hábiles desde la confirmación del pedido. El tránsito lo define la transportadora.",
+    n: "02",
+    title: "PRODUCTOS QUE DA GUSTO RECOMENDAR ✨",
+    text: "Fórmulas cuidadosamente desarrolladas, ingredientes seleccionados y productos pensados para responder a diferentes necesidades del cabello. Vendes algo en lo que puedes confiar.",
   },
   {
-    icon: "🚚",
-    title: "Cobertura nacional",
-    desc: "Envía como vía principal e Interrapidísimo en zonas con reexpedición. No hay recogida en tienda ni entrega el mismo día.",
+    n: "03",
+    title: "UN MARGEN QUE SÍ MOTIVA 💸",
+    text: "Accede a precios especiales para mayoristas y construye una ganancia atractiva en cada venta. Porque si vas a emprender, también queremos que sea un buen negocio para ti.",
   },
   {
-    icon: "💎",
-    title: "Tarifa de volumen",
-    desc: `Pedidos desde ${formatPrice(WHOLESALE_THRESHOLD_COP)} acceden a precios mayoristas y a un agente dedicado.`,
-  },
-] as const;
-
-const OBJECTIVES = [
-  {
-    title: "Aliados, no solo pedidos",
-    text: "Salones, tiendas y emprendedoras que quieren stock con la misma calidad que ve la clienta final.",
+    n: "04",
+    title: "NO EMPIEZAS DESDE CERO 🎀",
+    text: "Four Sensations ya tiene una historia, una comunidad y clientes que conocen y aman nuestros productos. Tú llevas esa experiencia a nuevos clientes desde tu propio negocio.",
   },
   {
-    title: "Trazabilidad y posventa",
-    text: "Garantía legal, canales oficiales y evidencia en novedades de transporte: el mismo estándar de la tienda.",
+    n: "05",
+    title: "TE DAMOS MATERIAL PARA VENDER MÁS 📲",
+    text: "No tienes que inventarte todo el contenido. Te apoyamos con piezas y material de la marca para que puedas mostrar, recomendar y promocionar tus productos en redes sociales.",
   },
   {
-    title: "Relación 1:1",
-    text: "Un agente arma contigo mix de líneas capilares, accesorios y kits según tu vitrina.",
+    n: "06",
+    title: "TIENES MUCHO PARA OFRECER 🌸",
+    text: "Nuestro portafolio te permite atender diferentes necesidades: nutrición, reparación, frizz, brillo, protección, cuero cabelludo, crecimiento y mucho más. Más opciones para tus clientes, más oportunidades de venta para ti.",
   },
-] as const;
-
-const STEPS = [
-  { n: "01", title: "Elige tu mix", desc: "Explora cuidado capilar y accesorios; arma el surtido de tu negocio." },
-  { n: "02", title: "Escríbenos", desc: "WhatsApp oficial: cuéntanos volumen, ciudad y tipo de punto de venta." },
-  { n: "03", title: "Confirmamos condiciones", desc: "El equipo valida tarifa mayorista, flete y fechas de despacho desde Manizales." },
-  { n: "04", title: "Compras con beneficio", desc: "Quedas en el programa: precios de volumen y prioridad en reposiciones." },
+  {
+    n: "07",
+    title: "NO TE DEJAMOS SOLA 💗",
+    text: "Queremos que conozcas lo que vendes y sepas cómo recomendarlo. Por eso cuentas con capacitación y acompañamiento para conocer mejor el portafolio y asesorar a tus clientes con seguridad.",
+  },
+  {
+    n: "08",
+    title: "VENDES MUCHO MÁS QUE PRODUCTOS ✨",
+    text: "El cabello también hace parte de cómo nos sentimos y nos vemos. Con Four Sensations puedes acompañar a tus clientes a construir rutinas de cuidado, consentirse y sentirse increíbles con su cabello.",
+  },
 ] as const;
 
 export function WholesaleLandingClient({ collageUrls }: { collageUrls: string[] }) {
   useReveal();
-  const wa = getWhatsAppDisplayNumber();
   const waHref = getWhatsAppHref(
     "Hola Four Sensations, quiero información del programa mayorista (volumen, precios y despacho desde Manizales).",
   );
@@ -64,10 +61,10 @@ export function WholesaleLandingClient({ collageUrls }: { collageUrls: string[] 
       <section className="fs-account-hero fs-cat-hero">
         <div className="fs-account-hero__copy">
           <p className="fs-account-hero__eyebrow">Programa mayorista · FOUR SENSATIONS S.A.S.</p>
-          <h1>Lleva Four Sensations a tu negocio</h1>
+          <h1>TU VITRINA ESTÁ PIDIENDO FOUR SENSATIONS 👀💗</h1>
           <p>
-            Precios de volumen, acompañamiento cercano y despacho nacional desde Manizales. El objetivo es simple:
-            que tu vitrina tenga fórmulas con intención y que tu operación tenga un aliado claro, no un catálogo frío.
+            Una marca que tus clientes van a querer descubrir, probar y volver a comprar. Productos con identidad,
+            fórmulas increíbles y una comunidad que ya ama Four Sensations.
           </p>
           <p className="fs-cat-commercial">
             Desde {formatPrice(WHOLESALE_THRESHOLD_COP)} por pedido entras a tarifa mayorista.
@@ -76,65 +73,32 @@ export function WholesaleLandingClient({ collageUrls }: { collageUrls: string[] 
             <a href={waHref} className="btn btn-primary btn-sm" target="_blank" rel="noreferrer">
               Escribir por WhatsApp
             </a>
-            <a href="#como-funciona" className="btn btn-outline btn-sm">
-              Cómo funciona
+            <a href="#razones" className="btn btn-outline btn-sm">
+              8 razones
             </a>
           </div>
         </div>
         <ProductCollage sources={collageUrls} />
       </section>
 
-      <section className="fs-cat-benefits">
-        <div className="container fs-cat-benefits__grid">
-          {BENEFITS.map((b) => (
-            <article key={b.title} className="fs-cat-benefit">
-              <span aria-hidden>{b.icon}</span>
-              <h3>{b.title}</h3>
-              <p>{b.desc}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="wholesale-section wholesale-benefits section-pad">
+      <section className="wholesale-section wholesale-threshold section-pad" id="razones">
         <div className="container">
-          <div className="wholesale-section-head reveal">
-            <span className="section-eyebrow">Para qué existe el programa</span>
-            <h2 className="section-title">
-              Objetivos de <em>Four Sensations</em>
-            </h2>
-          </div>
-          <div className="wholesale-benefits-grid">
-            {OBJECTIVES.map((b) => (
-              <article key={b.title} className="wholesale-benefit-card reveal">
-                <h3>{b.title}</h3>
-                <p>{b.text}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="wholesale-section wholesale-threshold section-pad" id="como-funciona">
-        <div className="container">
-          <div className="wholesale-threshold-card reveal">
+          <div className="wholesale-threshold-card wholesale-reasons-card reveal">
             <div className="wholesale-threshold-copy">
-              <span className="wholesale-eyebrow wholesale-eyebrow--dark">Tu acceso</span>
-              <h2>El equipo te abre las puertas</h2>
+              <h2>8 RAZONES PARA LLEVAR FOUR SENSATIONS A TU NEGOCIO 💗</h2>
               <p>
-                Atención de lunes a sábado, 9:00 a. m. a 6:00 p. m. WhatsApp {wa} · atencionalcliente.befs@gmail.com.
-                Políticas de envío y posventa iguales a las de la tienda: transparencia en cada pedido.
+                Porque vender una marca que te encanta también puede convertirse en una gran oportunidad.
               </p>
             </div>
             <div className="wholesale-steps">
-              {STEPS.map((s) => (
-                <div key={s.n} className="wholesale-step">
+              {REASONS.map((s) => (
+                <article key={s.n} className="wholesale-step">
                   <span className="wholesale-step-n">{s.n}</span>
                   <div>
                     <strong>{s.title}</strong>
-                    <p>{s.desc}</p>
+                    <p>{s.text}</p>
                   </div>
-                </div>
+                </article>
               ))}
             </div>
           </div>
