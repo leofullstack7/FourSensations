@@ -2,8 +2,14 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import hero1Image from "@/assets/foursensations/hero1.webp";
-import hero2Image from "@/assets/foursensations/hero2.webp";
+import heroPc1 from "@/assets/foursensations/banners/pc1.jpeg";
+import heroPc2 from "@/assets/foursensations/banners/pc2.jpeg";
+import heroPc3 from "@/assets/foursensations/banners/3.jpeg";
+import heroPc4 from "@/assets/foursensations/banners/pc4.jpeg";
+import heroMobile1 from "@/assets/foursensations/banners/movil1.jpeg";
+import heroMobile2 from "@/assets/foursensations/banners/movil2.jpeg";
+import heroMobile3 from "@/assets/foursensations/banners/movil3.jpeg";
+import heroMobile4 from "@/assets/foursensations/banners/movil4.jpeg";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { useReveal } from "@/hooks/useReveal";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
@@ -33,7 +39,37 @@ import type { StaticImageData } from "next/image";
 import dulceRenacerCover from "@/assets/productos/FS002 Dulce Renacer/FS002-1.webp";
 import accesoriosCover from "@/assets/productos/FS027 Accesorios/FS027-1.webp";
 
-const HERO_SLIDES: readonly StaticImageData[] = [hero1Image, hero2Image];
+const HERO_SLIDES: readonly {
+  desktop: StaticImageData;
+  mobile: StaticImageData;
+  alt: string;
+  href: string;
+}[] = [
+  {
+    desktop: heroPc1,
+    mobile: heroMobile1,
+    alt: "Un solo spray y todo cambia. Cuatro fragancias Hair Mist.",
+    href: "/categoria/cuidado-capilar?grupo=Hair%20Mist",
+  },
+  {
+    desktop: heroPc2,
+    mobile: heroMobile2,
+    alt: "Rise and Shine. El toque final para un cabello ultrabrillante.",
+    href: `/categoria/cuidado-capilar?grupo=${encodeURIComponent("Finalizadores y Protección")}`,
+  },
+  {
+    desktop: heroPc3,
+    mobile: heroMobile3,
+    alt: "Una bomba: el pre-shampoo para los días en que tu cabello pide más.",
+    href: `/categoria/cuidado-capilar?grupo=${encodeURIComponent("Pre - Shampoo")}`,
+  },
+  {
+    desktop: heroPc4,
+    mobile: heroMobile4,
+    alt: "Tu nueva obsesión capilar empieza aquí.",
+    href: "/categoria/cuidado-capilar",
+  },
+];
 const DESKTOP_INITIAL_VISIBLE_PRODUCTS = 32;
 const MOBILE_INITIAL_VISIBLE_PRODUCTS = 10;
 const DESKTOP_LOAD_MORE_PRODUCTS = 20;
@@ -76,7 +112,7 @@ export function StoreHomeClient({
   useEffect(() => {
     const timer = window.setInterval(() => {
       setHeroBannerIndex((prev) => (prev + 1) % HERO_SLIDES.length);
-    }, 12000);
+    }, 7000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -128,29 +164,28 @@ export function StoreHomeClient({
         <div className="banner-placeholder-wrapper" id="hero-banner">
           {HERO_SLIDES.map((slide, index) => (
             <div
-              key={slide.src}
+              key={slide.desktop.src}
               className={`hero-banner-layer${heroBannerIndex === index ? " active" : ""}`}
             >
               <Image
-                src={slide}
-                alt={index === 0 ? "Dulce Renacer y Sensación Primavera" : "Tu ritual capilar soñado"}
-                className="hero-banner-kenburns"
+                src={slide.desktop}
+                alt=""
+                className="hero-banner-kenburns hero-banner-kenburns--desktop"
                 sizes="100vw"
                 fill
                 priority={index === 0}
               />
+              <Image
+                src={slide.mobile}
+                alt=""
+                className="hero-banner-kenburns hero-banner-kenburns--mobile"
+                sizes="100vw"
+                fill
+                priority={index === 0}
+              />
+              <Link href={slide.href} className="hero-banner-hit" prefetch aria-label={slide.alt} />
             </div>
           ))}
-          <Link
-            href={`/categoria/${categoryPath("Cuidado capilar")}`}
-            className="hero1-discover"
-            prefetch
-          >
-            <span>Descúbrelos aquí</span>
-            <span className="hero1-discover__arrow" aria-hidden>
-              →
-            </span>
-          </Link>
         </div>
       </section>
 

@@ -95,6 +95,15 @@
 .hero-banner-layer.active .hero-banner-kenburns {
   animation: hero-kenburns 12s cubic-bezier(0.16, 0.84, 0.44, 1) forwards;
 }
+.hero-banner-kenburns--mobile {
+  display: none !important;
+}
+.hero-banner-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: auto;
+}
 @keyframes hero-kenburns {
   from {
     transform: scale(1);
@@ -294,10 +303,16 @@
 @media (max-width: 768px) {
   .banner-placeholder-wrapper {
     min-height: 0;
-    aspect-ratio: 2172 / 724;
+    aspect-ratio: 1440 / 1800;
     width: 100%;
     max-height: none;
     padding: 0;
+  }
+  .hero-banner-kenburns--desktop {
+    display: none !important;
+  }
+  .hero-banner-kenburns--mobile {
+    display: block !important;
   }
 
   .banner-placeholder-wrapper-secondary {
