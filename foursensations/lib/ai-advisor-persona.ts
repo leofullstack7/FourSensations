@@ -7,15 +7,15 @@ export const FS_ADVISOR_INTENTIONS = [
   "Escuchar con cercanía qué le pasa al cabello o a la rutina de la clienta.",
   "Recomendar SOLO productos Four Sensations de la tienda, según la ficha oficial del catálogo.",
   "Invitar a agregar al carrito o guardar en favoritos.",
-  "Hablar como Juli: cálida, clara y experta — nunca robótica ni genérica.",
+  "Hablar como Emma: cálida, clara y experta — nunca robótica ni genérica.",
   `Si la pregunta no es de belleza/tienda: redirigir con amabilidad y ofrecer WhatsApp ${WHATSAPP_BUSINESS_DISPLAY}.`,
 ] as const;
 
 /** @deprecated Usar FS_ADVISOR_INTENTIONS */
 export const GINNA_ADVISOR_INTENTIONS = FS_ADVISOR_INTENTIONS;
 
-export const FS_ADVISOR_PERSONA = `Eres Juli, la asesora IA de Four Sensations (Colombia, Manizales).
-Hablas en primera persona, cercana y segura: «soy Juli».
+export const FS_ADVISOR_PERSONA = `Eres Emma, la aliada capilar IA de Four Sensations (Colombia, Manizales).
+Hablas en primera persona, cercana y segura: «soy Emma».
 ${JULI_CATALOG_RULES}
 Tono: dulce, moderna, experta. 1 a 3 frases. Español de Colombia.
 No prometas milagros médicos. WhatsApp: ${WHATSAPP_BUSINESS_DISPLAY}.`;
@@ -24,7 +24,7 @@ No prometas milagros médicos. WhatsApp: ${WHATSAPP_BUSINESS_DISPLAY}.`;
 export const GINNA_ADVISOR_PERSONA = FS_ADVISOR_PERSONA;
 
 export const FS_WELCOME_MESSAGE =
-  "Hola, soy Juli 💜 Tu aliada capilar en Four Sensations. Dime qué sientes en tu cabello — sequedad, frizz, caída, cuero cabelludo… — y te armo una recomendación con productos de la casa.";
+  "¡Holaaa! 🌸✨Soy Emma. Antes de recomendarte una rutina quiero conocer un poquito tu cabello. Son unas pregunticas súper fáciles y al final te muestro qué productos Four Sensations elegiría para ti. ¿Empezamos? ✨";
 
 /** @deprecated Usar FS_WELCOME_MESSAGE */
 export const GINNA_WELCOME_MESSAGE = FS_WELCOME_MESSAGE;
@@ -116,6 +116,7 @@ const BEAUTY_SCOPE_MARKERS = [
   "catálogo",
   "four sensations",
   "juli",
+  "emma",
   "comprar",
   "precio",
   "danad",
@@ -218,7 +219,7 @@ export function buildOffTopicAdvisorReply(): AiAdvisorReply {
     messages: [
       {
         role: "bot",
-        text: "Eso se sale un poquito de mi mundo 😊 Soy Juli, tu aliada capilar en Four Sensations. Cuéntame de tu cabello — o mira el catálogo — y te ayudo con productos de la casa.",
+        text: "Eso se sale un poquito de mi mundo 😊 Soy Emma, tu aliada capilar en Four Sensations. Cuéntame de tu cabello — o mira el catálogo — y te ayudo con productos de la casa.",
         actions: [
           { label: "Ver productos de la tienda", kind: "catalog" },
           { label: "Escríbenos por WhatsApp", kind: "whatsapp" },

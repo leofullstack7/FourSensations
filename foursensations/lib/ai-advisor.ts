@@ -67,7 +67,7 @@ export const STORE_ADVISOR_KNOWLEDGE = {
   returns: `${POLICY_RETURNS_JULI} WhatsApp ${WHATSAPP_BUSINESS_DISPLAY}.`,
   whatsapp: `Nuestro WhatsApp de atención es ${WHATSAPP_BUSINESS_DISPLAY}. Escríbenos para pedidos, asesoría, garantía legal o novedades de transporte (no hay cambios por gusto).`,
   scope:
-    "Soy Juli, tu aliada de Four Sensations: te escucho y te recomiendo productos propios de la tienda según lo que tu cabello necesita.",
+    "Soy Emma, tu aliada de Four Sensations: te escucho y te recomiendo productos propios de la tienda según lo que tu cabello necesita.",
 } as const;
 
 const INTENT_SYNONYMS: Record<string, string[]> = {
@@ -382,7 +382,7 @@ export const ADVISOR_QUICK_PROMPTS = [
     text: "Tengo mucho frizz y el cabello rebelde",
     searchQuery: "frizz encrespado shine gloss dulce renacer fantasia natural",
     intro:
-      "El frizz se calma con nutrición + un buen finalizador. Mira lo que Juli te arma con productos de la tienda:",
+      "El frizz se calma con nutrición + un buen finalizador. Mira lo que Emma te arma con productos de la tienda:",
   },
   {
     id: "repair",
@@ -493,7 +493,7 @@ export function buildAdvisorReply(
       messages: [
         {
           role: "bot",
-          text: "Hola, soy Juli 💜 Cuéntame qué le pasa a tu cabello — sequedad, frizz, caída, cuero cabelludo… — y te armo una recomendación con productos Four Sensations.",
+          text: "¡Holaaa! 🌸 Soy Emma. Cuéntame de tu cabello — o empieza el cuestionario — y te armo una rutina Four Sensations.",
         },
       ],
     };
@@ -648,5 +648,5 @@ export const AI_PRODUCT_ATTRIBUTE_GUIDE = {
     "momentoUso — día, noche, post-ducha",
   ],
   tintes: ["tintFamily", "tintType", "tintLevel", "tintGroup"],
-  note: "Juli usa fichas del catálogo oficial (idealFor, beneficios) más name, tags y descripción. Recomienda solo productos Four Sensations.",
+  note: "Emma usa fichas del catálogo oficial (idealFor, beneficios) más name, tags y descripción. Recomienda solo productos Four Sensations.",
 } as const;

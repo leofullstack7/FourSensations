@@ -15,7 +15,8 @@ import {
   enrichStorefrontDisplayProducts,
   resolveStorefrontDisplayAfterFilter,
 } from "@/lib/store/variant-groups";
-import { hairSubcategoryForProductName } from "@/lib/hair-subcategories";
+import { hairSubcategoryForProductName, productBelongsToHairSubcategory } from "@/lib/hair-subcategories";
+import { withBombaCapilarProduct } from "@/lib/bomba-capilar";
 
 export type SubcategoryRow = {
   name: string;
@@ -59,11 +60,15 @@ function subcategoryMatches(productSub: string, filterSub: string): boolean {
 }
 
 function productMatchesHairGroup(p: StoreProduct, group: string, allowedLines: string[]): boolean {
+  if (productBelongsToHairSubcategory(p.name, group)) return true;
   if (subcategoryMatches(p.subcategory, group)) return true;
   const fromName = hairSubcategoryForProductName(p.name);
   if (fromName && subcategoryMatches(fromName, group)) return true;
   return allowedLines.some(
-    (name) => subcategoryMatches(p.subcategory, name) || fold(p.name) === fold(name),
+    (name) =>
+      subcategoryMatches(p.subcategory, name) ||
+      productBelongsToHairSubcategory(p.name, name) ||
+      fold(p.name) === fold(name),
   );
 }
 
@@ -332,14 +337,16 @@ export function CategoryLandingClient({
     setVisibleLimit(INITIAL_VISIBLE);
   }, [selectedGrupo, selectedLine]);
 
+  const catalog = useMemo(() => withBombaCapilarProduct(products), [products]);
+
   const filtered = useMemo(
-    () => products.filter((p) => productMatchesCategoryFilters(p, filterOpts)),
-    [products, filterOpts],
+    () => catalog.filter((p) => productMatchesCategoryFilters(p, filterOpts)),
+    [catalog, filterOpts],
   );
 
   const displayProducts = useMemo(
-    () => enrichStorefrontDisplayProducts(resolveStorefrontDisplayAfterFilter(filtered, products), products),
-    [filtered, products],
+    () => enrichStorefrontDisplayProducts(resolveStorefrontDisplayAfterFilter(filtered, catalog), catalog),
+    [filtered, catalog],
   );
 
   const hasActiveFilters = Boolean(selectedGrupo || selectedLine);
@@ -480,7 +487,7 @@ export function CategoryLandingClient({
             <div className="category-filter-title">Filtrar el catálogo</div>
             {hairMode ? (
               <p className="fs-cat-filter-lead">
-                Elige una familia (Tratamientos, Rutinas, Finalizadores, Tónicos, Fragancias o Multiuso) y, si quieres,
+                Elige una familia (Tratamientos, Shampoo y Acondicionador, Crecimiento, Detox, Finalizadores, Hair Mist, Puntas o Pre-Shampoo) y, si quieres,
                 una línea concreta.
               </p>
             ) : accessoryMode ? (

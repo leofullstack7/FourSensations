@@ -12,6 +12,7 @@ import { isDisplayableImageUrl } from "@/lib/util/image-url";
 import { productHeroThemeFromSlug } from "@/lib/store/product-hero-theme";
 import { getCategoryLabel } from "@/lib/category-labels";
 import { getCatalogProductCopy } from "@/lib/catalog-product-copy";
+import { getStorefrontProductTitle } from "@/lib/product-storefront-copy";
 
 function galleryPool(product: StoreProduct): string[] {
   const seen = new Set<string>();
@@ -38,7 +39,8 @@ export function ProductLandingClient({ product }: { product: StoreProduct }) {
   }`;
 
   const featured = activeSrc || images[0] || "";
-  const kicker = copy?.tagline || product.subcategory || getCategoryLabel(product.category);
+  const display = getStorefrontProductTitle(product.name);
+  const kicker = getCategoryLabel(product.category);
   const lead = copy?.hook || "";
   const blurb =
     copy?.description ||
@@ -67,7 +69,8 @@ export function ProductLandingClient({ product }: { product: StoreProduct }) {
           <div className="product-hero__fade" aria-hidden />
           <div className="product-hero__copy">
             <p className="product-hero__kicker">{kicker}</p>
-            <h1 className="product-hero__title">{product.name}</h1>
+            <h1 className="product-hero__title">{display.title}</h1>
+            {display.subtitle ? <p className="product-hero__subtitle">{display.subtitle}</p> : null}
             {lead ? <p className="product-hero__hook">{lead}</p> : null}
             <div className="product-hero__pills">
               {copy?.content ? <span>{copy.content}</span> : null}

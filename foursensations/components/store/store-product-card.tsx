@@ -5,6 +5,7 @@ import type { StoreProduct } from "@/lib/types/product";
 import { isDisplayableImageUrl } from "@/lib/util/image-url";
 import { normalizeColorHex } from "@/lib/product-color";
 import { StoreDiscountBadge, StoreProductPrice } from "@/components/store/StoreProductPrice";
+import { getStorefrontProductTitle } from "@/lib/product-storefront-copy";
 
 export function StoreProductCard({
   product,
@@ -23,6 +24,7 @@ export function StoreProductCard({
   imagePriority?: boolean;
   compact?: boolean;
 }) {
+  const display = getStorefrontProductTitle(product.name);
   const badgeMap = { new: "badge-new", sale: "badge-sale", hot: "badge-hot", best: "badge-best" } as const;
   const badgeLbl = { new: "Nuevo", sale: "Oferta", hot: "🔥 Hot", best: "⭐ Top" } as const;
   const colorHex = normalizeColorHex(product.colorHex);
@@ -115,7 +117,8 @@ export function StoreProductCard({
       </div>
       <div className="product-info">
         <div className="product-brand">{product.brand}</div>
-        <div className="product-name">{product.name}</div>
+        <div className="product-name">{display.title}</div>
+        {display.subtitle ? <div className="product-subtitle">{display.subtitle}</div> : null}
         {colorHex ? (
           <div className="product-card-color" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 4 }}>
             <span

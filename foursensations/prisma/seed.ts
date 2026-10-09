@@ -26,7 +26,7 @@ const prisma = new PrismaClient({
 const siteMenuData: Prisma.InputJsonValue = defaultMenuConfig as Prisma.InputJsonValue;
 
 const siteSettingsData: Prisma.InputJsonValue = {
-  topbar: "Despacho desde Manizales · Envíos a todo Colombia · El Club de los Cabellos Perfectos",
+  topbar: "Fórmulas con Intención · El Club de los Cabellos Perfectos · Despacho desde Manizales",
   hero: {
     eyebrow: "Bienvenida · Four Sensations",
     titleBefore: "Belleza que",
@@ -41,7 +41,7 @@ const siteSettingsData: Prisma.InputJsonValue = {
       { value: "2 días", label: "despacho máximo" },
     ],
   },
-  marquee: "Cabello sedoso · Sin frizz · Brillo espejo · Rutinas con intención · El Club de los Cabellos Perfectos",
+  marquee: "FÓRMULAS DERMATOLÓGICAMENTE COMPROBADAS · EL CLUB DE LOS CABELLOS PERFECTOS · RESULTADOS REALES PARA TU CABELLO",
   trustStrip: {
     title: "Por qué elegirnos",
     items: [

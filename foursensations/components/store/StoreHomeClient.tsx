@@ -13,12 +13,14 @@ import { StoreProductCard } from "@/components/store/store-product-card";
 import { CategoryShowcaseStrip } from "@/components/store/CategoryShowcaseStrip";
 import { TechAmbient } from "@/components/ui/TechAmbient";
 import { TintHomePreview } from "@/components/store/tints/TintHomePreview";
-import { productHasStorePhoto, sortProductsForHomeDisplay } from "@/lib/storefront-product-order";
+import { sortProductsForHomeDisplay } from "@/lib/storefront-product-order";
 import {
   enrichStorefrontDisplayProducts,
   resolveStorefrontDisplayAfterFilter,
 } from "@/lib/store/variant-groups";
-import { HAIR_SUBCATEGORY_ORDER } from "@/lib/hair-subcategories";
+import { HAIR_SUBCATEGORY_ORDER, productBelongsToHairSubcategory } from "@/lib/hair-subcategories";
+import { STOREFRONT_MARQUEE_MESSAGES } from "@/lib/store-marquee-messages";
+import { withBombaCapilarProduct } from "@/lib/bomba-capilar";
 import type { StoreProduct } from "@/lib/types/product";
 import type { StoreCombo } from "@/lib/types/store-combo";
 import type { TintBubbleItem } from "@/lib/tints";
@@ -26,7 +28,7 @@ import { HomeCombosPromo } from "@/components/store/CombosPromo";
 import { getWhatsAppHref } from "@/lib/storefront-contact";
 import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
 import { formatPrice } from "@/lib/format";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { StaticImageData } from "next/image";
 import proteinaCover from "@/assets/productos/FS001 Proteína 10 en 1/FS001-1.webp";
 import dulceRenacerCover from "@/assets/productos/FS002 Dulce Renacer/FS002-1.webp";
@@ -63,7 +65,7 @@ export function StoreHomeClient({
     favorites,
   } = useStorefrontUi();
 
-  const products = catalogProducts.length > 0 ? catalogProducts : initialProducts;
+  const products = withBombaCapilarProduct(catalogProducts.length > 0 ? catalogProducts : initialProducts);
 
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [manualSub, setManualSub] = useState<string | null>(null);
@@ -84,7 +86,9 @@ export function StoreHomeClient({
   const filteredProducts = useMemo(() => {
     let list: StoreProduct[];
     if (activeCategory === "__sub__" && manualSub != null) {
-      list = products.filter((p) => p.subcategory === manualSub);
+      list = products.filter(
+        (p) => productBelongsToHairSubcategory(p.name, manualSub) || p.subcategory === manualSub,
+      );
     } else if (activeCategory === "all") {
       list = [...products];
     } else {
@@ -124,31 +128,6 @@ export function StoreHomeClient({
     setVisibleCount(mobile ? MOBILE_INITIAL_VISIBLE_PRODUCTS : DESKTOP_INITIAL_VISIBLE_PRODUCTS);
   }, [activeCategory, manualSub, sortValue]);
 
-  const scrollToFeaturedProducts = useCallback(() => {
-    document.getElementById("featured")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
-
-  const [previewProducts, setPreviewProducts] = useState<StoreProduct[]>([]);
-
-  useEffect(() => {
-    const pool = enrichStorefrontDisplayProducts(
-      resolveStorefrontDisplayAfterFilter(products, products),
-      products,
-    ).filter(productHasStorePhoto);
-    if (pool.length === 0) {
-      setPreviewProducts([]);
-      return;
-    }
-    const copy = [...pool];
-    for (let i = copy.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      const tmp = copy[i]!;
-      copy[i] = copy[j]!;
-      copy[j] = tmp;
-    }
-    setPreviewProducts(copy.slice(0, 5));
-  }, [products]);
-
   return (
     <>
       <section className="hero-section" aria-label="Destacados Four Sensations">
@@ -183,24 +162,11 @@ export function StoreHomeClient({
 
       <div className="marquee-strip">
         <div className="marquee-track" id="marquee-track">
-          <span className="marquee-item">✨ El Club de los Cabellos Perfectos</span>
-          <span className="marquee-item">💆 Fórmulas con intención</span>
-          <span className="marquee-item">
-            <span>NUEVO</span> Belleza que se siente
-          </span>
-          <span className="marquee-item">🌿 Resultados reales para tu cabello</span>
-          <span className="marquee-item">💜 Ciencia con encanto</span>
-          <span className="marquee-item">📦 Programa mayorista</span>
-          <span className="marquee-item">🚚 Envíos a todo Colombia</span>
-          <span className="marquee-item">✨ El Club de los Cabellos Perfectos</span>
-          <span className="marquee-item">💆 Fórmulas con intención</span>
-          <span className="marquee-item">
-            <span>NUEVO</span> Belleza que se siente
-          </span>
-          <span className="marquee-item">🌿 Resultados reales para tu cabello</span>
-          <span className="marquee-item">💜 Ciencia con encanto</span>
-          <span className="marquee-item">📦 Programa mayorista</span>
-          <span className="marquee-item">🚚 Envíos a todo Colombia</span>
+          {[...STOREFRONT_MARQUEE_MESSAGES, ...STOREFRONT_MARQUEE_MESSAGES].map((text, i) => (
+            <span key={`${text}-${i}`} className="marquee-item">
+              {text}
+            </span>
+          ))}
         </div>
       </div>
 
@@ -212,32 +178,6 @@ export function StoreHomeClient({
         }}
         activeSubcategory={manualSub}
       />
-
-      {previewProducts.length > 0 ? (
-        <section className="gb-home-preview-products section-pad" aria-label="Productos destacados rápidos">
-          <div className="container">
-            <div className="gb-home-preview-products__grid">
-              {previewProducts.map((p, i) => (
-                <StoreProductCard
-                  key={p.id}
-                  product={p}
-                  isFav={favorites.includes(p.id)}
-                  onOpen={openProductModal}
-                  onToggleFav={toggleFavorite}
-                  onAddCart={addToCart}
-                  imagePriority={i < 2}
-                  compact
-                />
-              ))}
-            </div>
-            <div className="gb-home-preview-products__cta">
-              <button type="button" className="btn btn-primary btn-lg" onClick={scrollToFeaturedProducts}>
-                Ver Más Productos
-              </button>
-            </div>
-          </div>
-        </section>
-      ) : null}
 
       <BeautyAiAdvisor />
 
@@ -440,13 +380,13 @@ export function StoreHomeClient({
               },
               {
                 image: primaveralCover,
-                cat: "Rutinas",
+                cat: "Shampoo y Acondicionador",
                 name: "Equilibrio del cuero cabelludo",
                 href: `/categoria/${categoryPath("Cuidado capilar")}`,
               },
               {
                 image: scalpCover,
-                cat: "Tónicos",
+                cat: "Crecimiento y Fortalecimiento",
                 name: "Scalp en calma",
                 href: `/categoria/${categoryPath("Cuidado capilar")}`,
               },

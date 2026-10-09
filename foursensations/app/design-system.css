@@ -1485,7 +1485,14 @@ input, select, textarea { font-family: inherit; }
   font-size: 14.5px;
   font-weight: 500;
   color: var(--dark);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  line-height: 1.35;
+}
+.product-subtitle {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--text-light);
+  margin-bottom: 6px;
   line-height: 1.35;
 }
 .product-variant {

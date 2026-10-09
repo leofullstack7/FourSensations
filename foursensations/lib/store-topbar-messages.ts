@@ -1,12 +1,10 @@
 /**
  * Frases rotativas de la franja superior (topbar) de la tienda.
- * Edita este array para cambiar textos sin tocar el layout.
+ * Copy comercial: solo estas cuatro frases.
  */
 export const STOREFRONT_TOPBAR_MESSAGES: readonly string[] = [
-  "✨ Despacho desde Manizales · Envíos a todo Colombia 🇨🇴",
-  "📦 Preparación en máx. 2 días hábiles · El tránsito lo define la transportadora",
-  "💜 El Club de los Cabellos Perfectos — Belleza que se siente",
-  "🌿 Fórmulas con intención · Resultados reales para tu cabello",
-  "🛍️ Pago en línea con pasarela · Sin contraentrega",
-  "⚖️ Garantía legal · Sin cambios comerciales por gusto",
+  "Fórmulas con Intención 🍃 Resultados reales para tu cabello",
+  "El Club de los Cabellos Perfectos 👱🏻‍♀️✨",
+  "Preparación en Máximo 2 días hábiles 📦 El tránsito lo define la transportadora",
+  "Despacho desde Manizales 🚚Envíos a todo Colombia 🇨🇴",
 ];

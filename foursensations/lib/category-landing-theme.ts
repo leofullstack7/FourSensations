@@ -31,11 +31,11 @@ const bySlug: Record<string, Partial<CategoryLandingCopy>> = {
     eyebrow: "Cuidado capilar · Club de los Cabellos Perfectos",
     headline: "Tu cabello, con ciencia y encanto",
     subtitle:
-      "Tratamientos que reconstruyen, rutinas que equilibran, finalizadores con brillo, tónicos, fragancias y multiusos. Cada línea Four Sensations nace para un gesto concreto: nutrir, reparar, alisar la fibra o vestir el peinado.",
+      "Tratamientos, shampoo y acondicionador, crecimiento, detox, finalizadores, hair mist, puntas y pre-shampoo. Cada línea Four Sensations nace para un gesto concreto: nutrir, reparar o vestir el peinado.",
     ctaExplore: "Ver todo el cuidado capilar",
     commercialLine: "Arma tu protocolo: proteína, nutrición, cuero cabelludo o un aceite que selle el look.",
     benefits: [
-      { icon: "🧬", title: "Protocolos reales", text: "Seis familias: Tratamientos, Rutinas, Finalizadores, Tónicos, Fragancias y Multiuso." },
+      { icon: "🧬", title: "Protocolos reales", text: "Ocho familias: tratamientos, lavado, crecimiento, detox, protección, hair mist, puntas y pre-shampoo." },
       { icon: "✨", title: "Resultado que se ve", text: "Menos frizz, más brillo, fibra nutrida y cuero cabelludo en calma." },
       { icon: "🚚", title: "De Manizales a tu casa", text: "Pedidos preparados en máximo 2 días hábiles, con cobertura nacional." },
     ],
@@ -68,6 +68,13 @@ const bySlug: Record<string, Partial<CategoryLandingCopy>> = {
     subtitle: "Encuentra tu color explorando por grupo, familia o tipo. Cada burbuja es un color real.",
     ctaExplore: "Ver todos los tintes",
   },
+  "cuidado-corporal": {
+    eyebrow: "Cuidado corporal · Four Sensations",
+    headline: "Cuidado que se siente en la piel",
+    subtitle: "Línea corporal Four Sensations. Pronto más fórmulas para acompañar tu ritual de baño y cuerpo.",
+    ctaExplore: "Ver cuidado corporal",
+    commercialLine: "Misma intención, ahora también para el cuerpo.",
+  },
 };
 
 export function getCategoryLandingCopy(categoryLabel: string, slug: string): CategoryLandingCopy {
@@ -86,9 +93,11 @@ export function getCategoryLandingCopy(categoryLabel: string, slug: string): Cat
 
 export const HAIR_FILTER_GROUPS: HairSubcategoryName[] = [
   "Tratamientos",
-  "Rutinas",
-  "Finalizadores",
-  "Tónicos",
-  "Fragancias",
-  "Multiuso",
+  "Shampoo y Acondicionador",
+  "Crecimiento y Fortalecimiento",
+  "Detox y Cuero Cabelludo",
+  "Finalizadores y Protección",
+  "Hair Mist",
+  "Reparación de Puntas",
+  "Pre - Shampoo",
 ];

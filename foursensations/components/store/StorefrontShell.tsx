@@ -24,6 +24,8 @@ import { StoreDiscountBadge, StoreProductPrice } from "@/components/store/StoreP
 import { formatDiscountBadge, resolveProductPrice } from "@/lib/product-discount";
 import { loadFavorites, saveFavorites } from "@/lib/favorites-storage";
 import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
+import { findBombaCapilarParts, isBombaCapilarProduct, withBombaCapilarProduct } from "@/lib/bomba-capilar";
+import { getStorefrontProductTitle } from "@/lib/product-storefront-copy";
 import {
   POLICY_HREF_SHIPPING,
   POLICY_TRUST_PAY_SHORT,
@@ -111,7 +113,7 @@ export function StorefrontShell({
   /** Oculta topbar + header de tienda (modales y carrito siguen activos). Útil para labs A/B. */
   hideNavChrome?: boolean;
 }) {
-  const [products, setProducts] = useState<StoreProduct[]>(catalogProducts);
+  const [products, setProducts] = useState<StoreProduct[]>(() => withBombaCapilarProduct(catalogProducts));
   const [menuConfig] = useState<MenuConfig>(initialMenuConfig);
   const fullCatalogLoaded = useRef(false);
   const fullCatalogLoading = useRef(false);
@@ -121,7 +123,7 @@ export function StorefrontShell({
     setProducts((prev) => {
       const map = new Map(prev.map((p) => [p.id, p]));
       for (const p of extra) map.set(p.id, p);
-      return Array.from(map.values());
+      return withBombaCapilarProduct(Array.from(map.values()));
     });
   }, []);
 
@@ -316,6 +318,28 @@ export function StorefrontShell({
 
   const addToCart = useCallback(
     (productId: string, productSnapshot?: StoreProduct) => {
+      if (isBombaCapilarProduct(productId) || (productSnapshot && isBombaCapilarProduct(productSnapshot.id))) {
+        const { dulce, primaveral } = findBombaCapilarParts(productsRef.current);
+        const kit = [dulce, primaveral].filter((p): p is StoreProduct => Boolean(p));
+        if (kit.length === 0) {
+          showToast("Aún no podemos armar la Bomba Capilar. Abre Dulce Renacer y Sensación Primaveral.", "danger", "⚠️");
+          return;
+        }
+        setCart((prev) => {
+          let next = prev;
+          for (const item of kit) {
+            const existing = next.find((i) => i.id === item.id);
+            next = existing
+              ? next.map((i) => (i.id === item.id ? { ...i, qty: i.qty + 1 } : i))
+              : [...next, { ...item, qty: 1, comboId: undefined, comboItems: undefined }];
+          }
+          saveCart(next);
+          return next;
+        });
+        showToast("Bomba Capilar: Dulce Renacer + Sensación Primaveral al carrito", "success", "🛒");
+        setCartOpen(true);
+        return;
+      }
       const product =
         productsRef.current.find((p) => p.id === productId) ?? productSnapshot ?? null;
       if (!product) {
@@ -853,23 +877,13 @@ export function StorefrontShell({
                 </button>
                 <button type="button" className="icon-btn icon-btn--cart" style={{ position: "relative" }} title="Carrito" onClick={openCart}>
                   <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <path d="M16 10a4 4 0 0 1-8 0" />
+                    <path d="M6 6h15l-1.5 9h-12L6 6zm0 0L5 3H2" strokeLinecap="round" strokeLinejoin="round" />
+                    <circle cx="9" cy="20" r="1.5" />
+                    <circle cx="18" cy="20" r="1.5" />
                   </svg>
                   <span className="badge cart-badge" style={{ display: cartCount > 0 ? "flex" : "none" }}>
                     {cartCount}
                   </span>
-                </button>
-                <button
-                  type="button"
-                  className="icon-btn icon-btn--admin"
-                  title="Panel Admin"
-                  onClick={() => {
-                    window.location.href = "/admin";
-                  }}
-                >
-                  ⚙️
                 </button>
               </div>
             </div>
@@ -1163,9 +1177,14 @@ export function StorefrontShell({
                       <span>{selectedProduct.name}</span>
                     </div>
                     <div className="product-brand">{selectedProduct.brand}</div>
-                    <h2 className="product-modal-title" style={{ fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 600, color: "var(--dark)", marginBottom: 12, lineHeight: 1.2 }}>
-                      {selectedProduct.name}
+                    <h2 className="product-modal-title" style={{ fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 600, color: "var(--dark)", marginBottom: 4, lineHeight: 1.2 }}>
+                      {getStorefrontProductTitle(selectedProduct.name).title}
                     </h2>
+                    {getStorefrontProductTitle(selectedProduct.name).subtitle ? (
+                      <p className="product-subtitle" style={{ marginBottom: 12, fontSize: 16 }}>
+                        {getStorefrontProductTitle(selectedProduct.name).subtitle}
+                      </p>
+                    ) : null}
                     {selectedProduct.slug ? (
                       <Link
                         href={`/producto/${selectedProduct.slug}`}

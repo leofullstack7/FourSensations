@@ -40,7 +40,7 @@
     "aliases": []
   },
   "Tentación Equilibrio": {
-    "tagline": "Shampoo + Acondicionador para Cabellos Mixtos y Grasos Tentación Equilibrio es una r",
+    "tagline": "Shampoo & Acondicionador Cebolla",
     "hook": "",
     "description": "Cabellos Mixtos y Grasos Tentación Equilibrio es una rutina de shampoo y acondicionador desarrollada para cabellos mixtos y grasos que necesitan una limpieza efectiva sin descuidar la suavidad, el brillo y la manejabilidad. El Shampoo Tentación Equilibrio limpia el cuero cabelludo y el cabello mientras combina extractos naturales como cacao, fenogreco, arándanos, café y maracuyá, además de proteína hidrolizada de trigo y agentes acondicionadores que ayudan a mantener la fibra con una apariencia suave y cuidada. El Acondicionador Tentación Equilibrio complementa la rutina con ácido hialurónico, biotina, cacao, queratina vegetal y un complejo de 10 aminoácidos, ayudando a desenredar, acondicionar y aportar suavidad sin convertir el cuidado del cabello mixto en una rutina ",
     "idealFor": "cabellos grasos o mixtos, especialmente con raíz grasa y medios o puntas que necesitan suavidad, acondicionamiento y mayor manejabilidad.",
@@ -60,7 +60,7 @@
     "aliases": []
   },
   "Tentación Nutrición": {
-    "tagline": "Shampoo + Acondicionador para Cabellos Secos o con Raíz Grasa y Puntas Secas ¿Cabell",
+    "tagline": "Shampoo & Acondicionador Aguacate",
     "hook": "¿Cabello seco, áspero, opaco o con puntas que necesitan mucha más nutrición?",
     "description": "Tentación Nutrición es una rutina de shampoo y acondicionador desarrollada para cabellos secos o con raíz grasa y puntas secas que necesitan una limpieza efectiva acompañada de un cuidado más nutritivo en medios y puntas. El Shampoo Tentación Nutrición combina ingredientes como leche de coco, borojó, fenogreco, macadamia, aguacate, maracuyá, papaya, miel, argán, agua de cactus, chontaduro, castaño de Indias, arroz y biotina, ayudando a limpiar mientras acompaña una rutina enfocada en suavidad, brillo y nutrición. El Acondicionador Tentación Nutrición complementa la rutina con ácido hialurónico, aguacate, aloe vera, banano, biotina, péptidos, pantenol, complejo de aminoácidos, ceramidas, keratina, algodón, karité, macadamia y semillas de lino, además de agentes acondicio",
     "idealFor": "cabellos secos, opacos, porosos, ásperos, con frizz o con raíz grasa y puntas secas que necesitan mayor nutrición y acondicionamiento",
@@ -80,7 +80,7 @@
     "aliases": []
   },
   "Scalp Therapy": {
-    "tagline": "Shampoo + Acondicionador Detox para Cuero Cabelludo ¿Cuero cabelludo graso, con acum",
+    "tagline": "Shampoo & Acondicionador Carbón Activado",
     "hook": "¿Cuero cabelludo graso, con acumulación, sensación pesada o tendencia a la caspa?",
     "description": "Scalp Therapy es una rutina de shampoo y acondicionador desarrollada para realizar una limpieza profunda del cuero cabelludo, ayudar a remover impurezas, exceso de grasa y residuos acumulados, y dejar una sensación de frescura, ligereza y bienestar desde el lavado. Su fórmula tiene como protagonista el carbón activado y combina activos como ácido salicílico, ácido hialurónico, niacinamida, provitamina B5, biotina, romero, café, flor de jamaica, bambú, açaí y aminoácidos, dentro de una rutina enfocada en purificar, equilibrar y revitalizar el cuero cabelludo sin descuidar la fibra capilar.",
     "idealFor": "cabellos con tendencia grasa, caspa, acumulación de productos, sensación de pesadez o necesidad de una limpieza más profunda.",
@@ -93,7 +93,7 @@
     ]
   },
   "Scrub Glow": {
-    "tagline": "",
+    "tagline": "Exfoliante Capilar",
     "hook": "¿Cabello apagado, débil o que necesita una rutina de limpieza que haga mucho más que simplemente lavar?",
     "description": "Botanical es un shampoo multivitamínico desarrollado para limpiar el cuero cabelludo y el cabello mientras acompaña una rutina enfocada en fortalecer la apariencia de la fibra, mantener la suavidad y devolverle vitalidad al cabello. Su fórmula combina romero, ácido hialurónico, niacinamida, biotina, cebolla, argán, ají, jengibre, arroz y malva, una mezcla de activos botánicos, humectantes y acondicionadores que complementan el cuidado del cuero cabelludo y ayudan a mantener el cabello con una apariencia más fuerte, brillante, suave y manejable. Es una excelente base para una rutina capilar completa y combina especialmente bien con nuestra Proteína Capilar 10 en 1, tratamientos nutritivos, tónicos y productos de protección y finalización.",
     "idealFor": "Todo tipo de cabello, especialmente cabellos opacos, débiles, con apariencia cansada y cuero cabelludo sensible",
@@ -116,7 +116,7 @@
     ]
   },
   "Botanical": {
-    "tagline": "Shampoo Multivitamínico",
+    "tagline": "Shampoo",
     "hook": "¿Buscas una limpieza suave que prepare el cabello para la Proteína 10 en 1?",
     "description": "Shampoo Botanical es el complemento ideal de la Proteína Capilar 10 en 1 dentro de la Rutina Botanical. Limpia el cabello y el cuero cabelludo, aporta frescura y suavidad desde el lavado y prepara la fibra para el tratamiento. Está pensado para usarse de forma habitual, masajeando la raíz y llevando la espuma hacia las puntas sin agredirlas.",
     "idealFor": "Cabellos que necesitan limpieza suave y un complemento de la Proteína Capilar 10 en 1.",
@@ -134,7 +134,7 @@
     ]
   },
   "Cepillo Masajeador Capilar": {
-    "tagline": "Cepillo masajeador capilar",
+    "tagline": "Masajeador Capilar",
     "hook": "¿Quieres potenciar el masaje del cuero cabelludo en tu rutina?",
     "description": "El cepillo masajeador capilar Four Sensations complementa la aplicación de exfoliante, shampoo o tónicos. Ayuda a masajear el cuero cabelludo con suavidad y a distribuir mejor el producto durante la rutina.",
     "idealFor": "Complementar la aplicación de exfoliante capilar, shampoo, tónicos o rutinas de cuero cabelludo.",
@@ -148,7 +148,7 @@
     "aliases": []
   },
   "Fantasía Natural": {
-    "tagline": "bloqueador capilar",
+    "tagline": "Bloqueador Capilar",
     "hook": "¿Proteges tu piel del sol… pero dejas tu cabello completamente expuesto?",
     "description": "Fantasía Natural es mucho más que un bloqueador capilar. Es un producto multipropósito con intensa protección ultravioleta, de uso diario que funciona como crema para peinar, tratamiento ligero, termoprotector y bloqueador capilar frente a factores ambientales, ayudando a mantener el cabello suave, manejable y protegido sin dejar sensación grasosa. Su fórmula combina Blindagem, ácido hialurónico, pantenol, biotina, algodón, leche de coco y aceite de argán, activos que ayudan a acondicionar la fibra, aportar hidratación, mejorar la manejabilidad y mantener un acabado más brillante, suave y disciplinado. Está diseñado para acompañar el cabello en situaciones reales del día a día: exposición solar, herramientas de calor, sudor durante el ejercicio, playa, piscina, humedad,",
     "idealFor": "Todo tipo de cabello, especialmente cabello teñido, decolorado, seco, opaco, con frizz, expuesto al sol, herramientas de calor, piscina, playa o contaminación ambiental.",
@@ -171,7 +171,7 @@
     ]
   },
   "Luna Llena": {
-    "tagline": "SOS Nocturno para Puntas en Emergencia Capilar",
+    "tagline": "Suero Capilar",
     "hook": "¿Puntas secas, ásperas, abiertas y literalmente pidiendo auxilio?",
     "description": "Luna Llena es nuestro SOS nocturno para esos momentos en los que las puntas del cabello parecen haber llegado al límite. Un tratamiento sin enjuague diseñado para actuar durante tus horas de descanso, acondicionando intensamente las zonas más maltratadas y ayudando a que, al despertar, luzcan más suaves, pulidas, brillantes y visiblemente cuidadas . Su fórmula con aceite de argán, keratina y pantenol envuelve las puntas con una combinación acondicionadora que ayuda a disminuir la sensación de resequedad y aspereza, mejorar la manejabilidad y transformar visualmente esas zonas que se sienten quebradizas, opacas o chamizudas. Lo aplicas antes de dormir y lo dejas trabajar mientras descansas.",
     "idealFor": "Puntas secas, ásperas, abiertas o visiblemente maltratadas.",
@@ -187,7 +187,7 @@
     "aliases": []
   },
   "Suspiros": {
-    "tagline": "",
+    "tagline": "Aceite Multipropósito",
     "hook": "",
     "description": "Suspiros es un aceite multipropósito formulado con aceite de argán, aceite de sésamo y aceite de babasú, creado para acompañar diferentes momentos de tu rutina de belleza. Uno de sus usos favoritos es combinarlo con Luna Llena para preparar nuestra Pócima Mágica SOS, una mezcla intensiva para cuando las puntas están secas, maltratadas y oficialmente en emergencia capilar. También puede utilizarse en cejas y pestañas, ayudando a favorecer su crecimiento y una apariencia con mayor volumen, y como aceite para retirar el maquillaje.",
     "idealFor": "Puntas secas, ásperas, opacas, porosas, quebradizas, con frizz o visiblemente maltratadas por decoloraciones, tinturas, plancha, secador, exposición ambiental o falta de nutrición.",
@@ -227,7 +227,7 @@
     "aliases": []
   },
   "Proteína 10 en 1": {
-    "tagline": "Tratamiento Capilar Multifuncional",
+    "tagline": "10 en 1",
     "hook": "¿Cabello débil, poroso, opaco o con daños visibles?",
     "description": "Proteína Capilar 10 en 1 es un tratamiento capilar multifuncional desarrollado para complementar la rutina después del shampoo y concentrar en un solo paso diez beneficios dirigidos a mejorar la apariencia, resistencia, hidratación y vitalidad de la fibra capilar. Su fórmula está pensada para cabellos que necesitan un cuidado más completo, especialmente cuando presentan frizz, resequedad, pérdida de brillo, puntas maltratadas o daños asociados a procesos químicos y herramientas de calor.",
     "idealFor": "cabellos débiles, porosos, opacos, con frizz, puntas maltratadas o sometidos frecuentemente a procesos químicos y herramientas de calor. 10",
@@ -242,7 +242,7 @@
     ]
   },
   "Shine Gloss": {
-    "tagline": "Óleo Capilar Ultraligero de Bioinnovación Capilar",
+    "tagline": "Óleo Capilar",
     "hook": "¿Brillo espejo, control del frizz y puntas pulidas sin dejar el cabello pesado?",
     "description": "Shine Gloss es uno de los productos estrella de Four Sensations: un óleo capilar ultraligero creado para transformar el acabado del cabello con brillo intenso, suavidad, control del frizz y una apariencia visiblemente más pulida, sin dejar sensación grasosa ni pesada. Su fórmula incorpora nuestro Blend Hidratante Molecular, una combinación de aceites de cacay, camelia, macadamia, jojoba, buriti, sacha inchi, argán y linaza, seleccionados para complementar el cuidado de la fibra capilar y aportar un acabado luminoso, sedoso y de alto nivel. Su tecnología de micro-relleno inteligente ayuda a mejorar visualmente la superficie de la fibra, mientras su acción de blindaje cuticular contribuye a dejar el cabello más uniforme, disciplinado y protegido frente a agresiones extern",
     "idealFor": "Todo tipo de cabello, especialmente cabellos opacos, secos, con frizz, puntas ásperas, porosas o que necesitan un acabado más brillante, uniforme y pulido.",
@@ -287,7 +287,7 @@
     ]
   },
   "Bloom Shine": {
-    "tagline": "Perfume capilar · Bloom Shine",
+    "tagline": "Perfume Capilar",
     "hook": "¿Te gustan los aromas dulces que se sienten femeninos, alegres y absolutamente irresistibles?",
     "description": "Bloom Shine forma parte de las brumas capilares Four Sensations. Los Perfumes Capilares Four Sensations son brumas capilares sin alcohol desarrolladas para perfumar el cabello mientras complementan su cuidado con una fórmula ligera que no engrasa ni reseca. Su tecnología combina proteínas nutritivas, péptidos activos, vitaminas liposomadas GlowVita Complex™, protección térmica, hidrolato de romero, extracto de maracuyá y extracto de lino, creando una experiencia que va mucho más allá de dejar un aroma bonito. El complejo GlowVita Complex™ incorpora vitaminas A, C y E, provitamina B5, biotina y aceite de almendras encapsulados, mientras los péptidos complementan el cuidado de la fibra capilar.",
     "idealFor": "Todo tipo de cabello y para quienes quieren mantenerlo perfumado durante el día sin aplicar perfumes tradicionales con alcohol directamente sobre la fibra.",
@@ -307,7 +307,7 @@
     "aliases": []
   },
   "Sweet Love": {
-    "tagline": "Perfume capilar · Sweet Love",
+    "tagline": "Perfume Capilar",
     "hook": "¿Prefieres algo femenino, fresco y frutal con un toque cítrico?",
     "description": "Sweet Love forma parte de las brumas capilares Four Sensations. Los Perfumes Capilares Four Sensations son brumas capilares sin alcohol desarrolladas para perfumar el cabello mientras complementan su cuidado con una fórmula ligera que no engrasa ni reseca. Su tecnología combina proteínas nutritivas, péptidos activos, vitaminas liposomadas GlowVita Complex™, protección térmica, hidrolato de romero, extracto de maracuyá y extracto de lino, creando una experiencia que va mucho más allá de dejar un aroma bonito. El complejo GlowVita Complex™ incorpora vitaminas A, C y E, provitamina B5, biotina y aceite de almendras encapsulados, mientras los péptidos complementan el cuidado de la fibra capilar.",
     "idealFor": "Todo tipo de cabello y para quienes quieren mantenerlo perfumado durante el día sin aplicar perfumes tradicionales con alcohol directamente sobre la fibra.",
@@ -327,7 +327,7 @@
     "aliases": []
   },
   "Scarlette": {
-    "tagline": "Perfume capilar · Scarlette",
+    "tagline": "Perfume Capilar",
     "hook": "¿Una fragancia que se sienta femenina, coqueta y difícil de olvidar?",
     "description": "Scarlette forma parte de las brumas capilares Four Sensations. Los Perfumes Capilares Four Sensations son brumas capilares sin alcohol desarrolladas para perfumar el cabello mientras complementan su cuidado con una fórmula ligera que no engrasa ni reseca. Su tecnología combina proteínas nutritivas, péptidos activos, vitaminas liposomadas GlowVita Complex™, protección térmica, hidrolato de romero, extracto de maracuyá y extracto de lino, creando una experiencia que va mucho más allá de dejar un aroma bonito. El complejo GlowVita Complex™ incorpora vitaminas A, C y E, provitamina B5, biotina y aceite de almendras encapsulados, mientras los péptidos complementan el cuidado de la fibra capilar.",
     "idealFor": "Todo tipo de cabello y para quienes quieren mantenerlo perfumado durante el día sin aplicar perfumes tradicionales con alcohol directamente sobre la fibra.",
@@ -347,7 +347,7 @@
     "aliases": []
   },
   "Golden Glow": {
-    "tagline": "Perfume capilar · Golden Glow",
+    "tagline": "Perfume Capilar",
     "hook": "¿Tu mood siempre termina pidiendo playa, sol y algo delicioso?",
     "description": "Golden Glow forma parte de las brumas capilares Four Sensations. Los Perfumes Capilares Four Sensations son brumas capilares sin alcohol desarrolladas para perfumar el cabello mientras complementan su cuidado con una fórmula ligera que no engrasa ni reseca. Su tecnología combina proteínas nutritivas, péptidos activos, vitaminas liposomadas GlowVita Complex™, protección térmica, hidrolato de romero, extracto de maracuyá y extracto de lino, creando una experiencia que va mucho más allá de dejar un aroma bonito. El complejo GlowVita Complex™ incorpora vitaminas A, C y E, provitamina B5, biotina y aceite de almendras encapsulados, mientras los péptidos complementan el cuidado de la fibra capilar.",
     "idealFor": "Todo tipo de cabello y para quienes quieren mantenerlo perfumado durante el día sin aplicar perfumes tradicionales con alcohol directamente sobre la fibra.",
@@ -367,7 +367,7 @@
     "aliases": []
   },
   "Shots": {
-    "tagline": "Tónico Capilar",
+    "tagline": "Anticaída • Reparación • Crecimiento",
     "hook": "¿Piel opaca, áspera o con necesidad de una renovación visible?",
     "description": "Explosión de Chocolate es un exfoliante facial y corporal desarrollado para ayudar a remover suavemente células muertas e impurezas, mejorar la textura de la piel y dejarla con una apariencia más luminosa, suave, uniforme y renovada desde el primer uso. Su fórmula combina chocolate, arroz, manteca de cacao, avena, coco, granada y aceite de almendras dulces, dentro de una textura cremosa con partículas exfoliantes finas de cáscara de coco que permiten realizar una exfoliación efectiva sin convertir la experiencia en algo agresivo. Además de exfoliar, su combinación de ingredientes ayuda a aportar hidratación profunda, antioxidantes y aceites naturales, dejando la piel con una sensación aterciopelada y profundamente cuidada.",
     "idealFor": "cabellos debilitados, con caída, crecimiento lento, quiebre, daño visible o sometidos frecuentemente a procesos químicos y herramientas de calor.",
@@ -388,5 +388,21 @@
       "Shots Capilares",
       "Shots x3"
     ]
+  },
+  "Bomba Capilar": {
+    "tagline": "Dulce Renacer + Repolarizador Capilar",
+    "hook": "¿Quieres un ritual pre-shampoo más intensivo?",
+    "description": "Bomba Capilar es el ritual pre-shampoo de Four Sensations: Dulce Renacer (Tratamiento Capilar Nutritivo) + Sensación Primaveral (Repolarizador Capilar) en cantidades similares. Se aplica sobre el cabello seco o ligeramente húmedo, se deja actuar 45 a 60 minutos y luego se continúa con el shampoo y la rutina habitual.",
+    "idealFor": "cabellos secos, porosos, con frizz, maltratados o que necesitan un tratamiento intensivo antes del lavado.",
+    "benefits": [
+      "Nutrición intensiva antes del shampoo",
+      "Combina tratamiento nutritivo y repolarizador",
+      "Ayuda a suavidad, brillo y desenredo",
+      "Prepara la fibra para el resto de la rutina"
+    ],
+    "howTo": "1. Mezcla Dulce Renacer + Sensación Primaveral en cantidades similares. 2. Aplica sobre el cabello seco o ligeramente húmedo. 3. Deja actuar entre 45 y 60 minutos. 4. Enjuaga y continúa con el shampoo y la rutina habitual. Frecuencia sugerida: 1 a 2 veces por semana.",
+    "content": "Kit: Dulce Renacer 500 mL + Sensación Primaveral 300 mL",
+    "pricePublicHint": "74.000",
+    "aliases": ["Bomba capilar", "Pre-Shampoo", "Pre Shampoo"]
   }
 }

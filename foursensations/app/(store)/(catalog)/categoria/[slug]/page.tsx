@@ -52,7 +52,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
   let cat = await getStorefrontCategoryBySlug(slug);
 
-  if (!cat && !process.env.DATABASE_URL) {
+  if (!cat) {
     cat = categoryFromStaticMenu(slug);
   }
   if (!cat) return notFound();

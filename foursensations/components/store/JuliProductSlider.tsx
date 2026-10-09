@@ -5,6 +5,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { StoreProductPrice } from "@/components/store/StoreProductPrice";
 import type { StoreProduct } from "@/lib/types/product";
 import { isDisplayableImageUrl } from "@/lib/util/image-url";
+import { getStorefrontProductTitle } from "@/lib/product-storefront-copy";
 
 type JuliProductSliderProps = {
   products: StoreProduct[];
@@ -121,10 +122,10 @@ export function JuliProductSlider({
                 )}
               </button>
               <div className="juli-slide__body">
-                <p className="juli-slide__hint">{hint || product.subcategory || product.brand}</p>
+                <p className="juli-slide__hint">{hint || getStorefrontProductTitle(product.name).subtitle || product.brand}</p>
                 <h3 className="juli-slide__name">
                   <button type="button" onClick={() => onOpen(product.id)}>
-                    {product.name}
+                    {getStorefrontProductTitle(product.name).title}
                   </button>
                 </h3>
                 <div className="juli-slide__price">

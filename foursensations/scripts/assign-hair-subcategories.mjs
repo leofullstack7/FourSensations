@@ -10,12 +10,14 @@ const prisma = new PrismaClient();
 const skuTable = JSON.parse(readFileSync(resolve(process.cwd(), "lib/product-skus.json"), "utf8"));
 
 const HAIR_GROUPS = {
-  Tratamientos: ["Proteína 10 en 1", "Dulce Renacer", "Sensación Primaveral", "Shots"],
-  Rutinas: ["Botanical", "Scalp Therapy", "Tentación Nutrición", "Tentación Equilibrio"],
-  Finalizadores: ["Shine Gloss", "Fantasía Natural"],
-  Tónicos: ["Secreto de Primavera"],
-  Fragancias: ["Bloom Shine", "Sweet Love", "Scarlette", "Golden Glow"],
-  Multiuso: ["Suspiros", "Luna Llena"],
+  Tratamientos: ["Dulce Renacer", "Sensación Primaveral", "Proteína Capilar"],
+  "Shampoo y Acondicionador": ["Botanical", "Kit Tentación Equilibrio", "Kit Tentación Nutrición", "Kit Scalp Therapy"],
+  "Crecimiento y Fortalecimiento": ["Secreto de Primavera", "Shots Capilares"],
+  "Detox y Cuero Cabelludo": ["Scrub Glow", "Kit Scalp Therapy", "Cepillo"],
+  "Finalizadores y Protección": ["Fantasía Natural", "Shine Gloss"],
+  "Hair Mist": ["Sweet Love", "BloomShine", "Scarlette", "Golden Glow"],
+  "Reparación de Puntas": ["Luna Llena", "Suspiros"],
+  "Pre - Shampoo": ["Bomba Capilar"],
 };
 
 const NAME_TO_SUB = {
@@ -23,27 +25,32 @@ const NAME_TO_SUB = {
   "proteina capilar": "Tratamientos",
   "dulce renacer": "Tratamientos",
   "sensacion primaveral": "Tratamientos",
-  shots: "Tratamientos",
-  "shots capilares": "Tratamientos",
-  "shots x3": "Tratamientos",
-  "scrub glow": "Tratamientos",
-  botanical: "Rutinas",
-  "scalp therapy": "Rutinas",
-  "tentacion nutricion": "Rutinas",
-  "tentacion equilibrio": "Rutinas",
-  "shine gloss": "Finalizadores",
-  "2. shine gloss": "Finalizadores",
-  "fantasia natural": "Finalizadores",
-  "1. fantasia natural": "Finalizadores",
-  "secreto de primavera": "Tónicos",
-  "bloom shine": "Fragancias",
-  "sweet love": "Fragancias",
-  scarlette: "Fragancias",
-  "golden glow": "Fragancias",
-  "brumas capilares": "Fragancias",
-  suspiros: "Multiuso",
-  "luna llena": "Multiuso",
-  "crema autobronceadora": "Multiuso",
+  botanical: "Shampoo y Acondicionador",
+  "scalp therapy": "Shampoo y Acondicionador",
+  "kit scalp therapy": "Shampoo y Acondicionador",
+  "tentacion nutricion": "Shampoo y Acondicionador",
+  "kit tentacion nutricion": "Shampoo y Acondicionador",
+  "tentacion equilibrio": "Shampoo y Acondicionador",
+  "kit tentacion equilibrio": "Shampoo y Acondicionador",
+  "secreto de primavera": "Crecimiento y Fortalecimiento",
+  shots: "Crecimiento y Fortalecimiento",
+  "shots capilares": "Crecimiento y Fortalecimiento",
+  "shots x3": "Crecimiento y Fortalecimiento",
+  "scrub glow": "Detox y Cuero Cabelludo",
+  "cepillo masajeador capilar": "Detox y Cuero Cabelludo",
+  "shine gloss": "Finalizadores y Protección",
+  "2. shine gloss": "Finalizadores y Protección",
+  "fantasia natural": "Finalizadores y Protección",
+  "1. fantasia natural": "Finalizadores y Protección",
+  "bloom shine": "Hair Mist",
+  bloomshine: "Hair Mist",
+  "sweet love": "Hair Mist",
+  scarlette: "Hair Mist",
+  "golden glow": "Hair Mist",
+  "brumas capilares": "Hair Mist",
+  suspiros: "Reparación de Puntas",
+  "luna llena": "Reparación de Puntas",
+  "bomba capilar": "Pre - Shampoo",
 };
 
 function normalizeName(value) {
@@ -74,6 +81,12 @@ async function main() {
     where: { slug: "cuidado-capilar" },
     update: { name: "Cuidado capilar" },
     create: { slug: "cuidado-capilar", name: "Cuidado capilar", icon: "💇", sortOrder: 0 },
+  });
+
+  await prisma.category.upsert({
+    where: { slug: "cuidado-corporal" },
+    update: { name: "Cuidado Corporal" },
+    create: { slug: "cuidado-corporal", name: "Cuidado Corporal", icon: "🧴", sortOrder: 1 },
   });
 
   let sortOrder = 0;

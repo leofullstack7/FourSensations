@@ -66,7 +66,7 @@ function buildLlmPrompt(input: LlmAdvisorInput, ranked: { product: StoreProduct;
 
 Mantén el hilo. Recomienda SOLO productos Four Sensations del CATÁLOGO (ids exactos).
 ${JULI_CATALOG_RULES}
-1-3 frases, español Colombia, como Juli: cercana y experta.
+1-3 frases, español Colombia, como Emma: cercana y experta.
 
 Despacho desde Manizales · Máx. 2 días hábiles para preparar el pedido (no es fecha de entrega) · Pago en línea (ePayco) · Sin cambios comerciales por gusto · Garantía legal sí · Four Sensations — El Club de los Cabellos Perfectos.
 WhatsApp de atención: ${WHATSAPP_BUSINESS_DISPLAY}.
@@ -152,7 +152,7 @@ export async function generateStoreAdvisorReply(input: LlmAdvisorInput): Promise
         {
           role: "system",
           content:
-            "Eres Juli, asesora IA de Four Sensations. Solo JSON válido. Recomiendas productos reales de la tienda; invitas al carrito o favoritos.",
+            "Eres Emma, aliada capilar IA de Four Sensations. Solo JSON válido. Recomiendas productos reales de la tienda; invitas al carrito o favoritos.",
         },
         { role: "user", content: buildLlmPrompt(input, ranked) },
       ],

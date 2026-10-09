@@ -11,7 +11,7 @@ function fold(value: string): string {
 
 /**
  * Palabras clave → productos Four Sensations del catálogo oficial.
- * Disparan recomendaciones precisas en Juli AI.
+ * Disparan recomendaciones precisas en Emma.
  */
 export const JULI_CONCERN_TRIGGERS: {
   id: string;
@@ -180,7 +180,7 @@ export function formatJuliCatalogLine(product: StoreProduct): string {
 
 export const JULI_CATALOG_RULES = `Recomiendas SOLO productos Four Sensations de la tienda (nunca marcas ajenas).
 Usa la ficha oficial: para quién es, beneficios y modo de uso.
-Si piden bomba capilar, junta Dulce Renacer + Sensación Primaveral.
+Si piden bomba capilar o pre-shampoo, recomienda Bomba Capilar (Dulce Renacer + Sensación Primaveral).
 Si piden proteína o reconstrucción, lidera Proteína 10 en 1 con Botanical.
 Si piden caída o crecimiento, lidera Shots y Secreto de Primavera.
 Si piden frizz o brillo, Shine Gloss / Fantasía Natural / tratamientos nutritivos.
