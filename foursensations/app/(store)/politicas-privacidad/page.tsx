@@ -107,9 +107,10 @@ export default function PoliticasPrivacidadPage() {
       <LegalRevealSection number={8} title="Encargados del tratamiento y terceros" variant="blush">
         <p>
           Para prestar nuestros servicios podemos compartir únicamente la información necesaria con terceros o
-          encargados que intervienen en la operación, como transportadoras, proveedores tecnológicos, plataformas de
-          comercio electrónico, pasarelas de pago y otros proveedores necesarios para procesar compras, pagos, entregas
-          y comunicaciones autorizadas.
+          encargados que intervienen en la operación, como transportadoras (Envía e Interrapidísimo), proveedores
+          tecnológicos, plataformas de comercio electrónico, pasarelas de pago (hoy Mercado Pago) y otros proveedores
+          necesarios para procesar compras, pagos, entregas y comunicaciones autorizadas. No almacenamos datos de
+          tarjeta.
         </p>
         <p className="legal-mt-md">
           Four Sensations no vende tus datos personales a terceros con fines publicitarios.

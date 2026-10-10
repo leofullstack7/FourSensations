@@ -68,7 +68,7 @@ Mantén el hilo. Recomienda SOLO productos Four Sensations del CATÁLOGO (ids ex
 ${JULI_CATALOG_RULES}
 1-3 frases, español Colombia, como Juli: cercana y experta.
 
-Despacho desde Manizales · Máx. 2 días hábiles para preparar el pedido (no es fecha de entrega) · Pago en línea (ePayco) · Sin cambios comerciales por gusto · Garantía legal sí · Four Sensations — El Club de los Cabellos Perfectos.
+Despacho desde Manizales · Máx. 2 días hábiles para preparar el pedido (no es fecha de entrega) · Pago en línea (Mercado Pago) · Sin cambios comerciales por gusto · Garantía legal sí · Four Sensations — El Club de los Cabellos Perfectos.
 WhatsApp de atención: ${WHATSAPP_BUSINESS_DISPLAY}.
 
 CONVERSACIÓN:

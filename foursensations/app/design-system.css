@@ -96,6 +96,32 @@ input, select, textarea { font-family: inherit; }
   justify-self: center;
   text-align: center;
 }
+.topbar-msg--marquee {
+  display: none;
+}
+.topbar-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: topbar-marquee 36s linear infinite;
+}
+.topbar-marquee-copy,
+.topbar-marquee-item {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.topbar-marquee-dot {
+  display: inline-flex;
+  margin: 0 0.7em;
+  opacity: 0.85;
+}
+@keyframes topbar-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .topbar-marquee-track { animation: none; }
+}
 .topbar-user-slot {
   grid-column: 3;
   justify-self: end;
@@ -2995,15 +3021,21 @@ footer {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
   }
-  .topbar-msg {
+  .topbar-msg--rotate {
+    display: none;
+  }
+  .topbar-msg--marquee {
+    display: block;
     grid-column: 1;
-    justify-self: start;
+    justify-self: stretch;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: clip;
     font-size: 10px;
     letter-spacing: 0.06em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
+    text-align: left;
   }
   .topbar-user-slot {
     grid-column: 2;

@@ -30,6 +30,7 @@ export function CheckoutResultadoClient() {
   const [error, setError] = useState<string | null>(null);
 
   const refPayco = searchParams.get("ref_payco");
+  const mpPaymentId = searchParams.get("payment_id") || searchParams.get("collection_id");
 
   const fetchOrder = useCallback(async (ref: string) => {
     const res = await fetch(`/api/checkout/orders/${encodeURIComponent(ref)}`, { cache: "no-store" });
@@ -51,7 +52,20 @@ export function CheckoutResultadoClient() {
 
     (async () => {
       try {
-        if (!isBoldReturn) {
+        if (!isBoldReturn && mpPaymentId) {
+          const res = await fetch("/api/payments/mercadopago/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              paymentId: mpPaymentId,
+              reference: refFromUrl ?? undefined,
+            }),
+          });
+          const data = (await res.json()) as { linked?: boolean; reference?: string };
+          if (data.linked && data.reference) {
+            setReference(data.reference);
+          }
+        } else if (!isBoldReturn && refPayco) {
           const res = await fetch("/api/payments/epayco/sync-response", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -72,7 +86,7 @@ export function CheckoutResultadoClient() {
         setSyncDone(true);
       }
     })();
-  }, [syncDone, refPayco, searchParams, isBoldReturn]);
+  }, [syncDone, refPayco, mpPaymentId, searchParams, isBoldReturn]);
 
   useEffect(() => {
     if (!reference) return;
@@ -83,7 +97,11 @@ export function CheckoutResultadoClient() {
 
   const paid = order?.status === "PAID" && order?.paymentStatus === "APPROVED";
   const providerLabel =
-    order?.paymentProvider === "BOLD" || isBoldReturn ? "Bold" : "ePayco";
+    order?.paymentProvider === "BOLD" || isBoldReturn
+      ? "Bold"
+      : order?.paymentProvider === "EPAYCO"
+        ? "ePayco"
+        : "Mercado Pago";
 
   useEffect(() => {
     if (paid) saveCart([]);

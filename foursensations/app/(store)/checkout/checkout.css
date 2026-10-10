@@ -53,7 +53,7 @@
 
 .gb-co-header {
   position: sticky;
-  top: var(--fs-nav-h, 118px);
+  top: 0;
   z-index: 50;
   backdrop-filter: blur(16px);
   background: rgba(245, 241, 248, 0.88);
@@ -344,7 +344,11 @@
 @media (min-width: 1024px) {
   .gb-co-aside-sticky {
     position: sticky;
-    top: calc(var(--fs-nav-h, 118px) + 12px);
+    top: calc(var(--gb-co-header-h, 72px) + 12px);
+    z-index: 20;
+    align-self: start;
+    max-height: calc(100vh - var(--gb-co-header-h, 72px) - 28px);
+    overflow-y: auto;
   }
 }
 
@@ -562,9 +566,56 @@
 
 @media (min-width: 900px) {
   .gb-co-zone-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 14px;
   }
+}
+
+.gb-co-carrier-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+@media (min-width: 640px) {
+  .gb-co-carrier-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.gb-co-carrier-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 2px solid rgba(200, 168, 162, 0.28);
+  background: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+}
+
+.gb-co-carrier-card strong {
+  font-size: 14px;
+  color: var(--dark);
+}
+
+.gb-co-carrier-card span {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.gb-co-carrier-card--active {
+  border-color: var(--dusty-rose);
+  background: linear-gradient(145deg, rgba(232, 200, 194, 0.22), rgba(255, 255, 255, 0.95));
+}
+
+.gb-co-carrier-card--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .gb-co-zone-card {
@@ -657,6 +708,44 @@
 .gb-co-price-free {
   color: var(--sage-dark);
   font-weight: 700;
+}
+
+.gb-co-price-cod {
+  color: var(--dusty-rose);
+  font-weight: 700;
+}
+
+.gb-co-reexp-note {
+  margin: 14px 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--dark-mid);
+}
+
+.gb-co-reexp-details {
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.gb-co-reexp-details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.gb-co-reexp-details ul {
+  margin: 8px 0 0;
+  padding: 0 0 0 16px;
+  max-height: 160px;
+  overflow: auto;
+  columns: 2;
+  column-gap: 16px;
+}
+
+.gb-co-reexp-details li {
+  break-inside: avoid;
+  margin-bottom: 4px;
 }
 
 .gb-co-zone-hint {

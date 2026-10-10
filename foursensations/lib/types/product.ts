@@ -44,6 +44,8 @@ export type StoreProduct = {
   colorHex?: string | null;
   /** Nombre legible del color (opcional). */
   colorName?: string | null;
+  /** Precio de vitrina mayorista (tachado = público). */
+  isWholesalePrice?: boolean;
 };
 
 export type CartComboItemPreview = {

@@ -1,4 +1,6 @@
+import { StoreCatalogSeed } from "@/components/store/StoreCatalogSeed";
 import { WholesaleLandingClient } from "@/components/store/WholesaleLandingClient";
+import { getStorefrontProducts } from "@/lib/products";
 import { pickRandomCollageImages } from "@/lib/server/pick-collage-images";
 
 export const metadata = {
@@ -10,7 +12,15 @@ export const metadata = {
 export const revalidate = 60;
 
 export default async function MayoristaPage() {
-  const collageUrls = await pickRandomCollageImages(["mayorista", "cuidado-capilar", "accesorios"], 3);
+  const [collageUrls, products] = await Promise.all([
+    pickRandomCollageImages(["mayorista", "cuidado-capilar", "accesorios"], 3),
+    getStorefrontProducts(),
+  ]);
 
-  return <WholesaleLandingClient collageUrls={collageUrls} />;
+  return (
+    <>
+      <StoreCatalogSeed products={products} />
+      <WholesaleLandingClient collageUrls={collageUrls} products={products} />
+    </>
+  );
 }

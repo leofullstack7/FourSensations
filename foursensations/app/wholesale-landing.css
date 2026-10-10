@@ -403,3 +403,73 @@
     justify-content: center;
   }
 }
+
+.wholesale-register-band {
+  padding: 8px 0 28px;
+}
+.wholesale-register-card,
+.wholesale-spend-card {
+  background: #fff;
+  border: 1px solid rgba(196, 84, 122, 0.12);
+  border-radius: 24px;
+  padding: clamp(22px, 4vw, 36px);
+  box-shadow: var(--shadow-lg);
+}
+.wholesale-spend-kicker {
+  margin: 0 0 6px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 12px;
+  color: var(--rose);
+}
+.wholesale-spend-value {
+  display: block;
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 7vw, 3.4rem);
+  line-height: 1;
+  color: var(--dark);
+  margin-bottom: 10px;
+}
+.wholesale-register-card h2 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+}
+.wholesale-register-error {
+  color: var(--dusty-rose);
+  font-size: 13px;
+}
+.wholesale-register-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 18px 0;
+}
+.wholesale-register-grid label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.wholesale-register-grid input {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font: inherit;
+  color: var(--dark);
+  background: var(--ivory);
+}
+.wholesale-register-grid__full {
+  grid-column: 1 / -1;
+}
+.wholesale-catalog-head {
+  margin-bottom: 22px;
+}
+.wholesale-catalog-head h2 {
+  font-family: var(--font-display);
+  margin: 0 0 8px;
+}
+@media (max-width: 720px) {
+  .wholesale-register-grid {
+    grid-template-columns: 1fr;
+  }
+}

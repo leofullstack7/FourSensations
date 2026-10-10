@@ -10,9 +10,9 @@ import heroMobile1 from "@/assets/foursensations/banners/movil1.jpeg";
 import heroMobile2 from "@/assets/foursensations/banners/movil2.jpeg";
 import heroMobile3 from "@/assets/foursensations/banners/movil3.jpeg";
 import heroMobile4 from "@/assets/foursensations/banners/movil4.jpeg";
-import { BrandLogo } from "@/components/brand/BrandLogo";
 import { useReveal } from "@/hooks/useReveal";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
+import { StoreFooter } from "@/components/store/StoreFooter";
 import { BeautyAiAdvisor } from "@/components/store/BeautyAiAdvisor";
 import { StoreProductCard } from "@/components/store/store-product-card";
 import { CategoryShowcaseStrip } from "@/components/store/CategoryShowcaseStrip";
@@ -30,7 +30,6 @@ import type { StoreProduct } from "@/lib/types/product";
 import type { StoreCombo } from "@/lib/types/store-combo";
 import type { TintBubbleItem } from "@/lib/tints";
 import { HomeCombosPromo } from "@/components/store/CombosPromo";
-import { getWhatsAppHref, WHATSAPP_SUPPORT_MESSAGE } from "@/lib/storefront-contact";
 import { pickRotatingTestimonials } from "@/lib/store-testimonials";
 import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
 import { formatPrice } from "@/lib/format";
@@ -90,7 +89,6 @@ export function StoreHomeClient({
 }: StoreHomeClientProps) {
   const {
     catalogProducts,
-    menuConfig,
     categoryPath,
     showToast,
     openProductModal,
@@ -440,67 +438,7 @@ export function StoreHomeClient({
         </div>
       </section>
 
-      <footer>
-        <div className="container">
-          <div className="footer-grid">
-            <div className="footer-brand">
-              <BrandLogo variant="store" inverted />
-              <p className="footer-desc">
-                Four Sensations
-                <br />
-                ¡Creamos nuevas formas de amar, cuidar y disfrutar tu cabello!💗
-                <br />
-                <strong>BE YOU, BE FOUR SENSATIONS</strong>
-                <br />
-                Marca Colombiana 🇨🇴 · Hecho en Colombia
-              </p>
-            </div>
-            <div className="footer-col">
-              <h4>Productos</h4>
-              <div className="footer-links">
-                {Object.keys(menuConfig).map((catName) => (
-                  <Link key={catName} href={`/categoria/${categoryPath(catName)}`} prefetch>
-                    {catName}
-                  </Link>
-                ))}
-              </div>
-            </div>
-            <div className="footer-col">
-              <h4>Empresa</h4>
-              <div className="footer-links">
-                <Link href="/sobre-nosotros">Sobre nosotros</Link>
-                <Link href="/mayorista">Programa mayorista</Link>
-                <a href={getWhatsAppHref("Hola Four Sensations, quiero información para trabajar con ustedes.")} target="_blank" rel="noreferrer">
-                  Trabaja con nosotros
-                </a>
-              </div>
-            </div>
-            <div className="footer-col">
-              <h4>Ayuda</h4>
-              <div className="footer-links">
-                <a href={getWhatsAppHref(WHATSAPP_SUPPORT_MESSAGE)} target="_blank" rel="noreferrer">
-                  WhatsApp de atención
-                </a>
-                <Link href="/cuenta/pedidos">Mis pedidos</Link>
-                <Link href="/politicas-envio">Envíos, garantía y posventa</Link>
-                <Link href="/politicas-privacidad">Política de privacidad</Link>
-                <Link href="/terminos-condiciones">Términos y condiciones</Link>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="container">
-          <div className="footer-bottom">
-            <span>© 2026 Four Sensations S.A.S. Todos los derechos reservados</span>
-            <div className="footer-payments">
-              <span className="payment-chip">ePayco</span>
-              <span className="payment-chip">PSE</span>
-              <span className="payment-chip">Visa</span>
-              <span className="payment-chip">Mastercard</span>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <StoreFooter />
     </>
   );
 }

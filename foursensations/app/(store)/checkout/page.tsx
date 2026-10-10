@@ -3,7 +3,7 @@ import "./checkout.css";
 
 export const metadata = {
   title: "Checkout — Four Sensations",
-  description: "Completa tu compra: despacho desde Manizales y pago en línea con ePayco",
+  description: "Completa tu compra: despacho desde Manizales y pago en línea con Mercado Pago",
 };
 
 export default function CheckoutPage() {

@@ -946,8 +946,11 @@
   .gb-ai-inner {
     grid-template-columns: 1fr;
   }
+  .gb-ai-copy {
+    order: 0;
+  }
   .gb-ai-console {
-    order: -1;
+    order: 1;
   }
 }
 

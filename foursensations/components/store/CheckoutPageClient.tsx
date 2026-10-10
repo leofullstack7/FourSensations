@@ -2,18 +2,26 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ENVIA_REEXPEDITION_DESTINATIONS, findEnviaExclusion } from "@/lib/checkout/envia-exclusions";
 import {
   CHECKOUT_BULK_SHIPPING_NOTICE,
   CHECKOUT_COURIER_NOTE,
+  ENVIA_NO_REEXPEDITION_NOTE,
+  type ShippingCarrier,
   type ShippingZoneId,
   SHIPPING_ZONES,
   checkoutShippingCop,
+  guessShippingZoneFromCity,
+  resolveShippingCarrier,
   shippingZoneContextMessage,
 } from "@/lib/checkout/shipping-zones";
 import { loadCart, saveCart, syncCartPricesFromCatalog } from "@/lib/cart-storage";
 import { formatPrice } from "@/lib/format";
+import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
+import { withWholesalePrices } from "@/lib/wholesale-pricing";
+import { wholesaleMinimumReminder } from "@/lib/wholesale-rules";
+import { useSession } from "next-auth/react";
 import { formatDiscountBadge } from "@/lib/product-discount";
 import type { CartLine, StoreProduct } from "@/lib/types/product";
 import { isHttpImageUrl } from "@/lib/util/image-url";
@@ -23,7 +31,7 @@ import { createCheckoutOrderSchema } from "@/lib/validation/checkout-order";
 
 type PayPhase = "idle" | "order" | "session" | "widget" | "integrity" | "error";
 
-type PaymentMethod = "epayco" | "bold";
+type PaymentMethod = "mercadopago" | "bold";
 
 /** Bold deshabilitado temporalmente en checkout. */
 const BOLD_CHECKOUT_ENABLED = false;
@@ -44,19 +52,6 @@ const listItem = (reduce: boolean) => ({
     transition: { duration: reduce ? 0.01 : 0.42, ease: [0.22, 1, 0.36, 1] as const },
   },
 });
-
-function loadEpaycoScript(): Promise<void> {
-  if (typeof window === "undefined") return Promise.resolve();
-  if (window.ePayco?.checkout) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = "https://checkout.epayco.co/checkout-v2.js";
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("No se pudo cargar el script de ePayco"));
-    document.body.appendChild(s);
-  });
-}
 
 function mountBoldButton(opts: {
   reference: string;
@@ -88,7 +83,6 @@ function mountBoldButton(opts: {
 }
 
 export function CheckoutPageClient() {
-  const router = useRouter();
   const reduceMotion = useReducedMotion();
   const itemVariants = useMemo(() => listItem(Boolean(reduceMotion)), [reduceMotion]);
   const boldMountRef = useRef<HTMLDivElement>(null);
@@ -106,23 +100,35 @@ export function CheckoutPageClient() {
   const [postalCode, setPostalCode] = useState("");
   const [note, setNote] = useState("");
 
-  const [shippingZoneId, setShippingZoneId] = useState<ShippingZoneId>("bogota");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [shippingZoneId, setShippingZoneId] = useState<ShippingZoneId>("nacional");
+  const [shippingCarrier, setShippingCarrier] = useState<ShippingCarrier>("envia");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("mercadopago");
 
   const [phase, setPhase] = useState<PayPhase>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { data: session } = useSession();
+  const isWholesaleCustomer = session?.user?.role === "CUSTOMER" && Boolean(session.user.isWholesale);
+  const [wholesaleMin, setWholesaleMin] = useState(WHOLESALE_THRESHOLD_COP);
 
   useEffect(() => {
     setCart(loadCart());
     setHydrated(true);
     void (async () => {
       try {
-        const res = await fetch("/api/store/catalog", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { products?: StoreProduct[] };
+        const [catalogRes, wholesaleRes] = await Promise.all([
+          fetch("/api/store/catalog", { cache: "no-store" }),
+          fetch("/api/wholesale/me", { cache: "no-store" }),
+        ]);
+        if (wholesaleRes.ok) {
+          const me = (await wholesaleRes.json()) as { isWholesale?: boolean; minimumOrder?: number };
+          if (typeof me.minimumOrder === "number" && me.minimumOrder > 0) setWholesaleMin(me.minimumOrder);
+        }
+        if (!catalogRes.ok) return;
+        const data = (await catalogRes.json()) as { products?: StoreProduct[] };
         if (!Array.isArray(data.products) || data.products.length === 0) return;
+        const priced = isWholesaleCustomer ? withWholesalePrices(data.products) : data.products;
         setCart((prev) => {
-          const next = syncCartPricesFromCatalog(prev, data.products!);
+          const next = syncCartPricesFromCatalog(prev, priced);
           if (next !== prev) saveCart(next);
           return next;
         });
@@ -130,7 +136,7 @@ export function CheckoutPageClient() {
         /* catálogo opcional: el checkout cobra precio de DB */
       }
     })();
-  }, []);
+  }, [isWholesaleCustomer]);
 
   useEffect(() => {
     setErrorMsg(null);
@@ -143,9 +149,31 @@ export function CheckoutPageClient() {
 
   useEffect(() => {
     if (!BOLD_CHECKOUT_ENABLED && paymentMethod === "bold") {
-      setPaymentMethod("epayco");
+      setPaymentMethod("mercadopago");
     }
   }, [paymentMethod]);
+
+  useEffect(() => {
+    const c = city.trim();
+    if (c.length < 2) return;
+    setShippingZoneId(guessShippingZoneFromCity(c));
+    setShippingCarrier(resolveShippingCarrier(c, region.trim() || undefined));
+  }, [city, region]);
+
+  useEffect(() => {
+    const header = document.querySelector<HTMLElement>(".gb-co-header");
+    if (!header) return;
+    const sync = () => {
+      document.documentElement.style.setProperty("--gb-co-header-h", `${Math.round(header.offsetHeight)}px`);
+    };
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(header);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty("--gb-co-header-h");
+    };
+  }, []);
 
   const persist = useCallback((next: CartLine[]) => {
     setCart(next);
@@ -153,9 +181,14 @@ export function CheckoutPageClient() {
   }, []);
 
   const subtotal = useMemo(() => cart.reduce((s, i) => s + i.price * i.qty, 0), [cart]);
-  const shippingAmount = useMemo(() => checkoutShippingCop(shippingZoneId, subtotal), [shippingZoneId, subtotal]);
+  const enviaExclusion = useMemo(() => findEnviaExclusion(city, region), [city, region]);
+  const enviaBlocked = Boolean(enviaExclusion);
+  const shippingAmount = useMemo(
+    () => checkoutShippingCop(shippingZoneId, { city, region, carrier: shippingCarrier }),
+    [city, region, shippingCarrier, shippingZoneId],
+  );
   const total = subtotal + shippingAmount;
-  const zoneHint = shippingZoneContextMessage(shippingZoneId);
+  const zoneHint = shippingZoneContextMessage(shippingZoneId, shippingCarrier, city, region);
 
   const changeQty = (id: string, delta: number) => {
     const item = cart.find((i) => i.id === id);
@@ -192,7 +225,7 @@ export function CheckoutPageClient() {
         },
         customerNote: note.trim() || undefined,
         shippingZoneId,
-        paymentProvider: provider === "epayco" ? ("EPAYCO" as const) : ("BOLD" as const),
+        paymentProvider: provider === "mercadopago" ? ("MERCADOPAGO" as const) : ("BOLD" as const),
       };
     },
     [cart, city, email, line1, line2, name, note, phone, postalCode, region, shippingZoneId],
@@ -201,99 +234,69 @@ export function CheckoutPageClient() {
   const validateForm = useCallback((): string | null => {
     if (line1.trim().length < 3) return "Escribe una dirección completa (mínimo 3 caracteres).";
     if (city.trim().length < 2) return "Indica la ciudad.";
-    if (!paymentMethod) return "Elige ePayco como método de pago.";
+    if (!paymentMethod) return "Elige Mercado Pago como método de pago.";
+    if (isWholesaleCustomer && subtotal < wholesaleMin) {
+      return wholesaleMinimumReminder(wholesaleMin, subtotal);
+    }
     return null;
-  }, [city, line1, paymentMethod]);
+  }, [city, isWholesaleCustomer, line1, paymentMethod, subtotal, wholesaleMin]);
 
-  const runEpaycoPayment = useCallback(
-    async (checkoutType: "onpage" | "standard") => {
-      setErrorMsg(null);
-      const v = validateForm();
-      if (v) {
-        setPhase("error");
-        setErrorMsg(v);
-        return;
+  const runMercadoPagoPayment = useCallback(async () => {
+    setErrorMsg(null);
+    const v = validateForm();
+    if (v) {
+      setPhase("error");
+      setErrorMsg(v);
+      return;
+    }
+
+    setPhase("order");
+    const body = buildOrderPayload("mercadopago");
+    const parsed = createCheckoutOrderSchema.safeParse(body);
+    if (!parsed.success) {
+      setPhase("error");
+      setErrorMsg("Revisa correo, nombre, dirección y zona de envío.");
+      return;
+    }
+
+    let reference: string;
+
+    try {
+      const res = await fetch("/api/checkout/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data),
+      });
+      const data = (await res.json()) as { error?: string; reference?: string };
+      if (!res.ok) {
+        throw new Error(data.error || "No se pudo crear el pedido");
       }
+      if (!data.reference) throw new Error("Respuesta inválida");
+      reference = data.reference;
+    } catch (e) {
+      setPhase("error");
+      setErrorMsg(e instanceof Error ? e.message : "Error al crear el pedido");
+      return;
+    }
 
-      setPhase("order");
-      const body = buildOrderPayload("epayco");
-      const parsed = createCheckoutOrderSchema.safeParse(body);
-      if (!parsed.success) {
-        setPhase("error");
-        setErrorMsg("Revisa correo, nombre, dirección y zona de envío.");
-        return;
+    setPhase("session");
+    try {
+      const res = await fetch("/api/payments/mercadopago/preference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reference }),
+      });
+      const data = (await res.json()) as { error?: string; initPoint?: string };
+      if (!res.ok) {
+        throw new Error(data.error || "No se pudo iniciar Mercado Pago");
       }
-
-      let reference: string;
-
-      try {
-        const res = await fetch("/api/checkout/orders", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(parsed.data),
-        });
-        const data = (await res.json()) as { error?: string; reference?: string };
-        if (!res.ok) {
-          throw new Error(data.error || "No se pudo crear el pedido");
-        }
-        if (!data.reference) throw new Error("Respuesta inválida");
-        reference = data.reference;
-      } catch (e) {
-        setPhase("error");
-        setErrorMsg(e instanceof Error ? e.message : "Error al crear el pedido");
-        return;
-      }
-
-      setPhase("session");
-      try {
-        const res = await fetch("/api/payments/epayco/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reference, checkoutType }),
-        });
-        const data = (await res.json()) as {
-          error?: string;
-          sessionId?: string;
-          test?: boolean;
-        };
-        if (!res.ok) {
-          throw new Error(data.error || "No se pudo iniciar ePayco");
-        }
-        if (!data.sessionId) throw new Error("Sin sessionId");
-
-        await loadEpaycoScript();
-        if (!window.ePayco?.checkout) {
-          throw new Error("ePayco no disponible en el navegador");
-        }
-
-        setPhase("widget");
-        const checkout = window.ePayco.checkout.configure({
-          sessionId: data.sessionId,
-          type: checkoutType,
-          test: Boolean(data.test),
-        });
-
-        checkout.onCreated(() => {
-          console.info("[checkout] ePayco widget creado");
-        });
-        checkout.onErrors((errs) => {
-          console.error("[checkout] ePayco", errs);
-          setErrorMsg("Error en el checkout de ePayco. Intenta de nuevo o usa la pasarela clásica.");
-          setPhase("error");
-        });
-        checkout.onClosed(() => {
-          setPhase("idle");
-          router.push(`/checkout/resultado?ref=${encodeURIComponent(reference)}`);
-        });
-
-        checkout.open();
-      } catch (e) {
-        setPhase("error");
-        setErrorMsg(e instanceof Error ? e.message : "Error al abrir el pago");
-      }
-    },
-    [buildOrderPayload, router, validateForm],
-  );
+      if (!data.initPoint) throw new Error("Mercado Pago no devolvió el enlace de pago");
+      window.location.assign(data.initPoint);
+    } catch (e) {
+      setPhase("error");
+      setErrorMsg(e instanceof Error ? e.message : "Error al abrir Mercado Pago");
+    }
+  }, [buildOrderPayload, validateForm]);
 
   const runBoldPayment = useCallback(async () => {
     setErrorMsg(null);
@@ -399,7 +402,7 @@ export function CheckoutPageClient() {
 
   const handlePay = () => {
     if (paymentMethod === "bold" && BOLD_CHECKOUT_ENABLED) void runBoldPayment();
-    else if (paymentMethod === "epayco") void runEpaycoPayment("onpage");
+    else if (paymentMethod === "mercadopago") void runMercadoPagoPayment();
   };
 
   const payBusy = phase === "order" || phase === "session" || phase === "widget" || phase === "integrity";
@@ -474,7 +477,7 @@ export function CheckoutPageClient() {
             <div className="gb-co-hero-badge">Checkout seguro</div>
             <h1>Finalizar compra</h1>
             <p>
-              Elige envío y método de pago. Procesamos pagos con <strong>ePayco</strong> de forma segura, sin
+              Elige envío y método de pago. Procesamos pagos con <strong>Mercado Pago</strong> de forma segura, sin
               almacenar datos de tarjeta.
             </p>
           </motion.div>
@@ -638,7 +641,7 @@ export function CheckoutPageClient() {
                     className="gb-co-input"
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
-                    placeholder="Bogotá, Medellín…"
+                    placeholder="Manizales, Villamaría, Medellín…"
                   />
                 </div>
                 <div className="gb-co-field">
@@ -677,21 +680,43 @@ export function CheckoutPageClient() {
             <motion.section variants={itemVariants} className="gb-co-card gb-co-card--shipping">
               <div className="gb-co-section-title">
                 <span>✦</span>
-                ¿Cómo quieres recibir tu pedido?
+                Elige tu Entrega
               </div>
               <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: -8, marginBottom: 16 }}>
-                El costo de envío depende de la zona. Despachamos desde Manizales: preparación en máximo 2 días
-                hábiles; el tránsito lo define Envía o Interrapidísimo. No hay recogida en tienda ni entrega el mismo
-                día. No hay cambios comerciales por gusto.{" "}
-                <Link href="/politicas-envio">Políticas de envío y posventa</Link>.
+                El costo de envío Envía depende de la zona. Despachamos desde Manizales: preparación en máximo 2 días
+                hábiles; el tránsito lo define Envía o Interrapidísimo.
               </p>
+              <div className="gb-co-carrier-grid" role="radiogroup" aria-label="Transportadora">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={shippingCarrier === "envia"}
+                  disabled={enviaBlocked}
+                  className={`gb-co-carrier-card${shippingCarrier === "envia" ? " gb-co-carrier-card--active" : ""}${enviaBlocked ? " gb-co-carrier-card--disabled" : ""}`}
+                  onClick={() => {
+                    if (enviaBlocked) return;
+                    setShippingCarrier("envia");
+                  }}
+                >
+                  <strong>Envía</strong>
+                  <span>Tarifa según zona. Primera opción cuando hay cobertura.</span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={shippingCarrier === "interrapidismo"}
+                  className={`gb-co-carrier-card${shippingCarrier === "interrapidismo" ? " gb-co-carrier-card--active" : ""}`}
+                  onClick={() => setShippingCarrier("interrapidismo")}
+                >
+                  <strong>Interrapidísimo</strong>
+                  <span>El flete se paga contraentrega.</span>
+                </button>
+              </div>
               <div className="gb-co-zone-grid" role="radiogroup" aria-label="Zona de envío">
                 {(Object.keys(SHIPPING_ZONES) as ShippingZoneId[]).map((zid) => {
                   const z = SHIPPING_ZONES[zid];
                   const selected = shippingZoneId === zid;
-                  const baseRate = z.rateSubtotalLow;
-                  const copForCard = checkoutShippingCop(zid, subtotal);
-                  const showStruck = baseRate > 0 && copForCard === 0;
+                  const enviaRate = z.rateSubtotalLow;
                   return (
                     <motion.button
                       key={zid}
@@ -709,17 +734,27 @@ export function CheckoutPageClient() {
                       </span>
                       <span className="gb-co-zone-card-name">{z.name}</span>
                       <span className="gb-co-zone-card-price">
-                        {showStruck && (
-                          <>
-                            <span className="gb-co-price-struck">{formatPrice(baseRate)}</span>{" "}
-                          </>
+                        {shippingCarrier === "interrapidismo" ? (
+                          <strong>Contraentrega</strong>
+                        ) : (
+                          <strong>{formatPrice(enviaRate)}</strong>
                         )}
-                        <strong>{formatPrice(copForCard)}</strong>
                       </span>
                     </motion.button>
                   );
                 })}
               </div>
+              <p className="gb-co-reexp-note">{ENVIA_NO_REEXPEDITION_NOTE}</p>
+              <details className="gb-co-reexp-details">
+                <summary>Ver destinos sin cobertura Envía</summary>
+                <ul>
+                  {ENVIA_REEXPEDITION_DESTINATIONS.map((row) => (
+                    <li key={`${row.city}-${row.department}`}>
+                      {row.city} · {row.department}
+                    </li>
+                  ))}
+                </ul>
+              </details>
               {zoneHint && (
                 <motion.div
                   className="gb-co-zone-hint"
@@ -753,11 +788,14 @@ export function CheckoutPageClient() {
             </div>
             <div className="gb-co-total-row">
               <span>
-                Envío <span className="gb-co-total-zone">({SHIPPING_ZONES[shippingZoneId].shortLabel})</span>
+                Envío{" "}
+                <span className="gb-co-total-zone">
+                  ({SHIPPING_ZONES[shippingZoneId].shortLabel} · {shippingCarrier === "envia" ? "Envía" : "Interrapidísimo"})
+                </span>
               </span>
               <strong>
-                {shippingAmount === 0 ? (
-                  <span className="gb-co-price-free">Gratis ✨</span>
+                {shippingCarrier === "interrapidismo" ? (
+                  <span className="gb-co-price-cod">Contraentrega</span>
                 ) : (
                   formatPrice(shippingAmount)
                 )}
@@ -776,16 +814,16 @@ export function CheckoutPageClient() {
               <motion.button
                 type="button"
                 role="radio"
-                aria-checked={paymentMethod === "epayco"}
-                className={`gb-co-method-card${paymentMethod === "epayco" ? " gb-co-method-card--active" : ""}`}
-                onClick={() => setPaymentMethod("epayco")}
+                aria-checked={paymentMethod === "mercadopago"}
+                className={`gb-co-method-card${paymentMethod === "mercadopago" ? " gb-co-method-card--active" : ""}`}
+                onClick={() => setPaymentMethod("mercadopago")}
                 whileHover={reduceMotion ? undefined : { y: -3 }}
                 whileTap={reduceMotion ? undefined : { scale: 0.99 }}
               >
                 <span className="gb-co-method-badge">Recomendado</span>
                 <span className="gb-co-method-icon">💳</span>
-                <span className="gb-co-method-name">ePayco</span>
-                <span className="gb-co-method-desc">Smart Checkout y pasarela clásica</span>
+                <span className="gb-co-method-name">Mercado Pago</span>
+                <span className="gb-co-method-desc">Checkout Pro: tarjetas, PSE y más</span>
               </motion.button>
               {BOLD_CHECKOUT_ENABLED ? (
                 <motion.button
@@ -811,34 +849,28 @@ export function CheckoutPageClient() {
               servidor.
             </div>
 
+            {isWholesaleCustomer ? (
+              <p className="gb-co-wholesale-hint" role="status">
+                {wholesaleMinimumReminder(wholesaleMin, subtotal)}
+              </p>
+            ) : null}
+
             <button
               type="button"
               className="gb-co-pay"
               onClick={handlePay}
-              disabled={payBusy || !paymentMethod}
+              disabled={payBusy || !paymentMethod || (isWholesaleCustomer && subtotal < wholesaleMin)}
             >
               {payBusy && <span className="gb-co-spinner" aria-hidden />}
               {phase === "order" && "Creando pedido…"}
               {phase === "integrity" && "Firmando pago…"}
-              {phase === "session" && paymentMethod === "epayco" && "Conectando con ePayco…"}
-              {phase === "widget" && paymentMethod === "epayco" && "Abriendo checkout…"}
+              {phase === "session" && paymentMethod === "mercadopago" && "Conectando con Mercado Pago…"}
               {phase === "widget" && paymentMethod === "bold" && "Completa el pago arriba ↑"}
               {phase === "idle" && !paymentMethod && "Selecciona un método de pago"}
-              {phase === "idle" && paymentMethod === "epayco" && "Pagar con ePayco"}
+              {phase === "idle" && paymentMethod === "mercadopago" && "Pagar con Mercado Pago"}
               {phase === "idle" && paymentMethod === "bold" && "Preparar pago con Bold"}
               {phase === "error" && "Reintentar"}
             </button>
-
-            {paymentMethod === "epayco" && (
-              <button
-                type="button"
-                className="gb-co-pay-secondary"
-                onClick={() => runEpaycoPayment("standard")}
-                disabled={payBusy}
-              >
-                Pasarela clásica (nueva ventana) — si OnPage no carga
-              </button>
-            )}
 
             {errorMsg && (
               <div className="gb-co-status gb-co-status--error" role="alert">
@@ -846,8 +878,8 @@ export function CheckoutPageClient() {
               </div>
             )}
 
-            {phase === "session" && paymentMethod === "epayco" && (
-              <div className="gb-co-status gb-co-status--loading gb-co-status--pulse">Preparando pasarela segura…</div>
+            {phase === "session" && paymentMethod === "mercadopago" && (
+              <div className="gb-co-status gb-co-status--loading gb-co-status--pulse">Preparando Mercado Pago…</div>
             )}
           </motion.div>
         </aside>

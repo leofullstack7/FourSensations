@@ -20,10 +20,14 @@ import { getCategoryLabel } from "@/lib/category-labels";
 import { formatPrice } from "@/lib/format";
 import { preloadStorefrontProductImages } from "@/lib/preload-storefront-image";
 import { computeShippingCop, loadCart, saveCart, syncCartPricesFromCatalog } from "@/lib/cart-storage";
+import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
+import { applyWholesalePricing, withWholesalePrices } from "@/lib/wholesale-pricing";
+import { wholesaleMinimumReminder } from "@/lib/wholesale-rules";
 import { StoreDiscountBadge, StoreProductPrice } from "@/components/store/StoreProductPrice";
 import { formatDiscountBadge, resolveProductPrice } from "@/lib/product-discount";
 import { loadFavorites, saveFavorites } from "@/lib/favorites-storage";
 import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
+import { findBombaCapilarParts, isBombaCapilarProduct } from "@/lib/bomba-capilar";
 import {
   POLICY_HREF_SHIPPING,
   POLICY_TRUST_PAY_SHORT,
@@ -179,6 +183,8 @@ export function StorefrontShell({
   const [wishlistOpen, setWishlistOpen] = useState(false);
   const { data: session, status } = useSession();
   const isStoreCustomer = status === "authenticated" && session?.user?.role === "CUSTOMER";
+  const isWholesaleCustomer = isStoreCustomer && Boolean(session?.user?.isWholesale);
+  const [wholesaleMin, setWholesaleMin] = useState(WHOLESALE_THRESHOLD_COP);
   const customerId = session?.user?.id;
   const customerLabel = (session?.user?.name?.trim() || session?.user?.email?.split("@")[0] || "Cliente") as string;
   const customerTopbarName = formatTopbarName(customerLabel);
@@ -214,19 +220,40 @@ export function StorefrontShell({
   }, []);
 
   useEffect(() => {
-    if (products.length === 0) return;
+    if (!isWholesaleCustomer) return;
+    void (async () => {
+      try {
+        const res = await fetch("/api/wholesale/me", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { minimumOrder?: number };
+        if (typeof data.minimumOrder === "number" && data.minimumOrder > 0) {
+          setWholesaleMin(data.minimumOrder);
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [isWholesaleCustomer]);
+
+  const catalogForCart = useMemo(
+    () => (isWholesaleCustomer ? withWholesalePrices(products) : products),
+    [isWholesaleCustomer, products],
+  );
+
+  useEffect(() => {
+    if (catalogForCart.length === 0) return;
     setCart((prev) => {
-      const next = syncCartPricesFromCatalog(prev, products);
+      const next = syncCartPricesFromCatalog(prev, catalogForCart);
       if (next === prev) return prev;
       saveCart(next);
       return next;
     });
-  }, [products]);
+  }, [catalogForCart]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
       setTopbarIndex((i) => (i + 1) % STOREFRONT_TOPBAR_MESSAGES.length);
-    }, 7500);
+    }, 4000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -316,27 +343,51 @@ export function StorefrontShell({
 
   const addToCart = useCallback(
     (productId: string, productSnapshot?: StoreProduct) => {
+      if (isBombaCapilarProduct(productId) || (productSnapshot && isBombaCapilarProduct(productSnapshot.id))) {
+        const { dulce, primaveral } = findBombaCapilarParts(productsRef.current);
+        const kit = [dulce, primaveral].filter((p): p is StoreProduct => Boolean(p));
+        if (kit.length === 0) {
+          showToast("Aún no podemos armar la Bomba Capilar. Abre Dulce Renacer y Sensación Primaveral.", "danger", "⚠️");
+          return;
+        }
+        setCart((prev) => {
+          let next = prev;
+          for (const item of kit) {
+            const priced = isWholesaleCustomer ? applyWholesalePricing(item) : item;
+            const existing = next.find((i) => i.id === item.id);
+            next = existing
+              ? next.map((i) => (i.id === item.id ? { ...i, qty: i.qty + 1, ...priced } : i))
+              : [...next, { ...priced, qty: 1, comboId: undefined, comboItems: undefined }];
+          }
+          saveCart(next);
+          return next;
+        });
+        showToast("Bomba Capilar: Dulce Renacer + Sensación Primaveral al carrito", "success", "🛒");
+        setCartOpen(true);
+        return;
+      }
       const product =
         productsRef.current.find((p) => p.id === productId) ?? productSnapshot ?? null;
       if (!product) {
         showToast("No se pudo agregar al carrito. Abre el producto e inténtalo de nuevo.", "danger", "⚠️");
         return;
       }
+      const priced = isWholesaleCustomer ? applyWholesalePricing(product) : { ...product, isWholesalePrice: false };
       if (productSnapshot) {
         mergeCatalogProducts([product]);
       }
       setCart((prev) => {
         const existing = prev.find((i) => i.id === productId);
         const next = existing
-          ? prev.map((i) => (i.id === productId ? { ...i, qty: i.qty + 1 } : i))
-          : [...prev, { ...product, qty: 1, comboId: undefined, comboItems: undefined }];
+          ? prev.map((i) => (i.id === productId ? { ...i, qty: i.qty + 1, ...priced } : i))
+          : [...prev, { ...priced, qty: 1, comboId: undefined, comboItems: undefined }];
         saveCart(next);
         return next;
       });
       showToast(`${product.name} agregado al carrito`, "success", "🛒");
       setCartOpen(true);
     },
-    [mergeCatalogProducts, showToast],
+    [isWholesaleCustomer, mergeCatalogProducts, showToast],
   );
 
   const addComboToCart = useCallback(
@@ -663,13 +714,28 @@ export function StorefrontShell({
         <div className="topbar-inner">
           <MotionSpan
             key={topbarIndex}
-            className="topbar-msg"
+            className="topbar-msg topbar-msg--rotate"
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
           >
             {STOREFRONT_TOPBAR_MESSAGES[topbarIndex]}
           </MotionSpan>
+          <div className="topbar-msg topbar-msg--marquee" aria-hidden>
+            <div className="topbar-marquee-track">
+              {[0, 1].map((copy) => (
+                <span key={copy} className="topbar-marquee-copy">
+                  {STOREFRONT_TOPBAR_MESSAGES.map((msg, i) => (
+                    <span key={`${copy}-${i}`} className="topbar-marquee-item">
+                      {i > 0 ? <span className="topbar-marquee-dot">•</span> : null}
+                      {msg}
+                    </span>
+                  ))}
+                  <span className="topbar-marquee-dot">•</span>
+                </span>
+              ))}
+            </div>
+          </div>
           {isStoreCustomer ? (
             <div className="topbar-user-slot">
               <Link href="/cuenta/perfil" className="topbar-user" title={`Hola, ${customerLabel}`}>
@@ -1080,6 +1146,23 @@ export function StorefrontShell({
               <span id="cart-total">{formatPrice(subtotal + shipping)}</span>
             </div>
           </div>
+          {isWholesaleCustomer ? (
+            <div className="cart-wholesale-block">
+              <p className="cart-wholesale-kicker">Acumulado de este pedido</p>
+              <strong className="cart-wholesale-total">{formatPrice(subtotal)}</strong>
+              <p className="cart-wholesale-hint">{wholesaleMinimumReminder(wholesaleMin, subtotal)}</p>
+            </div>
+          ) : null}
+          {isWholesaleCustomer && subtotal < wholesaleMin ? (
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ width: "100%", justifyContent: "center", opacity: 0.55, cursor: "not-allowed" }}
+              disabled
+            >
+              Completa el mínimo para pagar
+            </button>
+          ) : (
           <Link
             href="/checkout"
             className="btn btn-primary"
@@ -1090,6 +1173,7 @@ export function StorefrontShell({
           >
             💳 Proceder al pago
           </Link>
+          )}
           <button type="button" className="btn btn-outline" style={{ width: "100%", justifyContent: "center", marginTop: 8 }} onClick={closeCart}>
             Seguir comprando
           </button>

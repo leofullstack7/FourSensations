@@ -2720,3 +2720,52 @@
   padding-bottom: 12px;
 }
 
+@media (max-width: 900px) {
+  .fs-about-hero {
+    grid-template-columns: 1fr;
+  }
+  .fs-about-story {
+    grid-template-columns: 1fr;
+  }
+  .fs-about-card {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    text-align: left;
+  }
+}
+
+.footer-desc--privileges {
+  white-space: normal;
+}
+
+.cart-wholesale-block {
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--ivory);
+  text-align: center;
+}
+.cart-wholesale-kicker {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cart-wholesale-total {
+  display: block;
+  margin: 4px 0 8px;
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 5vw, 2.4rem);
+  color: var(--dark);
+  line-height: 1.1;
+}
+.cart-wholesale-hint,
+.gb-co-wholesale-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--rose);
+}
+

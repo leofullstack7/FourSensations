@@ -21,6 +21,9 @@ model User {
   image         String?
   passwordHash  String?
   role          UserRole  @default(CUSTOMER)
+  isWholesale   Boolean   @default(false)
+  city          String?
+  address       String?
   accounts      Account[]
   sessions      Session[]
   orders        Order[]

@@ -43,8 +43,8 @@ export default function TerminosCondicionesPage() {
 
       <LegalRevealSection number={3} title="Compra y pagos" variant="light">
         <ul>
-          <li>El pedido se confirma cuando la pasarela aprueba el pago. No hay pago contra entrega.</li>
-          <li>Aceptamos los medios habilitados en el checkout (hoy ePayco: tarjetas y PSE). No almacenamos datos de tarjeta.</li>
+          <li>El pedido se confirma cuando la pasarela aprueba el pago. El producto se paga en línea. Si el destino no tiene cobertura Envía, el flete de Interrapidísimo se paga contraentrega.</li>
+          <li>Aceptamos los medios habilitados en el checkout (hoy Mercado Pago: tarjetas y PSE). No almacenamos datos de tarjeta.</li>
           <li>Recibirás confirmación al correo registrado, cuando el servicio de email esté configurado.</li>
         </ul>
       </LegalRevealSection>

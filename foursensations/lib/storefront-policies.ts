@@ -25,7 +25,7 @@ export const POLICY_RETURNS_JULI =
   "Por ser productos cosméticos / de cuidado personal, no hay cambios o devoluciones voluntarias por cambio de opinión o resultado distinto al esperado; sí aplica la garantía legal. Novedades de transporte (faltante, daño, etc.): reportar en las primeras 24 horas con fotos. Reversión de pago electrónico: 5 días hábiles cuando aplique. Detalle en /politicas-envio. WhatsApp para el caso concreto.";
 
 export const POLICY_PAYMENTS_ONE_LINER =
-  "El pedido se confirma cuando la pasarela aprueba el pago. No hay pago contra entrega. Los medios disponibles aparecen en el checkout (hoy ePayco: tarjetas y PSE).";
+  "El pedido se confirma cuando la pasarela aprueba el pago. El producto se paga en línea (hoy Mercado Pago: tarjetas y PSE). Si el destino no tiene cobertura Envía, el flete de Interrapidísimo se paga contraentrega.";
 
 export const POLICY_ORIGIN_LINE =
   "FOUR SENSATIONS S.A.S. · NIT 901.038.691-2 · Calle 65A #23A-15, Manizales, Caldas.";

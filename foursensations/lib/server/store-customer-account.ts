@@ -7,18 +7,48 @@ export type CustomerAccountSession = {
   name: string;
   email: string | null;
   image: string | null;
+  isWholesale: boolean;
+  city: string | null;
+  address: string | null;
 };
 
 export async function getStoreCustomerSession(): Promise<CustomerAccountSession | null> {
   const session = await auth();
   const id = session?.user?.id;
   if (!id || session.user.role !== "CUSTOMER") return null;
-  return {
-    id,
-    name: session.user.name?.trim() || session.user.email?.split("@")[0] || "Cliente",
-    email: session.user.email ?? null,
-    image: session.user.image ?? null,
-  };
+  let isWholesale = Boolean(session.user.isWholesale);
+  let city: string | null = null;
+  let address: string | null = null;
+  try {
+    const row = await prisma.user.findUnique({
+      where: { id },
+      select: { isWholesale: true, city: true, address: true, name: true, email: true, image: true },
+    });
+    if (row) {
+      isWholesale = row.isWholesale;
+      city = row.city;
+      address = row.address;
+    }
+    return {
+      id,
+      name: row?.name?.trim() || session.user.name?.trim() || session.user.email?.split("@")[0] || "Cliente",
+      email: row?.email ?? session.user.email ?? null,
+      image: row?.image ?? session.user.image ?? null,
+      isWholesale,
+      city,
+      address,
+    };
+  } catch {
+    return {
+      id,
+      name: session.user.name?.trim() || session.user.email?.split("@")[0] || "Cliente",
+      email: session.user.email ?? null,
+      image: session.user.image ?? null,
+      isWholesale,
+      city,
+      address,
+    };
+  }
 }
 
 export type CustomerOrderItemView = {

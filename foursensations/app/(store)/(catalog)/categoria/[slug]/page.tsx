@@ -4,6 +4,7 @@ import { TintCategoryPageBridge } from "@/components/store/tints/TintCategoryPag
 import { TINTES_CATEGORY_SLUG } from "@/lib/bulk-import/tintes";
 import { getStorefrontCategoryBySlug, type StoreCategoryWithSubs } from "@/lib/store-categories";
 import { getMenuCategoryBySlug } from "@/lib/menu-config";
+import { HAIR_SUBCATEGORY_ORDER, hairSubcategoryForProductName } from "@/lib/hair-subcategories";
 import { slugify } from "@/lib/slugify";
 import { findStorefrontProductByMenuName } from "@/lib/products";
 import { productPagePath } from "@/lib/store/menu-item-href";
@@ -67,9 +68,22 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     );
   }
 
-  const grupoLabels = Array.from(
-    new Set(cat.subcategories.map((s) => (s.menuTag?.trim() ? s.menuTag.trim() : "General"))),
-  ).sort((a, b) => a.localeCompare(b, "es"));
+  const isHair = cat.slug === "cuidado-capilar" || cat.name.toLowerCase().includes("capilar");
+  if (isHair) {
+    cat = {
+      ...cat,
+      subcategories: cat.subcategories.map((s) => ({
+        ...s,
+        menuTag: hairSubcategoryForProductName(s.name) ?? s.menuTag,
+      })),
+    };
+  }
+
+  const grupoLabels = isHair
+    ? [...HAIR_SUBCATEGORY_ORDER]
+    : Array.from(
+        new Set(cat.subcategories.map((s) => (s.menuTag?.trim() ? s.menuTag.trim() : "General"))),
+      ).sort((a, b) => a.localeCompare(b, "es"));
 
   const matchFromList = (list: string[], value: string | undefined): string => {
     if (!value?.trim()) return "";

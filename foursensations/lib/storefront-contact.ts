@@ -15,6 +15,12 @@ export const WHATSAPP_DEFAULT_MESSAGE =
 export const WHATSAPP_SUPPORT_MESSAGE =
   "Holaaa Four Sensations 💗 Vi varias cositas que me encantaron y quiero comprar. ¿Me ayudan con mi pedido? ✨";
 
+export const WHATSAPP_WHOLESALE_MESSAGE =
+  "Hola Four Sensations 💗 Quiero información del programa mayorista (volumen, precios y despacho desde Manizales).";
+
+export const WHATSAPP_CAREERS_MESSAGE =
+  "Hola Four Sensations ✨ Quiero información para trabajar con ustedes.";
+
 export function getWhatsAppDigits(): string {
   const raw = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER?.trim();
   const digits = raw?.replace(/\D/g, "") || "";

@@ -11,7 +11,7 @@ const ITEMS = [
   {
     icon: "⬡",
     title: "Checkout cifrado",
-    desc: "Pagos en línea con pasarela (ePayco). Sin contraentrega.",
+    desc: "Pagos en línea con Mercado Pago. En zonas sin cobertura Envía, el flete de Interrapidísimo es contraentrega.",
   },
   {
     icon: "◎",

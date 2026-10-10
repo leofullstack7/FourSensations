@@ -20,9 +20,9 @@ export function saveCart(cart: CartLine[]): void {
   localStorage.setItem(CART_KEY, JSON.stringify(cart));
 }
 
-/** Estimación de envío en carrito (tarifa nacional de referencia; el checkout usa la zona elegida). */
+/** Estimación de envío en carrito (tarifa nacional Envía; el checkout usa zona y cobertura). */
 export function computeShippingCop(_subtotal: number): number {
-  return 14_500;
+  return 15_900;
 }
 
 /** Actualiza precios del carrito con el catálogo vivo (descuentos). Combos no se tocan. */
@@ -36,7 +36,12 @@ export function syncCartPricesFromCatalog(cart: CartLine[], catalog: StoreProduc
     if (!live) return line;
     const nextPct = live.discountPercent ?? null;
     const prevPct = line.discountPercent ?? null;
-    if (live.price === line.price && live.originalPrice === line.originalPrice && nextPct === prevPct) {
+    if (
+      live.price === line.price &&
+      live.originalPrice === line.originalPrice &&
+      nextPct === prevPct &&
+      Boolean(live.isWholesalePrice) === Boolean(line.isWholesalePrice)
+    ) {
       return line;
     }
     changed = true;
@@ -45,6 +50,7 @@ export function syncCartPricesFromCatalog(cart: CartLine[], catalog: StoreProduc
       price: live.price,
       originalPrice: live.originalPrice,
       discountPercent: nextPct,
+      isWholesalePrice: live.isWholesalePrice,
     };
   });
   return changed ? next : cart;

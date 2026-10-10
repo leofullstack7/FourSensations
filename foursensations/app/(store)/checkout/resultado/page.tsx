@@ -4,7 +4,7 @@ import "../checkout.css";
 
 export const metadata = {
   title: "Resultado del pago — Four Sensations",
-  description: "Estado de tu compra con ePayco",
+  description: "Estado de tu compra con Mercado Pago",
 };
 
 export default function CheckoutResultadoPage() {

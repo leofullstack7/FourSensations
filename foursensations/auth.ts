@@ -57,6 +57,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email: user.email ?? undefined,
             name: user.name ?? undefined,
             role: user.role,
+            isWholesale: Boolean((user as { isWholesale?: boolean }).isWholesale),
           };
         } catch {
           return null;
@@ -153,24 +154,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (account?.provider === "google" && user?.id) {
         const u = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { role: true, name: true },
+          select: { role: true, name: true, isWholesale: true },
         });
         if (u) {
           token.role = u.role;
+          token.isWholesale = u.isWholesale;
           if (u.name) token.name = u.name;
         }
       } else if (user) {
         const r = (user as { role?: string }).role;
         if (r) token.role = r;
+        token.isWholesale = Boolean((user as { isWholesale?: boolean }).isWholesale);
         if (user.name) token.name = user.name;
       }
-      if (token.sub && (!token.role || !token.name)) {
+      if (token.sub && (!token.role || !token.name || token.isWholesale === undefined)) {
         const u = await prisma.user.findUnique({
           where: { id: token.sub as string },
-          select: { role: true, name: true },
+          select: { role: true, name: true, isWholesale: true },
         });
         if (u) {
           if (u.role) token.role = u.role;
+          token.isWholesale = u.isWholesale;
           if (u.name) token.name = u.name;
         }
       }
@@ -180,6 +184,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         if (token.sub) session.user.id = token.sub;
         session.user.role = token.role as string;
+        session.user.isWholesale = Boolean(token.isWholesale);
         if (typeof token.name === "string" && token.name.trim()) {
           session.user.name = token.name;
         }

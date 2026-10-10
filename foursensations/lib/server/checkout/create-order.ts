@@ -1,11 +1,18 @@
 import { OrderStatus, PaymentStatus, Prisma } from "@prisma/client";
-import { SHIPPING_ZONES, checkoutShippingCop } from "@/lib/checkout/shipping-zones";
+import {
+  SHIPPING_ZONES,
+  checkoutShippingCop,
+  guessShippingZoneFromCity,
+  resolveShippingCarrier,
+} from "@/lib/checkout/shipping-zones";
 import { prisma } from "@/lib/prisma";
 import { resolveProductPrice } from "@/lib/product-discount";
 import { expireDueProductDiscounts } from "@/lib/server/product-discounts";
 import { getActiveStoreComboById } from "@/lib/server/store-combos";
 import type { CreateCheckoutOrderInput } from "@/lib/validation/checkout-order";
 import { generateOrderReference } from "@/lib/server/checkout/reference";
+import { getWholesaleUnitPrice } from "@/lib/wholesale-pricing";
+import { resolveWholesaleCycle } from "@/lib/wholesale-rules";
 
 export type CreateOrderResult =
   | {
@@ -92,6 +99,32 @@ export async function createPendingOrderFromCheckout(
     return { ok: false, error: "Pedidos no disponibles (sin base de datos)", status: 503 };
   }
 
+  let wholesaleMin: number | null = null;
+  if (options?.userId) {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: options.userId },
+        select: { isWholesale: true, email: true },
+      });
+      if (user?.isWholesale) {
+        const emailNorm = user.email?.trim().toLowerCase() || null;
+        const paid = await prisma.order.findMany({
+          where: {
+            OR: [
+              { userId: options.userId },
+              ...(emailNorm ? [{ customerEmail: { equals: emailNorm, mode: "insensitive" as const } }] : []),
+            ],
+          },
+          select: { total: true, createdAt: true, paymentStatus: true, status: true },
+          take: 80,
+        });
+        wholesaleMin = resolveWholesaleCycle(paid).minimumOrder;
+      }
+    } catch {
+      wholesaleMin = null;
+    }
+  }
+
   try {
     const data = await prisma.$transaction(async (tx) => {
       const productIds = Array.from(
@@ -136,7 +169,9 @@ export async function createPendingOrderFromCheckout(
           throw new Error(`Producto no disponible: ${productId}`);
         }
         stockNeed.set(productId, (stockNeed.get(productId) ?? 0) + line.quantity);
-        const unitPrice = resolveProductPrice(p).price;
+        const publicPrice = resolveProductPrice(p).price;
+        const unitPrice =
+          wholesaleMin != null ? getWholesaleUnitPrice(p.name, publicPrice) : publicPrice;
         const lineTotal = unitPrice * line.quantity;
         subtotal += lineTotal;
         lines.push({
@@ -161,19 +196,31 @@ export async function createPendingOrderFromCheckout(
         }
       }
 
-      const shipping = checkoutShippingCop(input.shippingZoneId, subtotal);
+      if (wholesaleMin != null && subtotal < wholesaleMin) {
+        throw new Error(
+          `El pedido mayorista debe superar $${wholesaleMin.toLocaleString("es-CO")}. Completa tu pedido antes de pagar.`,
+        );
+      }
+
+      const addr = { ...input.shippingAddress };
+      const city = (addr.city ?? "").trim();
+      const region = addr.region?.trim();
+      const zoneId = guessShippingZoneFromCity(city) || input.shippingZoneId;
+      const carrier = resolveShippingCarrier(city, region);
+      const shipping = checkoutShippingCop(zoneId, { city, region, carrier });
       const total = subtotal + shipping;
       if (total <= 0) {
         throw new Error("Total inválido");
       }
 
       const reference = generateOrderReference();
-      const zoneMeta = SHIPPING_ZONES[input.shippingZoneId];
-      const addr = { ...input.shippingAddress };
+      const zoneMeta = SHIPPING_ZONES[zoneId];
       const shippingJson = {
         ...addr,
-        shippingZoneId: input.shippingZoneId,
+        shippingZoneId: zoneId,
         shippingZoneLabel: zoneMeta.shortLabel,
+        shippingCarrier: carrier,
+        shippingCarrierLabel: carrier === "envia" ? "Envía" : "Interrapidísimo",
       } as unknown as Prisma.InputJsonValue;
 
       const order = await tx.order.create({
@@ -218,7 +265,7 @@ export async function createPendingOrderFromCheckout(
     return { ok: true, ...data };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "No se pudo crear el pedido";
-    const isClient = /Producto no disponible|Combo no disponible|Stock insuficiente|Total inválido/.test(msg);
+    const isClient = /Producto no disponible|Combo no disponible|Stock insuficiente|Total inválido|pedido mayorista/.test(msg);
     return { ok: false, error: msg, status: isClient ? 400 : 500 };
   }
 }

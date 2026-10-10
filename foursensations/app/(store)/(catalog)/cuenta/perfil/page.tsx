@@ -60,8 +60,14 @@ export default async function AccountProfilePage() {
         </div>
         <div className="fs-account-fact">
           <b>Acceso</b>
-          Cliente de tienda
+          {customer.isWholesale ? "Mayorista Four Sensations" : "Cliente de tienda"}
         </div>
+        {customer.isWholesale ? (
+          <div className="fs-account-fact">
+            <b>Ciudad y dirección</b>
+            {[customer.city, customer.address].filter(Boolean).join(" · ") || "Completadas en tu registro mayorista"}
+          </div>
+        ) : null}
       </div>
     </AccountFrame>
   );

@@ -57,7 +57,7 @@ const THANKS = ["gracias", "thank", "genial", "perfecto", "listo", "ok gracias",
 const SHIPPING = ["envio", "envios", "domicilio", "entrega", "cuanto demora", "llega", "demora el pedido"];
 const HUMAN = ["humano", "persona", "asesor", "asesora", "whatsapp", "hablar con alguien", "atencion", "asesoria personal"];
 const OFF_TOPIC = ["presidente", "futbol", "bitcoin", "noticias del dia", "resultado del partido"];
-const PAYMENTS = ["pago", "pagos", "tarjeta", "efectivo", "epayco", "bold", "cuotas"];
+const PAYMENTS = ["pago", "pagos", "tarjeta", "efectivo", "mercadopago", "mercado pago", "epayco", "bold", "cuotas"];
 const RETURNS = ["devolucion", "devoluciones", "cambio", "garantia", "reembolso"];
 
 /** Conocimiento fijo de la tienda (no está en columnas de producto). */

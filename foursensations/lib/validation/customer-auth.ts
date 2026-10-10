@@ -11,6 +11,11 @@ export const customerLoginSchema = z.object({
   password: z.string().min(1, "Contraseña requerida").max(128),
 });
 
+export const wholesaleRegisterSchema = customerRegisterSchema.extend({
+  city: z.string().trim().min(2, "Ciudad requerida").max(80),
+  address: z.string().trim().min(5, "Dirección requerida").max(200),
+});
+
 export function formatCustomerAuthZodError(err: z.ZodError): string {
   return err.issues.map((e) => `${e.path.join(".")}: ${e.message}`).join("; ");
 }

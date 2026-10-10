@@ -9,6 +9,7 @@ export type ProductDiscountFields = {
   discountPercent?: number | null;
   discountEndsAt?: Date | string | null;
   discountBasePrice?: number | null;
+  isWholesalePrice?: boolean;
 };
 
 export type ResolvedProductPrice = {
@@ -57,6 +58,13 @@ export function computedDiscountPercent(price: number, originalPrice: number | n
  * tener un “antes” basura y pintar descuentos falsos del 90%+).
  */
 export function resolveProductPrice(p: ProductDiscountFields, now = new Date()): ResolvedProductPrice {
+  if (p.isWholesalePrice && p.originalPrice != null && p.originalPrice > p.price) {
+    return {
+      price: p.price,
+      originalPrice: p.originalPrice,
+      discountPercent: computedDiscountPercent(p.price, p.originalPrice),
+    };
+  }
   if (isActiveManagedDiscount(p, now)) {
     const pct = Math.round(p.discountPercent!);
     const base =

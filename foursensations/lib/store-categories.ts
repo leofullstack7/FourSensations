@@ -51,7 +51,7 @@ async function fetchStorefrontCategoryMenuFromDb(): Promise<StorefrontMenuPayloa
 /** Mega menú desde Prisma: categorías + subcategorías en una query; caché 1 h (prod). */
 const getCachedStorefrontCategoryMenu = unstable_cache(
   async (): Promise<StorefrontMenuPayload> => fetchStorefrontCategoryMenuFromDb(),
-  ["storefront-category-menu-v2"],
+  ["storefront-category-menu-v3"],
   { revalidate: 3600, tags: [STOREFRONT_MENU_CACHE_TAG] }
 );
 

@@ -1,24 +1,42 @@
+import {
+  HAIR_SUBCATEGORY_ORDER,
+  HAIR_SUBCATEGORY_PRODUCTS,
+  hairSubcategoryForProductName,
+} from "@/lib/hair-subcategories";
 import type { MenuConfig } from "@/lib/types/admin";
+
+function hairMenuSubs(): Record<string, string[]> {
+  return Object.fromEntries(
+    HAIR_SUBCATEGORY_ORDER.map((title) => [title, [...HAIR_SUBCATEGORY_PRODUCTS[title]]]),
+  );
+}
+
+/** Reagrupa ítems de DB bajo las columnas reales de Cuidado capilar. */
+export function remapHairMenuSubs(existing: Record<string, string[]> | undefined): Record<string, string[]> {
+  const grouped = hairMenuSubs();
+  const seen = new Set(
+    Object.values(grouped)
+      .flat()
+      .map((name) => name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()),
+  );
+
+  for (const name of Object.values(existing ?? {}).flat()) {
+    const dest = hairSubcategoryForProductName(name);
+    if (!dest) continue;
+    const key = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    grouped[dest].push(name);
+  }
+
+  return grouped;
+}
 
 /** Categorías públicas al lanzar. */
 export const defaultMenuConfig: MenuConfig = {
   "Cuidado capilar": {
     icon: "💇",
-    subs: {
-      Tratamientos: ["Dulce Renacer", "Sensación Primaveral", "Proteína Capilar"],
-      "Shampoo y Acondicionador": [
-        "Botanical",
-        "Kit Tentación Equilibrio",
-        "Kit Tentación Nutrición",
-        "Kit Scalp Therapy",
-      ],
-      "Crecimiento y Fortalecimiento": ["Secreto de Primavera", "Shots Capilares"],
-      "Detox y Cuero Cabelludo": ["Scrub Glow", "Kit Scalp Therapy", "Cepillo"],
-      "Finalizadores y Protección": ["Fantasía Natural", "Shine Gloss"],
-      "Hair Mist": ["Sweet Love", "BloomShine", "Scarlette", "Golden Glow"],
-      "Reparación de Puntas": ["Luna Llena", "Suspiros"],
-      "Pre - Shampoo": ["Bomba Capilar"],
-    },
+    subs: hairMenuSubs(),
   },
   "Cuidado corporal": {
     icon: "🧴",
@@ -75,6 +93,11 @@ export function filterStorefrontLaunchMenu<T extends { config: MenuConfig; slugB
     if (payload.slugByCategoryName[name]) slugByCategoryName[name] = payload.slugByCategoryName[name];
   }
   if (Object.keys(config).length === 0) return payload;
+  for (const name of Object.keys(config)) {
+    if (normalizeCategoryLabel(name) !== normalizeCategoryLabel("Cuidado capilar")) continue;
+    const current = config[name]!;
+    config[name] = { ...current, subs: remapHairMenuSubs(current.subs) };
+  }
   return { ...payload, config, slugByCategoryName };
 }
 
