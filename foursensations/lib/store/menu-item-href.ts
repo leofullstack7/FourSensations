@@ -32,3 +32,17 @@ export function resolveStoreMenuItemHref(opts: {
 export function resolveStoreMenuGroupHref(categorySlug: string, group: string): string {
   return `/categoria/${categorySlug}?grupo=${encodeURIComponent(group)}`;
 }
+
+/** Ruta pública de categoría (o mayorista si el slug/nombre lo indica). */
+export function resolveStoreCategoryHref(categorySlugOrName: string): string {
+  const key = normalizeMenuLookup(categorySlugOrName);
+  if (key === "mayorista" || key.includes("mayorista")) return "/mayorista";
+  const slug = categorySlugOrName
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-");
+  return `/categoria/${slug || categorySlugOrName}`;
+}
