@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import {
   buildMenuConfigFromTree,
@@ -15,6 +15,9 @@ import {
   updateAdminCategory,
   updateAdminSubcategory,
 } from "@/lib/api/admin-categories";
+import { fetchAdminMegaPromo, saveAdminMegaPromo } from "@/lib/api/admin-site-settings";
+import { uploadAdminProductImage } from "@/lib/api/admin-upload";
+import type { MegaPromoImageSlot } from "@/lib/site-settings";
 
 type ShowToast = (msg: string, type?: string, icon?: string) => void;
 
@@ -68,6 +71,71 @@ export function AdminMenuTab({
   const [editSubMenuTagSelect, setEditSubMenuTagSelect] = useState("");
   const [editSubMenuTagCustom, setEditSubMenuTagCustom] = useState("");
   const [saving, setSaving] = useState(false);
+  const [accesoriosSlots, setAccesoriosSlots] = useState<[MegaPromoImageSlot, MegaPromoImageSlot]>([
+    { imageUrl: "", label: "Colección" },
+    { imageUrl: "", label: "Detalles" },
+  ]);
+  const [megaBusy, setMegaBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const map = await fetchAdminMegaPromo();
+        const slots = map.Accesorios ?? map.accesorios ?? [];
+        if (cancelled) return;
+        setAccesoriosSlots([
+          { imageUrl: slots[0]?.imageUrl ?? "", label: slots[0]?.label ?? "Colección", href: slots[0]?.href },
+          { imageUrl: slots[1]?.imageUrl ?? "", label: slots[1]?.label ?? "Detalles", href: slots[1]?.href },
+        ]);
+      } catch {
+        /* silencioso: panel menú sigue usable */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const saveAccesoriosMega = async () => {
+    setMegaBusy(true);
+    try {
+      const map = await fetchAdminMegaPromo();
+      const cleaned = accesoriosSlots
+        .map((s) => ({
+          imageUrl: s.imageUrl.trim(),
+          ...(s.label?.trim() ? { label: s.label.trim() } : {}),
+          ...(s.href?.trim() ? { href: s.href.trim() } : {}),
+        }))
+        .filter((s) => s.imageUrl);
+      const { Accesorios: _prevAcc, ...rest } = map;
+      const next = cleaned.length > 0 ? { ...rest, Accesorios: cleaned } : rest;
+      await saveAdminMegaPromo(next);
+      showToast("Imágenes del megamenú Accesorios guardadas", "success", "✅");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "No se pudo guardar", "danger", "⚠️");
+    } finally {
+      setMegaBusy(false);
+    }
+  };
+
+  const uploadAccesoriosSlot = async (index: 0 | 1, file: File | null) => {
+    if (!file) return;
+    setMegaBusy(true);
+    try {
+      const url = await uploadAdminProductImage(file);
+      setAccesoriosSlots((prev) => {
+        const next = [...prev] as [MegaPromoImageSlot, MegaPromoImageSlot];
+        next[index] = { ...next[index], imageUrl: url };
+        return next;
+      });
+      showToast("Imagen subida. Pulsa Guardar para publicar.", "success", "🖼️");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Error al subir", "danger", "⚠️");
+    } finally {
+      setMegaBusy(false);
+    }
+  };
 
   const beginEditCategory = (cat: AdminCategoryTree) => {
     setEditCatId(cat.id);
@@ -239,6 +307,99 @@ export function AdminMenuTab({
             </div>
           </div>
         )}
+      </div>
+
+      <div className="admin-card" style={{ marginBottom: 20 }}>
+        <div className="admin-card-title">Imágenes megamenú · Accesorios</div>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 14px", maxWidth: 820 }}>
+          Dos fotos con corte diagonal en el megamenú de Accesorios (PC). Sube o pega URL y guarda. Más adelante
+          podremos elegir imágenes de otras secciones desde aquí.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+          {([0, 1] as const).map((idx) => (
+            <div key={idx} style={{ border: "1px solid var(--cream, #eee)", borderRadius: 12, padding: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Imagen {idx + 1}</div>
+              {accesoriosSlots[idx].imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={accesoriosSlots[idx].imageUrl}
+                  alt=""
+                  style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 8, marginBottom: 8 }}
+                />
+              ) : (
+                <div
+                  style={{
+                    height: 120,
+                    borderRadius: 8,
+                    background: "var(--ivory, #f7f3ef)",
+                    marginBottom: 8,
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: 12,
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  Sin imagen
+                </div>
+              )}
+              <label className="gb-co-label" style={{ display: "block", fontSize: 11, marginBottom: 4 }}>
+                Etiqueta
+              </label>
+              <input
+                className="form-input"
+                value={accesoriosSlots[idx].label ?? ""}
+                onChange={(e) =>
+                  setAccesoriosSlots((prev) => {
+                    const next = [...prev] as [MegaPromoImageSlot, MegaPromoImageSlot];
+                    next[idx] = { ...next[idx], label: e.target.value };
+                    return next;
+                  })
+                }
+                placeholder={idx === 0 ? "Colección" : "Detalles"}
+              />
+              <label className="gb-co-label" style={{ display: "block", fontSize: 11, margin: "8px 0 4px" }}>
+                URL
+              </label>
+              <input
+                className="form-input"
+                value={accesoriosSlots[idx].imageUrl}
+                onChange={(e) =>
+                  setAccesoriosSlots((prev) => {
+                    const next = [...prev] as [MegaPromoImageSlot, MegaPromoImageSlot];
+                    next[idx] = { ...next[idx], imageUrl: e.target.value };
+                    return next;
+                  })
+                }
+                placeholder="https://…"
+              />
+              <input
+                type="file"
+                accept="image/*"
+                style={{ marginTop: 8, fontSize: 12 }}
+                disabled={megaBusy}
+                onChange={(e) => void uploadAccesoriosSlot(idx, e.target.files?.[0] ?? null)}
+              />
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button type="button" className="btn btn-primary btn-sm" disabled={megaBusy} onClick={() => void saveAccesoriosMega()}>
+            {megaBusy ? "Guardando…" : "Guardar imágenes Accesorios"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            disabled={megaBusy}
+            onClick={() =>
+              setAccesoriosSlots([
+                { imageUrl: "", label: "Colección" },
+                { imageUrl: "", label: "Detalles" },
+              ])
+            }
+          >
+            Limpiar
+          </button>
+        </div>
       </div>
 
       <div className="admin-card">

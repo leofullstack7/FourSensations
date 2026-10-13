@@ -25,7 +25,7 @@ export function computeShippingCop(_subtotal: number): number {
   return 15_900;
 }
 
-/** Actualiza precios del carrito con el catálogo vivo (descuentos). Combos no se tocan. */
+/** Actualiza precios e imágenes del carrito con el catálogo vivo. Combos no se tocan. */
 export function syncCartPricesFromCatalog(cart: CartLine[], catalog: StoreProduct[]): CartLine[] {
   if (catalog.length === 0 || cart.length === 0) return cart;
   const byId = new Map(catalog.map((p) => [p.id, p]));
@@ -36,11 +36,15 @@ export function syncCartPricesFromCatalog(cart: CartLine[], catalog: StoreProduc
     if (!live) return line;
     const nextPct = live.discountPercent ?? null;
     const prevPct = line.discountPercent ?? null;
+    const imgSame = (live.img || "") === (line.img || "");
+    const hoverSame = (live.imgHover || "") === (line.imgHover || "");
     if (
       live.price === line.price &&
       live.originalPrice === line.originalPrice &&
       nextPct === prevPct &&
-      Boolean(live.isWholesalePrice) === Boolean(line.isWholesalePrice)
+      Boolean(live.isWholesalePrice) === Boolean(line.isWholesalePrice) &&
+      imgSame &&
+      hoverSame
     ) {
       return line;
     }
@@ -51,6 +55,10 @@ export function syncCartPricesFromCatalog(cart: CartLine[], catalog: StoreProduc
       originalPrice: live.originalPrice,
       discountPercent: nextPct,
       isWholesalePrice: live.isWholesalePrice,
+      img: live.img,
+      imgHover: live.imgHover,
+      emoji: live.emoji,
+      gallery: live.gallery,
     };
   });
   return changed ? next : cart;

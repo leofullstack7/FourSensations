@@ -23,11 +23,20 @@ import { withWholesalePrices } from "@/lib/wholesale-pricing";
 import { wholesaleMinimumReminder } from "@/lib/wholesale-rules";
 import { useSession } from "next-auth/react";
 import { formatDiscountBadge } from "@/lib/product-discount";
+import Image from "next/image";
 import type { CartLine, StoreProduct } from "@/lib/types/product";
-import { isHttpImageUrl } from "@/lib/util/image-url";
+import { isDisplayableImageUrl } from "@/lib/util/image-url";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { TechAmbient } from "@/components/ui/TechAmbient";
 import { createCheckoutOrderSchema } from "@/lib/validation/checkout-order";
+
+function cartLineImageSrc(item: CartLine): string | null {
+  const candidates = [item.img, item.imgHover, ...(item.gallery ?? [])];
+  for (const c of candidates) {
+    if (isDisplayableImageUrl(c)) return c!;
+  }
+  return null;
+}
 
 type PayPhase = "idle" | "order" | "session" | "widget" | "integrity" | "error";
 
@@ -115,6 +124,7 @@ export function CheckoutPageClient() {
 
   const [phase, setPhase] = useState<PayPhase>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [infoModal, setInfoModal] = useState<string | null>(null);
   const { data: session } = useSession();
   const isWholesaleCustomer = session?.user?.role === "CUSTOMER" && Boolean(session.user.isWholesale);
   const [wholesaleMin, setWholesaleMin] = useState(WHOLESALE_THRESHOLD_COP);
@@ -297,6 +307,10 @@ export function CheckoutPageClient() {
   );
 
   const validateForm = useCallback((): string | null => {
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return "Completa un correo válido.";
+    }
+    if (name.trim().length < 2) return "Escribe tu nombre completo.";
     if (line1.trim().length < 3) return "Escribe una dirección completa (mínimo 3 caracteres).";
     if (city.trim().length < 2) return "Indica la ciudad.";
     if (!paymentMethod) return "Elige Mercado Pago como método de pago.";
@@ -304,14 +318,23 @@ export function CheckoutPageClient() {
       return wholesaleMinimumReminder(wholesaleMin, subtotal);
     }
     return null;
-  }, [city, isWholesaleCustomer, line1, paymentMethod, subtotal, wholesaleMin]);
+  }, [city, email, isWholesaleCustomer, line1, name, paymentMethod, subtotal, wholesaleMin]);
+
+  const formComplete = useMemo(() => validateForm() === null && cart.length > 0, [cart.length, validateForm]);
+
+  useEffect(() => {
+    if (!infoModal) return;
+    const t = window.setTimeout(() => setInfoModal(null), 2800);
+    return () => window.clearTimeout(t);
+  }, [infoModal]);
 
   const runMercadoPagoPayment = useCallback(async () => {
     setErrorMsg(null);
     const v = validateForm();
     if (v) {
-      setPhase("error");
+      setInfoModal("Completa la información");
       setErrorMsg(v);
+      setPhase("idle");
       return;
     }
 
@@ -319,8 +342,9 @@ export function CheckoutPageClient() {
     const body = buildOrderPayload("mercadopago");
     const parsed = createCheckoutOrderSchema.safeParse(body);
     if (!parsed.success) {
-      setPhase("error");
+      setInfoModal("Completa la información");
       setErrorMsg("Revisa correo, nombre, dirección y zona de envío.");
+      setPhase("idle");
       return;
     }
 
@@ -466,11 +490,27 @@ export function CheckoutPageClient() {
   }, [buildOrderPayload, email, name, phone, validateForm]);
 
   const handlePay = () => {
+    const v = validateForm();
+    if (v) {
+      setInfoModal("Completa la información");
+      setErrorMsg(v);
+      return;
+    }
     if (paymentMethod === "bold" && BOLD_CHECKOUT_ENABLED) void runBoldPayment();
     else if (paymentMethod === "mercadopago") void runMercadoPagoPayment();
   };
 
   const payBusy = phase === "order" || phase === "session" || phase === "widget" || phase === "integrity";
+  const payLabel = (() => {
+    if (phase === "order") return "Creando pedido…";
+    if (phase === "integrity") return "Firmando pago…";
+    if (phase === "session" && paymentMethod === "mercadopago") return "Conectando con Mercado Pago…";
+    if (phase === "widget" && paymentMethod === "bold") return "Completa el pago arriba ↑";
+    if (!formComplete) return "Completa tus datos para pagar";
+    if (phase === "error") return "Reintentar";
+    if (paymentMethod === "bold") return "Preparar pago con Bold";
+    return "Ir a Mercado Pago";
+  })();
 
   if (!hydrated) {
     return (
@@ -542,8 +582,8 @@ export function CheckoutPageClient() {
             <div className="gb-co-hero-badge">Checkout seguro</div>
             <h1>Finalizar compra</h1>
             <p>
-              Elige envío y método de pago. Procesamos pagos con <strong>Mercado Pago</strong> de forma segura, sin
-              almacenar datos de tarjeta.
+              Completa tus datos y envío. Al pagar te llevamos al checkout seguro de <strong>Mercado Pago</strong> (tarjeta,
+              PSE y más). No pedimos datos de tarjeta en esta página.
             </p>
           </motion.div>
 
@@ -554,20 +594,29 @@ export function CheckoutPageClient() {
             <span className="gb-co-step gb-co-step--active">4 · Pago</span>
           </div>
 
-          <motion.div variants={listParent} initial="hidden" animate="show" className="gb-co-stack" style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-            <motion.section variants={itemVariants} className="gb-co-card">
+          <motion.div variants={listParent} initial="hidden" animate="show" className="gb-co-stack gb-co-stack--compact">
+            <motion.section variants={itemVariants} className="gb-co-card gb-co-card--compact">
               <div className="gb-co-section-title">
                 <span>1</span>
                 Resumen del pedido
               </div>
-              {cart.map((item) => (
+              {cart.map((item) => {
+                const imgSrc = cartLineImageSrc(item);
+                return (
                 <div key={item.id} className="gb-co-line-item">
-                  <div className="gb-co-thumb">
-                    {isHttpImageUrl(item.img) ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={item.img} alt="" />
+                  <div className="gb-co-thumb gb-co-thumb--photo">
+                    {imgSrc ? (
+                      <Image
+                        src={imgSrc}
+                        alt={item.name}
+                        fill
+                        sizes="88px"
+                        unoptimized={imgSrc.startsWith("/")}
+                        className="gb-co-thumb__img"
+                        style={{ objectFit: "cover" }}
+                      />
                     ) : (
-                      item.emoji
+                      <span aria-hidden>{item.emoji || "🛍️"}</span>
                     )}
                   </div>
                   <div>
@@ -616,10 +665,11 @@ export function CheckoutPageClient() {
                     ) : null}
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </motion.section>
 
-            <motion.section variants={itemVariants} className="gb-co-card">
+            <motion.section variants={itemVariants} className="gb-co-card gb-co-card--compact">
               <div className="gb-co-section-title">
                 <span>2</span>
                 Tus datos
@@ -627,7 +677,7 @@ export function CheckoutPageClient() {
               <div className="gb-co-grid2">
                 <div className="gb-co-field">
                   <label className="gb-co-label" htmlFor="gb-email">
-                    Correo
+                    Correo *
                   </label>
                   <input
                     id="gb-email"
@@ -637,11 +687,12 @@ export function CheckoutPageClient() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="hola@correo.com"
+                    required
                   />
                 </div>
                 <div className="gb-co-field">
                   <label className="gb-co-label" htmlFor="gb-name">
-                    Nombre completo
+                    Nombre completo *
                   </label>
                   <input
                     id="gb-name"
@@ -651,10 +702,11 @@ export function CheckoutPageClient() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Nombre y apellido"
+                    required
                   />
                 </div>
               </div>
-              <div className="gb-co-field" style={{ marginTop: 14 }}>
+              <div className="gb-co-field gb-co-field--tight">
                 <label className="gb-co-label" htmlFor="gb-phone">
                   Teléfono / WhatsApp
                 </label>
@@ -670,43 +722,43 @@ export function CheckoutPageClient() {
               </div>
             </motion.section>
 
-            <motion.section variants={itemVariants} className="gb-co-card">
+            <motion.section variants={itemVariants} className="gb-co-card gb-co-card--compact">
               <div className="gb-co-section-title">
                 <span>3</span>
                 Dirección de entrega
               </div>
-              <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: -8, marginBottom: 14, lineHeight: 1.5 }}>
-                {CHECKOUT_COURIER_NOTE}
-              </p>
-              <div className="gb-co-field">
-                <label className="gb-co-label" htmlFor="gb-line1">
-                  Dirección
-                </label>
-                <input
-                  id="gb-line1"
-                  className="gb-co-input"
-                  value={line1}
-                  onChange={(e) => setLine1(e.target.value)}
-                  placeholder="Calle, carrera, número, barrio"
-                />
-              </div>
-              <div className="gb-co-field" style={{ marginTop: 12 }}>
-                <label className="gb-co-label" htmlFor="gb-line2">
-                  Apartamento / torre (opcional)
-                </label>
-                <input id="gb-line2" className="gb-co-input" value={line2} onChange={(e) => setLine2(e.target.value)} />
-              </div>
-              <div className="gb-co-grid2" style={{ marginTop: 12 }}>
+              <p className="gb-co-hint">{CHECKOUT_COURIER_NOTE}</p>
+              <div className="gb-co-grid2">
+                <div className="gb-co-field" style={{ gridColumn: "1 / -1" }}>
+                  <label className="gb-co-label" htmlFor="gb-line1">
+                    Dirección *
+                  </label>
+                  <input
+                    id="gb-line1"
+                    className="gb-co-input"
+                    value={line1}
+                    onChange={(e) => setLine1(e.target.value)}
+                    placeholder="Calle, carrera, número, barrio"
+                    required
+                  />
+                </div>
+                <div className="gb-co-field">
+                  <label className="gb-co-label" htmlFor="gb-line2">
+                    Apto / torre
+                  </label>
+                  <input id="gb-line2" className="gb-co-input" value={line2} onChange={(e) => setLine2(e.target.value)} />
+                </div>
                 <div className="gb-co-field">
                   <label className="gb-co-label" htmlFor="gb-city">
-                    Ciudad
+                    Ciudad *
                   </label>
                   <input
                     id="gb-city"
                     className="gb-co-input"
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
-                    placeholder="Manizales, Villamaría, Medellín…"
+                    placeholder="Manizales, Medellín…"
+                    required
                   />
                 </div>
                 <div className="gb-co-field">
@@ -718,38 +770,38 @@ export function CheckoutPageClient() {
                     className="gb-co-input"
                     value={region}
                     onChange={(e) => setRegion(e.target.value)}
-                    placeholder="Cundinamarca, Antioquia…"
+                    placeholder="Caldas, Antioquia…"
+                  />
+                </div>
+                <div className="gb-co-field">
+                  <label className="gb-co-label" htmlFor="gb-postal">
+                    Cód. postal
+                  </label>
+                  <input id="gb-postal" className="gb-co-input" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} />
+                </div>
+                <div className="gb-co-field" style={{ gridColumn: "1 / -1" }}>
+                  <label className="gb-co-label" htmlFor="gb-note">
+                    Notas (opcional)
+                  </label>
+                  <textarea
+                    id="gb-note"
+                    className="gb-co-textarea gb-co-textarea--compact"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Indicaciones de entrega…"
+                    rows={2}
                   />
                 </div>
               </div>
-              <div className="gb-co-field" style={{ marginTop: 12 }}>
-                <label className="gb-co-label" htmlFor="gb-postal">
-                  Código postal (opcional)
-                </label>
-                <input id="gb-postal" className="gb-co-input" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} />
-              </div>
-              <div className="gb-co-field" style={{ marginTop: 12 }}>
-                <label className="gb-co-label" htmlFor="gb-note">
-                  Notas del pedido
-                </label>
-                <textarea
-                  id="gb-note"
-                  className="gb-co-textarea"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Indicaciones de entrega, referencia del edificio…"
-                />
-              </div>
             </motion.section>
 
-            <motion.section variants={itemVariants} className="gb-co-card gb-co-card--shipping">
+            <motion.section variants={itemVariants} className="gb-co-card gb-co-card--shipping gb-co-card--compact">
               <div className="gb-co-section-title">
                 <span>✦</span>
                 Elige tu Entrega
               </div>
-              <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: -8, marginBottom: 16 }}>
-                El costo de envío Envía depende de la zona. Despachamos desde Manizales: preparación en máximo 2 días
-                hábiles; el tránsito lo define Envía o Interrapidísimo.
+              <p className="gb-co-hint">
+                Envía según zona · Interrapidísimo contraentrega. Despacho desde Manizales (máx. 2 días hábiles).
               </p>
               <div className="gb-co-carrier-grid" role="radiogroup" aria-label="Transportadora">
                 <button
@@ -932,7 +984,7 @@ export function CheckoutPageClient() {
                 <span className="gb-co-method-badge">Recomendado</span>
                 <span className="gb-co-method-icon">💳</span>
                 <span className="gb-co-method-name">Mercado Pago</span>
-                <span className="gb-co-method-desc">Checkout Pro: tarjetas, PSE y más</span>
+                <span className="gb-co-method-desc">Te redirige a Mercado Pago (tarjeta, PSE…)</span>
               </motion.button>
               {BOLD_CHECKOUT_ENABLED ? (
                 <motion.button
@@ -966,20 +1018,17 @@ export function CheckoutPageClient() {
 
             <button
               type="button"
-              className="gb-co-pay"
+              className={`gb-co-pay${!formComplete && !payBusy ? " gb-co-pay--incomplete" : ""}`}
               onClick={handlePay}
               disabled={payBusy || !paymentMethod || (isWholesaleCustomer && subtotal < wholesaleMin)}
             >
               {payBusy && <span className="gb-co-spinner" aria-hidden />}
-              {phase === "order" && "Creando pedido…"}
-              {phase === "integrity" && "Firmando pago…"}
-              {phase === "session" && paymentMethod === "mercadopago" && "Conectando con Mercado Pago…"}
-              {phase === "widget" && paymentMethod === "bold" && "Completa el pago arriba ↑"}
-              {phase === "idle" && !paymentMethod && "Selecciona un método de pago"}
-              {phase === "idle" && paymentMethod === "mercadopago" && "Pagar con Mercado Pago"}
-              {phase === "idle" && paymentMethod === "bold" && "Preparar pago con Bold"}
-              {phase === "error" && "Reintentar"}
+              {payLabel}
             </button>
+
+            {!formComplete ? (
+              <p className="gb-co-pay-hint">Correo, nombre, dirección y ciudad son obligatorios.</p>
+            ) : null}
 
             {errorMsg && (
               <div className="gb-co-status gb-co-status--error" role="alert">
@@ -993,6 +1042,15 @@ export function CheckoutPageClient() {
           </motion.div>
         </aside>
       </div>
+
+      {infoModal ? (
+        <div className="gb-co-toast-modal" role="status" aria-live="polite">
+          <div className="gb-co-toast-modal__card">
+            <strong>{infoModal}</strong>
+            {errorMsg ? <p>{errorMsg}</p> : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
