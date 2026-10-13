@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+export const FS_ADMIN_CREDS_FILL_EVENT = "fs-admin-creds-fill";
+
 type TempAdminCredsWidgetProps = {
   email: string;
   password: string;
@@ -9,6 +11,8 @@ type TempAdminCredsWidgetProps = {
   /** En login: siempre visible (ignora el dismiss del home). */
   alwaysShow?: boolean;
   showRoute?: boolean;
+  /** Muestra botón para rellenar el formulario de login. */
+  showFillButton?: boolean;
 };
 
 function CopyIcon() {
@@ -69,6 +73,7 @@ export function TempAdminCredsWidget({
   loginPath = "/admin/login",
   alwaysShow = false,
   showRoute = true,
+  showFillButton = false,
 }: TempAdminCredsWidgetProps) {
   const [hidden, setHidden] = useState(false);
 
@@ -113,6 +118,21 @@ export function TempAdminCredsWidget({
         <CredRow label="Usuario" value={email} />
         <CredRow label="Clave" value={password} />
       </dl>
+      {showFillButton ? (
+        <button
+          type="button"
+          className="fs-admin-creds__fill"
+          onClick={() => {
+            window.dispatchEvent(
+              new CustomEvent(FS_ADMIN_CREDS_FILL_EVENT, {
+                detail: { email, password },
+              }),
+            );
+          }}
+        >
+          Usar y entrar
+        </button>
+      ) : null}
     </aside>
   );
 }

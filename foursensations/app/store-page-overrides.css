@@ -2920,6 +2920,26 @@
   font-weight: 800;
   line-height: 1;
 }
+.fs-admin-creds__fill {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.fs-admin-creds__fill:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
 @media (max-width: 720px) {
   .fs-admin-creds {
     top: auto;

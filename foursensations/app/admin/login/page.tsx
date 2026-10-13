@@ -33,6 +33,7 @@ export default async function AdminLoginPage() {
           password={password}
           alwaysShow
           showRoute={false}
+          showFillButton
         />
       ) : null}
       <Suspense fallback={<LoginFallback />}>

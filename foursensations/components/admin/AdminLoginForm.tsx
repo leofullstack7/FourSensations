@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { submitAdminCredentialsLogin } from "@/lib/admin/admin-credentials-login";
+import { FS_ADMIN_CREDS_FILL_EVENT } from "@/components/store/TempAdminCredsWidget";
 
 function adminNextPath(raw: string | null): string {
   if (raw && raw.startsWith("/admin")) return raw;
@@ -20,6 +21,8 @@ export function AdminLoginForm() {
   const [password, setPassword] = useState("");
   const [loginErr, setLoginErr] = useState<string | null>(null);
   const [loginSubmitting, setLoginSubmitting] = useState(false);
+  const credsRef = useRef({ username: "", password: "" });
+  credsRef.current = { username, password };
 
   const nextPath = adminNextPath(searchParams.get("next"));
   const forbidden = searchParams.get("error") === "forbidden";
@@ -30,11 +33,13 @@ export function AdminLoginForm() {
     window.location.replace(nextPath);
   }, [status, session, nextPath]);
 
-  const runLogin = async () => {
+  const runLogin = async (emailOverride?: string, passwordOverride?: string) => {
+    const email = (emailOverride ?? credsRef.current.username).trim();
+    const pass = passwordOverride ?? credsRef.current.password;
     setLoginErr(null);
     setLoginSubmitting(true);
     try {
-      const result = await submitAdminCredentialsLogin(username, password, nextPath);
+      const result = await submitAdminCredentialsLogin(email, pass, nextPath);
       if (!result.ok) {
         if (result.reason === "empty") {
           setLoginErr("Completa email y contraseña");
@@ -52,6 +57,22 @@ export function AdminLoginForm() {
       setLoginSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    const onFill = (event: Event) => {
+      const detail = (event as CustomEvent<{ email?: string; password?: string }>).detail;
+      const nextEmail = detail?.email?.trim() || "";
+      const nextPassword = detail?.password || "";
+      if (!nextEmail || !nextPassword) return;
+      setUsername(nextEmail);
+      setPassword(nextPassword);
+      credsRef.current = { username: nextEmail, password: nextPassword };
+      void runLogin(nextEmail, nextPassword);
+    };
+    window.addEventListener(FS_ADMIN_CREDS_FILL_EVENT, onFill);
+    return () => window.removeEventListener(FS_ADMIN_CREDS_FILL_EVENT, onFill);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar
+  }, [nextPath]);
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -100,11 +121,12 @@ export function AdminLoginForm() {
           </label>
           <input
             id="admin-login-email"
-            type="email"
+            type="text"
+            inputMode="email"
             className="form-input"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="ej. admin@foursensations.local"
+            placeholder="admin@foursensations.com"
             autoComplete="username"
             disabled={loginSubmitting}
             required

@@ -48,6 +48,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         try {
           const user = await prisma.user.findFirst({
             where: { email: { equals: email, mode: "insensitive" } },
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              role: true,
+              passwordHash: true,
+              isWholesale: true,
+            },
           });
           if (!user?.passwordHash || user.role !== "CUSTOMER") return null;
           const ok = await bcrypt.compare(password, user.passwordHash);
@@ -57,9 +65,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email: user.email ?? undefined,
             name: user.name ?? undefined,
             role: user.role,
-            isWholesale: Boolean((user as { isWholesale?: boolean }).isWholesale),
+            isWholesale: Boolean(user.isWholesale),
           };
-        } catch {
+        } catch (err) {
+          console.error("[auth] customer credentials authorize failed:", err);
           return null;
         }
       },
@@ -82,22 +91,78 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const email = loginId;
         if (!email || !password) return null;
 
+        const seedEmail =
+          process.env.SEED_ADMIN_EMAIL?.trim() || "admin@foursensations.com";
+        const seedPassword =
+          process.env.SEED_ADMIN_PASSWORD?.trim() || "BEfour2026*";
+        const isSeedLogin =
+          email.toLowerCase() === seedEmail.toLowerCase() && password === seedPassword;
+
         try {
-          const user = await prisma.user.findFirst({
+          let user = await prisma.user.findFirst({
             where: {
               email: { equals: email, mode: "insensitive" },
             },
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              role: true,
+              passwordHash: true,
+            },
           });
-          if (!user?.passwordHash || user.role !== "ADMIN") return null;
-          const ok = await bcrypt.compare(password, user.passwordHash);
-          if (!ok) return null;
+
+          let ok =
+            !!user?.passwordHash &&
+            user.role === "ADMIN" &&
+            (await bcrypt.compare(password, user.passwordHash));
+
+          /** Si el widget/env muestran SEED_ADMIN_* pero el hash en DB divergió, resincroniza. */
+          if (!ok && isSeedLogin) {
+            const passwordHash = await bcrypt.hash(seedPassword, 12);
+            user = await prisma.user.upsert({
+              where: { email: seedEmail },
+              update: {
+                role: "ADMIN",
+                passwordHash,
+                name: "Admin Four Sensations",
+              },
+              create: {
+                email: seedEmail,
+                role: "ADMIN",
+                passwordHash,
+                name: "Admin Four Sensations",
+              },
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                passwordHash: true,
+              },
+            });
+            ok = true;
+            console.warn("[auth] admin seed credentials re-synced to database");
+          }
+
+          if (!ok || !user || user.role !== "ADMIN") {
+            console.warn("[auth] admin credentials rejected", {
+              email,
+              hasUser: Boolean(user),
+              role: user?.role ?? null,
+              hasHash: Boolean(user?.passwordHash),
+            });
+            return null;
+          }
+
           return {
             id: user.id,
             email: user.email ?? undefined,
             name: user.name ?? undefined,
             role: user.role,
           };
-        } catch {
+        } catch (err) {
+          console.error("[auth] admin credentials authorize failed:", err);
           return null;
         }
       },
