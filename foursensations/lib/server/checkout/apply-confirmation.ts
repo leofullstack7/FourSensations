@@ -5,6 +5,7 @@ import {
   sendOrderConfirmationToCustomer,
 } from "@/lib/server/email/order-confirmation-customer";
 import { orderPayloadForEmail, sendOrderNotification } from "@/lib/server/email/order-notification";
+import { recordCouponRedemptionForPaidOrder } from "@/lib/server/coupons";
 
 export type FlatConfirmationPayload = Record<string, string>;
 
@@ -221,6 +222,9 @@ export async function applyEpaycoConfirmation(
         console.error("[email] error correo cliente:", err),
       );
     }
+    void recordCouponRedemptionForPaidOrder(order.id).catch((err) =>
+      console.error("[coupons] error registrando canje:", err),
+    );
     return { ok: true, duplicate: false, orderReference: order.reference };
   }
 

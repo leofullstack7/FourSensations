@@ -13,6 +13,7 @@ import type { CreateCheckoutOrderInput } from "@/lib/validation/checkout-order";
 import { generateOrderReference } from "@/lib/server/checkout/reference";
 import { getWholesaleUnitPrice } from "@/lib/wholesale-pricing";
 import { resolveWholesaleCycle } from "@/lib/wholesale-rules";
+import { quoteCouponForCart } from "@/lib/server/coupons";
 
 export type CreateOrderResult =
   | {
@@ -21,8 +22,10 @@ export type CreateOrderResult =
       reference: string;
       subtotal: number;
       shipping: number;
+      discount: number;
       total: number;
       currency: string;
+      couponCode?: string | null;
     }
   | { ok: false; error: string; status: number };
 
@@ -207,10 +210,37 @@ export async function createPendingOrderFromCheckout(
       const region = addr.region?.trim();
       const zoneId = guessShippingZoneFromCity(city) || input.shippingZoneId;
       const carrier = resolveShippingCarrier(city, region);
-      const shipping = checkoutShippingCop(zoneId, { city, region, carrier });
-      const total = subtotal + shipping;
-      if (total <= 0) {
-        throw new Error("Total inválido");
+      const shippingBase = checkoutShippingCop(zoneId, { city, region, carrier });
+
+      let discount = 0;
+      let shipping = shippingBase;
+      let couponId: string | null = null;
+      let couponCode: string | null = null;
+
+      if (input.couponCode?.trim()) {
+        const quoted = await quoteCouponForCart(input.couponCode, {
+          subtotal,
+          shipping: shippingBase,
+          customerEmail: input.customerEmail,
+        });
+        if (!quoted.ok) {
+          throw new Error(quoted.error);
+        }
+        discount = quoted.discount;
+        shipping = quoted.shippingAfter;
+        couponId = quoted.couponId;
+        couponCode = quoted.code;
+      }
+
+      // FREE_SHIPPING: shipping=0 y discount=ahorro de envío → no restar de nuevo.
+      // PERCENT/FIXED: shipping intacto → restar discount del subtotal.
+      const finalTotal =
+        shipping < shippingBase
+          ? Math.max(0, subtotal + shipping)
+          : Math.max(0, subtotal + shipping - discount);
+
+      if (finalTotal <= 0) {
+        throw new Error("Total inválido tras aplicar el cupón");
       }
 
       const reference = generateOrderReference();
@@ -221,6 +251,7 @@ export async function createPendingOrderFromCheckout(
         shippingZoneLabel: zoneMeta.shortLabel,
         shippingCarrier: carrier,
         shippingCarrierLabel: carrier === "envia" ? "Envía" : "Interrapidísimo",
+        ...(couponCode ? { couponCode, couponDiscount: discount } : {}),
       } as unknown as Prisma.InputJsonValue;
 
       const order = await tx.order.create({
@@ -231,8 +262,11 @@ export async function createPendingOrderFromCheckout(
           paymentProvider: input.paymentProvider ?? null,
           subtotal,
           shipping,
-          total,
+          discount,
+          total: finalTotal,
           currency: "COP",
+          couponId,
+          couponCode,
           customerEmail: input.customerEmail.trim(),
           customerName: input.customerName.trim(),
           customerPhone: input.customerPhone?.trim() || null,
@@ -257,15 +291,17 @@ export async function createPendingOrderFromCheckout(
         reference: order.reference,
         subtotal,
         shipping,
-        total,
+        discount,
+        total: finalTotal,
         currency: order.currency,
+        couponCode,
       };
     });
 
     return { ok: true, ...data };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "No se pudo crear el pedido";
-    const isClient = /Producto no disponible|Combo no disponible|Stock insuficiente|Total inválido|pedido mayorista/.test(msg);
+    const isClient = /Producto no disponible|Combo no disponible|Stock insuficiente|Total inválido|pedido mayorista|cupón|Cupón|Envío gratis|agotó|mínima/.test(msg);
     return { ok: false, error: msg, status: isClient ? 400 : 500 };
   }
 }

@@ -38,6 +38,8 @@ export const createCheckoutOrderSchema = z
     shippingZoneId: z.enum(SHIPPING_ZONE_IDS),
     /** Preferencia de pasarela; el costo de envío lo calcula el servidor. */
     paymentProvider: z.enum(["EPAYCO", "BOLD", "MERCADOPAGO"]).optional(),
+    /** Código de cupón opcional. */
+    couponCode: z.string().min(1).max(40).optional(),
   })
   .superRefine((data, ctx) => {
     const line1 = data.shippingAddress.line1.trim();

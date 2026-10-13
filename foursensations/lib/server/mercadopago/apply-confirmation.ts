@@ -6,6 +6,7 @@ import {
 } from "@/lib/server/email/order-confirmation-customer";
 import { orderPayloadForEmail, sendOrderNotification } from "@/lib/server/email/order-notification";
 import type { MercadoPagoPayment } from "@/lib/server/mercadopago/client";
+import { recordCouponRedemptionForPaidOrder } from "@/lib/server/coupons";
 
 function mapMpStatus(status: string): { payment: PaymentStatus; order: OrderStatus } {
   switch (status) {
@@ -117,6 +118,9 @@ export async function applyMercadoPagoPayment(
         console.error("[email] error correo cliente:", err),
       );
     }
+    void recordCouponRedemptionForPaidOrder(order.id).catch((err) =>
+      console.error("[coupons] error registrando canje:", err),
+    );
     return { ok: true, duplicate: false, orderReference: order.reference };
   }
 

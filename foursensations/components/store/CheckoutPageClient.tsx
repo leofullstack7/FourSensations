@@ -103,6 +103,15 @@ export function CheckoutPageClient() {
   const [shippingZoneId, setShippingZoneId] = useState<ShippingZoneId>("nacional");
   const [shippingCarrier, setShippingCarrier] = useState<ShippingCarrier>("envia");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("mercadopago");
+  const [couponInput, setCouponInput] = useState("");
+  const [couponApplied, setCouponApplied] = useState<{
+    code: string;
+    label: string;
+    discount: number;
+    shippingAfter: number;
+  } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponBusy, setCouponBusy] = useState(false);
 
   const [phase, setPhase] = useState<PayPhase>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -187,8 +196,63 @@ export function CheckoutPageClient() {
     () => checkoutShippingCop(shippingZoneId, { city, region, carrier: shippingCarrier }),
     [city, region, shippingCarrier, shippingZoneId],
   );
-  const total = subtotal + shippingAmount;
+  const shippingPaid = couponApplied ? couponApplied.shippingAfter : shippingAmount;
+  const couponDiscount = couponApplied?.discount ?? 0;
+  const total =
+    couponApplied && couponApplied.shippingAfter < shippingAmount
+      ? Math.max(0, subtotal + shippingPaid)
+      : Math.max(0, subtotal + shippingPaid - couponDiscount);
   const zoneHint = shippingZoneContextMessage(shippingZoneId, shippingCarrier, city, region);
+
+  useEffect(() => {
+    // Si cambia el carrito/envío, el cupón aplicado puede quedar inválido.
+    setCouponApplied(null);
+    setCouponError(null);
+  }, [subtotal, shippingAmount]);
+
+  const applyCoupon = useCallback(async () => {
+    const code = couponInput.trim();
+    if (!code) {
+      setCouponError("Escribe un código");
+      return;
+    }
+    setCouponBusy(true);
+    setCouponError(null);
+    try {
+      const res = await fetch("/api/store/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code,
+          subtotal,
+          shipping: shippingAmount,
+          ...(email.trim() ? { customerEmail: email.trim() } : {}),
+        }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        code?: string;
+        label?: string;
+        discount?: number;
+        shippingAfter?: number;
+      };
+      if (!res.ok || data.discount == null || !data.code) {
+        setCouponApplied(null);
+        setCouponError(data.error || "Cupón no válido");
+        return;
+      }
+      setCouponApplied({
+        code: data.code,
+        label: data.label || data.code,
+        discount: data.discount,
+        shippingAfter: data.shippingAfter ?? shippingAmount,
+      });
+    } catch {
+      setCouponError("No se pudo validar el cupón");
+    } finally {
+      setCouponBusy(false);
+    }
+  }, [couponInput, email, shippingAmount, subtotal]);
 
   const changeQty = (id: string, delta: number) => {
     const item = cart.find((i) => i.id === id);
@@ -226,9 +290,10 @@ export function CheckoutPageClient() {
         customerNote: note.trim() || undefined,
         shippingZoneId,
         paymentProvider: provider === "mercadopago" ? ("MERCADOPAGO" as const) : ("BOLD" as const),
+        ...(couponApplied?.code ? { couponCode: couponApplied.code } : {}),
       };
     },
-    [cart, city, email, line1, line2, name, note, phone, postalCode, region, shippingZoneId],
+    [cart, city, couponApplied?.code, email, line1, line2, name, note, phone, postalCode, region, shippingZoneId],
   );
 
   const validateForm = useCallback((): string | null => {
@@ -796,11 +861,55 @@ export function CheckoutPageClient() {
               <strong>
                 {shippingCarrier === "interrapidismo" ? (
                   <span className="gb-co-price-cod">Contraentrega</span>
+                ) : shippingPaid === 0 && couponApplied ? (
+                  <span className="gb-co-price-cod">Gratis</span>
                 ) : (
-                  formatPrice(shippingAmount)
+                  formatPrice(shippingPaid)
                 )}
               </strong>
             </div>
+            <div className="gb-co-coupon">
+              <label className="gb-co-coupon__label" htmlFor="checkout-coupon">
+                Cupón
+              </label>
+              <div className="gb-co-coupon__row">
+                <input
+                  id="checkout-coupon"
+                  className="gb-co-input"
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                  placeholder="Código"
+                  disabled={couponBusy}
+                />
+                <button type="button" className="gb-co-coupon__btn" disabled={couponBusy} onClick={() => void applyCoupon()}>
+                  {couponBusy ? "…" : couponApplied ? "OK" : "Aplicar"}
+                </button>
+                {couponApplied ? (
+                  <button
+                    type="button"
+                    className="gb-co-coupon__clear"
+                    onClick={() => {
+                      setCouponApplied(null);
+                      setCouponError(null);
+                    }}
+                  >
+                    Quitar
+                  </button>
+                ) : null}
+              </div>
+              {couponError ? <p className="gb-co-coupon__err">{couponError}</p> : null}
+              {couponApplied ? (
+                <p className="gb-co-coupon__ok">
+                  {couponApplied.label} · −{formatPrice(couponDiscount)}
+                </p>
+              ) : null}
+            </div>
+            {couponDiscount > 0 ? (
+              <div className="gb-co-total-row">
+                <span>Descuento cupón</span>
+                <strong>−{formatPrice(couponDiscount)}</strong>
+              </div>
+            ) : null}
             <div className="gb-co-total-row gb-co-total-row--grand">
               <span>Total</span>
               <span>{formatPrice(total)}</span>

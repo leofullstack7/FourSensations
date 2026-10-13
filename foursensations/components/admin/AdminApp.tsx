@@ -152,6 +152,7 @@ import type { AdminProduct, AdminSale } from "@/lib/types/admin";
 import { formatPrice } from "@/lib/format";
 import { AdminCombosPanel } from "@/components/admin/AdminCombosPanel";
 import { AdminDiscountsPanel } from "@/components/admin/AdminDiscountsPanel";
+import { AdminCouponsPanel } from "@/components/admin/AdminCouponsPanel";
 import { AdminProductListBoard } from "@/components/admin/AdminProductListBoard";
 import { AdminMenuTab } from "@/components/admin/AdminMenuTab";
 import { BrandLogo } from "@/components/brand/BrandLogo";
@@ -164,7 +165,7 @@ import {
   resolveMenuTagFromEditor,
 } from "@/lib/admin/menu-utils";
 
-type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "discounts" | "sales" | "stock" | "customers" | "categories" | "families" | "menu" | "versions" | "reports";
+type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "discounts" | "coupons" | "sales" | "stock" | "customers" | "categories" | "families" | "menu" | "versions" | "reports";
 
 type GoPageOptions = {
   productTab?: "list" | "add" | "bulk";
@@ -176,6 +177,7 @@ const ADMIN_PAGE_TITLES: Record<AdminPageId, string> = {
   "category-products": "Gestión de PRODUCTOS en Categorías",
   combos: "Crear Combos",
   discounts: "Descuentos",
+  coupons: "Cupones",
   sales: "Ventas",
   stock: "Inventario",
   customers: "Clientes CRM",
@@ -197,6 +199,7 @@ const ADMIN_NAV_ITEMS: {
   { id: "category-products", icon: "✨", label: "Productos en Categorías" },
   { id: "combos", icon: "🧩", label: "Crear Combos" },
   { id: "discounts", icon: "🏷️", label: "Descuentos" },
+  { id: "coupons", icon: "🎟️", label: "Cupones" },
   { id: "sales", icon: "💰", label: "Ventas" },
   { id: "customers", icon: "👥", label: "Clientes CRM" },
   { id: "stock", icon: "📋", label: "Inventario" },
@@ -2013,6 +2016,10 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                 categories={categoriesTree}
                 showToast={showToast}
               />
+            </div>
+
+            <div className={`admin-page ${page === "coupons" ? "active" : ""}`} style={{ display: page === "coupons" ? "block" : "none" }}>
+              <AdminCouponsPanel active={page === "coupons"} showToast={showToast} />
             </div>
 
             <div className={`admin-page ${page === "sales" ? "active" : ""}`} style={{ display: page === "sales" ? "block" : "none" }}>
