@@ -2881,12 +2881,44 @@
   text-transform: uppercase;
   opacity: 0.78;
 }
-.fs-admin-creds__fields dd {
+.fs-admin-creds__fields dd,
+.fs-admin-creds__value {
   margin: 2px 0 0;
   font-size: 12px;
   font-weight: 700;
   word-break: break-all;
   line-height: 1.35;
+}
+.fs-admin-creds__value {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.fs-admin-creds__text {
+  flex: 1;
+  min-width: 0;
+}
+.fs-admin-creds__copy {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-top: -2px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  color: #fff;
+  cursor: pointer;
+}
+.fs-admin-creds__copy:hover {
+  background: rgba(0, 0, 0, 0.42);
+}
+.fs-admin-creds__copied {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
 }
 @media (max-width: 720px) {
   .fs-admin-creds {
