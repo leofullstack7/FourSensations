@@ -1,7 +1,7 @@
 import { revalidateTag } from "next/cache";
 import { revalidateCategoryStorefrontProducts } from "@/lib/server/revalidate-category-storefront";
 
-export const STOREFRONT_PRODUCTS_CACHE_TAG = "storefront-products-v6";
+export const STOREFRONT_PRODUCTS_CACHE_TAG = "storefront-products-v7-catalog-prices";
 export const STOREFRONT_BRANDS_CACHE_TAG = "storefront-brands";
 export const STOREFRONT_TINTS_CACHE_TAG = "storefront-tint-bubble-items-v1";
 

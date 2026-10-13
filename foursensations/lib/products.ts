@@ -122,7 +122,7 @@ const getCachedStorefrontProducts = unstable_cache(
     if (rows.length === 0) return mockProducts.map((p) => ({ ...p, slug: slugify(p.name) }));
     return rows.map((r) => rowToStore(r, r.images));
   },
-  ["storefront-products-v6"],
+  ["storefront-products-v7-catalog-prices"],
   { revalidate: 300, tags: [STOREFRONT_PRODUCTS_CACHE_TAG] }
 );
 

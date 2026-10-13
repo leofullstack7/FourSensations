@@ -23,7 +23,6 @@ import {
   enrichStorefrontDisplayProducts,
   resolveStorefrontDisplayAfterFilter,
 } from "@/lib/store/variant-groups";
-import { isHomeClubFavoriteProduct } from "@/lib/home-club-favorites";
 import { productMatchesHairSubcategory } from "@/lib/hair-subcategories";
 import { STOREFRONT_BRAND_MARQUEE_MESSAGES } from "@/lib/store-brand-marquee-messages";
 import type { StoreProduct } from "@/lib/types/product";
@@ -119,8 +118,8 @@ export function StoreHomeClient({
     if (manualSub) {
       list = products.filter((p) => productMatchesHairSubcategory(p, manualSub));
     } else {
-      list = products.filter((p) => isHomeClubFavoriteProduct(p.name));
-      if (list.length === 0) list = [...products];
+      // Home: catálogo completo (antes solo “favoritos del Club”).
+      list = [...products];
     }
 
     if (sortValue === "default") {
@@ -132,10 +131,16 @@ export function StoreHomeClient({
     }
 
     const copy = [...list];
-    if (sortValue === "price-asc") copy.sort((a, b) => a.price - b.price);
-    else if (sortValue === "price-desc") copy.sort((a, b) => b.price - a.price);
-    else if (sortValue === "rating") copy.sort((a, b) => b.rating - a.rating);
-    else if (sortValue === "new") copy.sort((a, b) => Number(b.isNew) - Number(a.isNew));
+    const photoRank = (p: StoreProduct) => (p.img?.trim() ? 1 : 0);
+    if (sortValue === "price-asc") {
+      copy.sort((a, b) => photoRank(b) - photoRank(a) || a.price - b.price);
+    } else if (sortValue === "price-desc") {
+      copy.sort((a, b) => photoRank(b) - photoRank(a) || b.price - a.price);
+    } else if (sortValue === "rating") {
+      copy.sort((a, b) => photoRank(b) - photoRank(a) || b.rating - a.rating);
+    } else if (sortValue === "new") {
+      copy.sort((a, b) => photoRank(b) - photoRank(a) || Number(b.isNew) - Number(a.isNew));
+    }
     return enrichStorefrontDisplayProducts(resolveStorefrontDisplayAfterFilter(copy, products), products);
   }, [products, sortValue, manualSub]);
 
