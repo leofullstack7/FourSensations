@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { MotionDiv, MotionSpan } from "@/components/store/store-framer-motion";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { JuliProductSlider } from "@/components/store/JuliProductSlider";
@@ -15,6 +16,7 @@ import {
   type EmmaAnswers,
 } from "@/lib/emma/flow";
 import type { StoreProduct } from "@/lib/types/product";
+import emmaWordmark from "@/assets/foursensations/emma.png";
 
 type Phase = "intro" | "question" | "loading" | "result";
 
@@ -271,7 +273,14 @@ export function BeautyAiAdvisor() {
             Emma · en vivo
           </MotionSpan>
           <h2 id="gb-ai-title" className="gb-ai-title">
-            Hola, soy <em>Emma</em>
+            Hola, soy{" "}
+            <Image
+              src={emmaWordmark}
+              alt="Emma"
+              className="emma-wordmark"
+              height={64}
+              priority
+            />
           </h2>
           <p className="gb-ai-kicker">{EMMA_LEFT_COPY.greeting}</p>
           <p className="gb-ai-desc">{EMMA_LEFT_COPY.body}</p>
@@ -296,7 +305,9 @@ export function BeautyAiAdvisor() {
               💗
             </span>
             <div className="gb-ai-console-who">
-              <strong>Emma</strong>
+              <strong className="emma-console-name">
+                <Image src={emmaWordmark} alt="Emma" className="emma-wordmark emma-wordmark--console" height={28} />
+              </strong>
               <span>Four Sensations · en línea</span>
             </div>
           </div>

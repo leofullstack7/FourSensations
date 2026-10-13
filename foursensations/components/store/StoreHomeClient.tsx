@@ -29,7 +29,8 @@ import type { StoreProduct } from "@/lib/types/product";
 import type { StoreCombo } from "@/lib/types/store-combo";
 import type { TintBubbleItem } from "@/lib/tints";
 import { HomeCombosPromo } from "@/components/store/CombosPromo";
-import { pickRotatingTestimonials } from "@/lib/store-testimonials";
+import { HomeTestimonials } from "@/components/store/HomeTestimonials";
+import { PromoDiagonalTrio } from "@/components/store/PromoDiagonalTrio";
 import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
 import { formatPrice } from "@/lib/format";
 import { useEffect, useMemo, useState } from "react";
@@ -73,7 +74,6 @@ const MOBILE_INITIAL_VISIBLE_PRODUCTS = 10;
 const DESKTOP_LOAD_MORE_PRODUCTS = 20;
 const MOBILE_LOAD_MORE_PRODUCTS = 10;
 const MOBILE_FEATURED_BREAKPOINT = 768;
-const HOME_TESTIMONIALS_ROTATION = pickRotatingTestimonials(3);
 
 type StoreHomeClientProps = {
   tintItems?: TintBubbleItem[];
@@ -292,6 +292,7 @@ export function StoreHomeClient({
               </Link>
               <div className="promo-deco">✨</div>
             </div>
+            <PromoDiagonalTrio />
             <div className="promo-card wide" style={{ background: "linear-gradient(135deg, var(--dark) 0%, var(--dark-mid) 100%)", color: "white" }}>
               <div>
                 <div className="promo-label" style={{ color: "rgba(255,255,255,0.6)" }}>
@@ -385,33 +386,7 @@ export function StoreHomeClient({
         </div>
       </section>
 
-      <section className="testimonials-section section-pad">
-        <div className="container">
-          <div className="section-header reveal">
-            <div className="section-eyebrow">Lo que dicen</div>
-            <h2 className="section-title">
-              Clientas que nos <em>aman</em>
-            </h2>
-          </div>
-          <div className="testimonials-grid reveal-stagger">
-            {HOME_TESTIMONIALS_ROTATION.map((t) => (
-              <div key={`${t.name}-${t.city}`} className="testimonial-card">
-                <div className="t-stars">★★★★★</div>
-                <p className="t-text">&quot;{t.text}&quot;</p>
-                <div className="t-user">
-                  <div className="t-avatar">{t.initial}</div>
-                  <div>
-                    <div className="t-name">{t.name}</div>
-                    <div className="t-detail">
-                      {t.city} · {t.tag}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <HomeTestimonials />
 
       <section className="newsletter-section">
         <TechAmbient variant="subtle" />

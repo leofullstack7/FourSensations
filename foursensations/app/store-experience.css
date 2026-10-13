@@ -233,6 +233,22 @@
   font-weight: 400;
   font-size: 1.12em;
 }
+.emma-wordmark {
+  display: inline-block;
+  vertical-align: middle;
+  height: 1.05em;
+  width: auto;
+  margin: 0 0.06em;
+}
+.emma-wordmark--console {
+  height: 1.35em;
+  display: block;
+}
+.emma-console-name {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
 .gb-ai-kicker {
   margin: 0 0 14px;
   font-size: 15px;

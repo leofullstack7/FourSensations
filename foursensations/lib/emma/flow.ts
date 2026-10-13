@@ -116,15 +116,15 @@ const Q1_REACT: Record<string, string> = {
 };
 
 const Q5_REACT: Record<string, string> = {
-  reparar: "Anotadísimo 💗 Repararlo será nuestra prioridad número uno.",
-  nutrir: "Perfecto 💗 Nutrirlo e hidratarlo va primero en tu lista.",
-  grasa: "Listo 💗 Controlar la grasa será lo primero que ataquemos.",
-  caspa: "Entendido 💗 Cuidar caspa y descamación será tu prioridad.",
-  caida: "Anotado 💗 Fortalecer y cuidar la caída va primero.",
-  crecimiento: "Súper 💗 Favorecer el crecimiento será el foco principal.",
-  frizz: "Perfecto 💗 Controlar el frizz será lo primero.",
-  brillo: "Amo 💗 Más brillo será nuestra prioridad ✨",
-  puntas: "Listo 💗 Reparar tus puntas va número uno 💗",
+  reparar: "Perfecto 💗 Reparación queda como tu prioridad #1. Me falta una última cosita para terminar de conocerte.",
+  nutrir: "Anotadísimo 💗 Nutrición e hidratación quedan como tu prioridad #1. Me falta una última cosita.",
+  grasa: "Perfecto ✨ Ya sé que controlar la grasa es lo primero que quieres trabajar. Solo me falta una última pregunta.",
+  caspa: "Entendido 💗 El cuidado de la caspa y la descamación queda como tu prioridad. Ya casi terminamos.",
+  caida: "Okeyyy 💗 Fortalecimiento y cuidado de la caída quedan como prioridad #1. Me falta una última cosita.",
+  crecimiento: "Perfecto 💗 Meta clarísima: favorecer el crecimiento. Ya casi tengo todo para armar tu rutina.",
+  frizz: "Anotadísimo ✨ Controlar el frizz queda como tu prioridad. Una última pregunta y Emma hace lo suyo 💗",
+  brillo: "Amooo ✨ Más brillo queda como tu prioridad #1. Me falta una última cosita para terminar.",
+  puntas: "Perfecto 💗 Esas puntas quedan oficialmente como prioridad. Una última pregunta y terminamos.",
 };
 
 export function emmaReactionForAnswer(questionId: number, selectedIds: string[]): string {
@@ -150,19 +150,28 @@ export function emmaReactionForAnswer(questionId: number, selectedIds: string[])
     return "Perfecto 💗 Sigamos.";
   }
   if (questionId === 3) {
-    return "Te escucho 💗 Ya guardé cómo estás sintiendo tu cabello. Ahora vamos a la raíz.";
+    if (selectedIds.length <= 1) {
+      return "Perfecto 💗 Ya tengo mucho más claro cómo se está sintiendo tu cabello. Ahora vamos a mirar la raíz 👀";
+    }
+    return "Okeyyy, ya voy entendiendo MUCHO mejor lo que está pasando 👀💗 Guardé todo lo que marcaste. Ahora vamos a la raíz.";
   }
   if (questionId === 4) {
     if (selectedIds.includes("ninguna") && selectedIds.length === 1) {
-      return "Perfecto 💗 Sin alertas en el cuero cabelludo por ahora. Sigamos.";
+      return "Perfecto 💗 Entonces por ahora no identificas ninguna de esas situaciones en tu cuero cabelludo. Ahora viene una pregunta CLAVE.";
     }
-    return "Anotado 💗 Ya tengo claro lo de tu cuero cabelludo. Una más y listo.";
+    return "Perfecto, ya entendí mucho mejor tu cuero cabelludo también 💗 Ahora viene una pregunta CLAVE: quiero saber tu prioridad #1.";
   }
   if (questionId === 5) {
-    return Q5_REACT[selectedIds[0] ?? ""] ?? "Perfecto 💗 Esa será nuestra prioridad.";
+    return Q5_REACT[selectedIds[0] ?? ""] ?? "Perfecto 💗 Esa será nuestra prioridad. Me falta una última cosita.";
   }
   if (questionId === 6) {
-    return "Listo 💗 Ya tengo el panorama completo. Dame un segundito…";
+    if (selectedIds.includes("ninguna") && selectedIds.length === 1) {
+      return "Perfecto 💗 Con todo lo que ya me contaste tengo suficiente para armar tu recomendación. Emma va a hacer su magia…";
+    }
+    if (selectedIds.length <= 1) {
+      return "¡Listoooo! 💗 Ya tengo todo lo que necesitaba para conocerte mejor. Ahora déjame unir las pistas y armar tu rutina…";
+    }
+    return "¡Listoooo! 💗 Ya entendí muchísimo mejor lo que vive tu cabello en el día a día. Ahora déjame cruzar todo y armarte tu recomendación…";
   }
   return "Perfecto 💗";
 }

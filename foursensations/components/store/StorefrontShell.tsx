@@ -1011,7 +1011,7 @@ export function StorefrontShell({
                 className="mega-dock__grid"
                 style={
                   {
-                    "--mega-cols": String(Math.min(6, Math.max(1, Object.keys(desktopMega.subs).length))),
+                    "--mega-cols": String(Math.max(1, Object.keys(desktopMega.subs).length)),
                   } as CSSProperties
                 }
               >
