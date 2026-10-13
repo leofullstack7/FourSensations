@@ -2775,7 +2775,8 @@
   right: 14px;
   top: 48%;
   translate: 0 -50%;
-  z-index: 36000;
+  /* Por encima del splash (40000) para que se vea en el intro */
+  z-index: 50000;
   width: 196px;
   min-height: 196px;
   padding: 16px 14px 14px;

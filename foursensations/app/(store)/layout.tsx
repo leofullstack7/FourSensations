@@ -9,9 +9,12 @@ export default function StoreLayout({ children }: { children: React.ReactNode })
   const password = process.env.SEED_ADMIN_PASSWORD?.trim() || "BEfour2026*";
 
   return (
-    <Suspense fallback={null}>
-      <StoreNavigationProvider>{children}</StoreNavigationProvider>
+    <>
+      {/* Fuera del Suspense: useSearchParams en el provider suspendía y el fallback null borraba el widget. */}
       {showCreds ? <TempAdminCredsWidget email={email} password={password} loginPath="/admin/login" /> : null}
-    </Suspense>
+      <Suspense fallback={null}>
+        <StoreNavigationProvider>{children}</StoreNavigationProvider>
+      </Suspense>
+    </>
   );
 }

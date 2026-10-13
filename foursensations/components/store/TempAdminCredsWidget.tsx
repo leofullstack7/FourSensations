@@ -13,15 +13,14 @@ export function TempAdminCredsWidget({
   password,
   loginPath = "/admin/login",
 }: TempAdminCredsWidgetProps) {
-  const [hidden, setHidden] = useState(true);
+  const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
     try {
-      if (sessionStorage.getItem("fs-hide-admin-creds") === "1") return;
+      if (sessionStorage.getItem("fs-hide-admin-creds") === "1") setHidden(true);
     } catch {
       /* ignore */
     }
-    setHidden(false);
   }, []);
 
   if (hidden || !email || !password) return null;
