@@ -2769,3 +2769,132 @@
   color: var(--rose);
 }
 
+/* —— Widget temporal credenciales admin (quitar cuando ya no haga falta) —— */
+.fs-admin-creds {
+  position: fixed;
+  right: 14px;
+  top: 48%;
+  translate: 0 -50%;
+  z-index: 36000;
+  width: 196px;
+  min-height: 196px;
+  padding: 16px 14px 14px;
+  border-radius: 18px;
+  overflow: hidden;
+  color: #fff;
+  box-shadow:
+    0 18px 40px rgba(42, 12, 72, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.18);
+  isolation: isolate;
+}
+.fs-admin-creds__flame {
+  position: absolute;
+  inset: -40%;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 55% 45% at 30% 80%, rgba(255, 90, 60, 0.85) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 70% 75%, rgba(255, 170, 40, 0.75) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 20%, rgba(168, 70, 210, 0.75) 0%, transparent 55%),
+    linear-gradient(165deg, #5a1d8a 0%, #8a2f6e 40%, #c4452e 78%, #f0a030 100%);
+  background-size: 140% 140%;
+  animation: fs-admin-flame 4.5s ease-in-out infinite alternate;
+  filter: blur(0.2px);
+}
+.fs-admin-creds__flame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 90%, rgba(255, 220, 120, 0.55), transparent 40%),
+    radial-gradient(circle at 85% 70%, rgba(255, 80, 120, 0.4), transparent 42%);
+  animation: fs-admin-wave 3.2s ease-in-out infinite alternate;
+  mix-blend-mode: screen;
+}
+@keyframes fs-admin-flame {
+  0% {
+    transform: translateY(6%) scale(1.02) rotate(-2deg);
+    background-position: 20% 30%;
+  }
+  100% {
+    transform: translateY(-4%) scale(1.08) rotate(2deg);
+    background-position: 80% 70%;
+  }
+}
+@keyframes fs-admin-wave {
+  0% {
+    transform: translateY(8%) scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(-10%) scale(1.12);
+    opacity: 1;
+  }
+}
+.fs-admin-creds__close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.28);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.fs-admin-creds__eyebrow,
+.fs-admin-creds__route,
+.fs-admin-creds__fields {
+  position: relative;
+  z-index: 1;
+}
+.fs-admin-creds__eyebrow {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+.fs-admin-creds__route {
+  display: inline-block;
+  margin: 0 0 12px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.fs-admin-creds__fields {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+.fs-admin-creds__fields dt {
+  margin: 0;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+.fs-admin-creds__fields dd {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  word-break: break-all;
+  line-height: 1.35;
+}
+@media (max-width: 720px) {
+  .fs-admin-creds {
+    top: auto;
+    bottom: 92px;
+    translate: 0;
+    width: 168px;
+    min-height: 168px;
+    padding: 12px;
+  }
+}
+
