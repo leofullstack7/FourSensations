@@ -51,6 +51,7 @@ import {
 } from "@/lib/store/variant-groups";
 import {
   normalizeMenuLookup,
+  resolveStoreCategoryHref,
   resolveStoreMenuGroupHref,
   resolveStoreMenuItemHref,
 } from "@/lib/store/menu-item-href";
@@ -839,7 +840,7 @@ export function StorefrontShell({
                   onMouseEnter={() => openDesktopMega(cat)}
                 >
                   <StoreNavLink
-                    href={`/categoria/${categoryPath(cat)}`}
+                    href={resolveStoreCategoryHref(cat)}
                     className="nav-link"
                     prefetch
                     onFocus={() => openDesktopMega(cat)}
@@ -1038,7 +1039,7 @@ export function StorefrontShell({
                         type="button"
                         className="mobile-mega-see-all"
                         onClick={() => {
-                          navigateTo(`/categoria/${categoryPath(cat)}`);
+                          navigateTo(resolveStoreCategoryHref(cat));
                           closeMobileMenu();
                         }}
                       >
@@ -1068,7 +1069,7 @@ export function StorefrontShell({
                   <p className="mega-kicker">Colección</p>
                   <h3 className="mega-header">{desktopMegaCat}</h3>
                 </div>
-                <StoreNavLink href={`/categoria/${categoryPath(desktopMegaCat)}`} className="mega-promo-btn">
+                <StoreNavLink href={resolveStoreCategoryHref(desktopMegaCat)} className="mega-promo-btn">
                   Ver todo
                 </StoreNavLink>
               </div>

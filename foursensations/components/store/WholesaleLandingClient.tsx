@@ -10,52 +10,86 @@ import { StoreProductCard } from "@/components/store/store-product-card";
 import { useReveal } from "@/hooks/useReveal";
 import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
 import { formatPrice } from "@/lib/format";
-import { getWhatsAppHref, WHATSAPP_WHOLESALE_MESSAGE } from "@/lib/storefront-contact";
+import {
+  getWhatsAppDisplayNumber,
+  getWhatsAppHref,
+  WHATSAPP_WHOLESALE_MESSAGE,
+} from "@/lib/storefront-contact";
 import type { StoreProduct } from "@/lib/types/product";
 import { withWholesalePrices } from "@/lib/wholesale-pricing";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 
+const BENEFITS = [
+  {
+    icon: "📍",
+    title: "Origen Manizales",
+    desc: "FOUR SENSATIONS S.A.S. despacha desde Calle 65A #23A-15, Manizales, Caldas, a todo Colombia.",
+  },
+  {
+    icon: "⏱️",
+    title: "Preparación ágil",
+    desc: "Máximo 2 días hábiles desde la confirmación del pedido. El tránsito lo define la transportadora.",
+  },
+  {
+    icon: "🚚",
+    title: "Cobertura nacional",
+    desc: "Envía como vía principal e Interrapidísimo en zonas con reexpedición. No hay recogida en tienda ni entrega el mismo día.",
+  },
+  {
+    icon: "💎",
+    title: "Tarifa de volumen",
+    desc: `Pedidos desde ${formatPrice(WHOLESALE_THRESHOLD_COP)} acceden a precios mayoristas y a un agente dedicado.`,
+  },
+] as const;
+
 const REASONS = [
   {
     n: "01",
-    title: "EMPIEZA SIN COMPLICARTE \u{1F497}",
-    text: "No necesitas una inversi\u00F3n enorme para comenzar. Puedes iniciar con un pedido desde $700.000 y hacer crecer tu inventario a tu ritmo.",
+    title: "EMPIEZA SIN COMPLICARTE 💗",
+    text: "No necesitas una inversión enorme para comenzar. Puedes iniciar con un pedido desde $700.000 y hacer crecer tu inventario a tu ritmo.",
   },
   {
     n: "02",
-    title: "PRODUCTOS QUE DA GUSTO RECOMENDAR \u2728",
-    text: "F\u00F3rmulas cuidadosamente desarrolladas, ingredientes seleccionados y productos pensados para responder a diferentes necesidades del cabello. Vendes algo en lo que puedes confiar.",
+    title: "PRODUCTOS QUE DA GUSTO RECOMENDAR ✨",
+    text: "Fórmulas cuidadosamente desarrolladas, ingredientes seleccionados y productos pensados para responder a diferentes necesidades del cabello. Vendes algo en lo que puedes confiar.",
   },
   {
     n: "03",
-    title: "UN MARGEN QUE S\u00CD MOTIVA \u{1F4B8}",
-    text: "Accede a precios especiales para mayoristas y construye una ganancia atractiva en cada venta. Porque si vas a emprender, tambi\u00E9n queremos que sea un buen negocio para ti.",
+    title: "UN MARGEN QUE SÍ MOTIVA 💸",
+    text: "Accede a precios especiales para mayoristas y construye una ganancia atractiva en cada venta. Porque si vas a emprender, también queremos que sea un buen negocio para ti.",
   },
   {
     n: "04",
-    title: "NO EMPIEZAS DESDE CERO \u{1F380}",
-    text: "Four Sensations ya tiene una historia, una comunidad y clientes que conocen y aman nuestros productos. T\u00FA llevas esa experiencia a nuevos clientes desde tu propio negocio.",
+    title: "NO EMPIEZAS DESDE CERO 🎀",
+    text: "Four Sensations ya tiene una historia, una comunidad y clientes que conocen y aman nuestros productos. Tú llevas esa experiencia a nuevos clientes desde tu propio negocio.",
   },
   {
     n: "05",
-    title: "TE DAMOS MATERIAL PARA VENDER M\u00C1S \u{1F4F2}",
+    title: "TE DAMOS MATERIAL PARA VENDER MÁS 📲",
     text: "No tienes que inventarte todo el contenido. Te apoyamos con piezas y material de la marca para que puedas mostrar, recomendar y promocionar tus productos en redes sociales.",
   },
   {
     n: "06",
-    title: "TIENES MUCHO PARA OFRECER \u{1F338}",
+    title: "TIENES MUCHO PARA OFRECER 🌸",
     text: "Nuestro portafolio te permite atender diferentes necesidades: nutrición, reparación, frizz, brillo, protección, cuero cabelludo, crecimiento y mucho más. Más opciones para tus clientes, más oportunidades de venta para ti.",
   },
   {
     n: "07",
-    title: "NO TE DEJAMOS SOLA \u{1F497}",
+    title: "NO TE DEJAMOS SOLA 💗",
     text: "Queremos que conozcas lo que vendes y sepas cómo recomendarlo. Por eso cuentas con capacitación y acompañamiento para conocer mejor el portafolio y asesorar a tus clientes con seguridad.",
   },
   {
     n: "08",
-    title: "VENDES MUCHO M\u00C1S QUE PRODUCTOS \u2728",
+    title: "VENDES MUCHO MÁS QUE PRODUCTOS ✨",
     text: "El cabello también hace parte de cómo nos sentimos y nos vemos. Con Four Sensations puedes acompañar a tus clientes a construir rutinas de cuidado, consentirse y sentirse increíbles con su cabello.",
   },
+] as const;
+
+const STEPS = [
+  { n: "01", title: "Regístrate", desc: "Crea tu cuenta mayorista con correo, ciudad y dirección." },
+  { n: "02", title: "Elige tu mix", desc: "Arma el surtido con precios de volumen en el catálogo de esta página." },
+  { n: "03", title: "Paga y despachamos", desc: "Checkout con Mercado Pago o Addi. Despacho desde Manizales en máximo 2 días hábiles." },
+  { n: "04", title: "Reposiciones", desc: "Quedas en el programa: precios de volumen y acompañamiento por WhatsApp." },
 ] as const;
 
 type WholesaleMe = {
@@ -77,10 +111,10 @@ export function WholesaleLandingClient({
   const router = useRouter();
   const { update } = useSession();
   const { favorites, openProductModal, toggleFavorite, addToCart, showToast, cartCount } = useStorefrontUi();
+  const wa = getWhatsAppDisplayNumber();
   const waHref = getWhatsAppHref(WHATSAPP_WHOLESALE_MESSAGE);
   const priced = useMemo(() => withWholesalePrices(products), [products]);
 
-  const [formOpen, setFormOpen] = useState(false);
   const [me, setMe] = useState<WholesaleMe | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -141,7 +175,7 @@ export function WholesaleLandingClient({
       await update();
       router.push("/cuenta/perfil");
       router.refresh();
-      showToast("Registro mayorista listo. Ya estás dentro.", "success", "\u2705");
+      showToast("Registro mayorista listo. Ya estás dentro.", "success", "✅");
     } finally {
       setLoading(false);
     }
@@ -161,31 +195,58 @@ export function WholesaleLandingClient({
             Desde {formatPrice(WHOLESALE_THRESHOLD_COP)} por pedido entras a tarifa mayorista.
           </p>
           <div className="category-landing-cta-row" style={{ marginTop: 18 }}>
-            {isWholesale ? null : (
-              <button type="button" className="btn btn-primary btn-sm" onClick={() => setFormOpen((v) => !v)}>
+            {isWholesale ? (
+              <a href="#catalogo-mayorista" className="btn btn-primary btn-sm">
+                Ver catálogo mayorista
+              </a>
+            ) : (
+              <a href="#registro-mayorista" className="btn btn-primary btn-sm">
                 Quiero registrarme
-              </button>
+              </a>
             )}
-            <a href="#catalogo-mayorista" className="btn btn-outline btn-sm">
-              Ver catálogo
+            <a href="#razones" className="btn btn-outline btn-sm">
+              8 razones
+            </a>
+            <a href={waHref} className="btn btn-outline btn-sm" target="_blank" rel="noreferrer">
+              WhatsApp
             </a>
           </div>
         </div>
         <ProductCollage sources={collageUrls} />
       </section>
 
-      <section className="wholesale-register-band" id="registro-mayorista">
+      <section className="fs-cat-benefits">
+        <div className="container fs-cat-benefits__grid">
+          {BENEFITS.map((b) => (
+            <article key={b.title} className="fs-cat-benefit">
+              <span aria-hidden>{b.icon}</span>
+              <h3>{b.title}</h3>
+              <p>{b.desc}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="wholesale-register-band section-pad" id="registro-mayorista">
         <div className="container">
           {isWholesale ? (
             <div className="wholesale-spend-card reveal">
               <p className="wholesale-spend-kicker">Tu acumulado mayorista</p>
               <strong className="wholesale-spend-value">{formatPrice(me?.accumulatedSpend ?? 0)}</strong>
               <p>
-                Suma de tus pedidos pagados en el ciclo vigente. El mínimo de este pedido es{" "}
-                {formatPrice(me?.minimumOrder ?? WHOLESALE_THRESHOLD_COP)}.
+                Hola{me?.name ? `, ${me.name}` : ""} — suma de tus pedidos pagados en el ciclo vigente. El mínimo de
+                este pedido es {formatPrice(me?.minimumOrder ?? WHOLESALE_THRESHOLD_COP)}.
               </p>
+              <div className="wholesale-hero-actions" style={{ marginTop: 18, marginBottom: 0 }}>
+                <a href="#catalogo-mayorista" className="btn btn-primary">
+                  Seguir comprando
+                </a>
+                <Link href="/cuenta/perfil" className="btn btn-outline">
+                  Ir a mi perfil
+                </Link>
+              </div>
             </div>
-          ) : formOpen ? (
+          ) : (
             <form
               className="wholesale-register-card reveal"
               onSubmit={(e) => {
@@ -195,36 +256,88 @@ export function WholesaleLandingClient({
             >
               <div>
                 <h2>Regístrate como mayorista</h2>
-                <p>Al crear tu cuenta inicias sesión de inmediato y abres tu perfil Four Sensations.</p>
+                <p>
+                  Al crear tu cuenta inicias sesión de inmediato, abres tu perfil Four Sensations y ves precios de
+                  volumen en el catálogo.
+                </p>
               </div>
               {error ? <p className="wholesale-register-error">{error}</p> : null}
               <div className="wholesale-register-grid">
                 <label>
                   Nombre
-                  <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+                  <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required />
                 </label>
                 <label>
                   Correo
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                    required
+                  />
                 </label>
                 <label>
                   Contraseña
-                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="new-password"
+                    required
+                    minLength={8}
+                  />
                 </label>
                 <label>
                   Ciudad
-                  <input value={city} onChange={(e) => setCity(e.target.value)} autoComplete="address-level2" />
+                  <input
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    autoComplete="address-level2"
+                    required
+                  />
                 </label>
                 <label className="wholesale-register-grid__full">
                   Dirección
-                  <input value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="street-address" />
+                  <input
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    autoComplete="street-address"
+                    required
+                  />
                 </label>
               </div>
               <button type="submit" className="btn btn-primary" disabled={loading}>
                 {loading ? "Creando tu cuenta…" : "Crear cuenta mayorista"}
               </button>
             </form>
-          ) : null}
+          )}
+        </div>
+      </section>
+
+      <section className="wholesale-section wholesale-threshold section-pad" id="como-funciona">
+        <div className="container">
+          <div className="wholesale-threshold-card reveal">
+            <div className="wholesale-threshold-copy">
+              <span className="wholesale-eyebrow wholesale-eyebrow--dark">Tu acceso</span>
+              <h2>Así funciona el programa</h2>
+              <p>
+                Atención de lunes a sábado, 9:00 a. m. a 6:00 p. m. WhatsApp {wa} · atencionalcliente.befs@gmail.com.
+                Políticas de envío y posventa iguales a las de la tienda.
+              </p>
+            </div>
+            <div className="wholesale-steps">
+              {STEPS.map((s) => (
+                <div key={s.n} className="wholesale-step">
+                  <span className="wholesale-step-n">{s.n}</span>
+                  <div>
+                    <strong>{s.title}</strong>
+                    <p>{s.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -255,8 +368,12 @@ export function WholesaleLandingClient({
           <div className="wholesale-catalog-head">
             <h2>Catálogo mayorista</h2>
             <p>
-              Todos los productos con precio de volumen. El valor grande es mayorista; el tachado es el precio al público.
+              Todos los productos con precio de volumen. El valor grande es mayorista; el tachado es el precio al
+              público.
               {cartCount > 0 ? ` Llevas ${cartCount} ítem(s) en el carrito.` : ""}
+              {!isWholesale
+                ? " Regístrate arriba para activar tu cuenta mayorista y comprar con tarifa de volumen."
+                : ""}
             </p>
           </div>
           <div className="cat-mosaic">
@@ -285,9 +402,9 @@ export function WholesaleLandingClient({
               <p>Arma el pedido con tarifas de volumen. El carrito te muestra el acumulado de este pedido.</p>
             </div>
             <div className="wholesale-hero-actions">
-              <Link href="#catalogo-mayorista" className="btn btn-primary btn-lg">
+              <a href="#catalogo-mayorista" className="btn btn-primary btn-lg">
                 Seguir eligiendo
-              </Link>
+              </a>
               <a href={waHref} className="btn btn-outline btn-lg" target="_blank" rel="noreferrer">
                 WhatsApp mayorista
               </a>
