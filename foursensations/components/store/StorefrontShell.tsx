@@ -1115,7 +1115,7 @@ export function StorefrontShell({
                     {showVisual ? (
                       <div className="mega-dock__visual" aria-hidden={false}>
                         {visualSlots.slice(0, 2).map((slot, idx) => {
-                          const href = slot.href || `/categoria/${categoryPath(desktopMegaCat)}`;
+                          const href = slot.href || resolveStoreCategoryHref(desktopMegaCat);
                           return (
                             <StoreNavLink
                               key={`${slot.imageUrl}-${idx}`}
