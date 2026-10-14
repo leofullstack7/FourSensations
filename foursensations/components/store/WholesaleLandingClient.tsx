@@ -1,9 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import howItWorksPhoto from "@/assets/foursensations/sobre-nosotros-lab.jpg";
+import reasonsPhoto from "@/assets/foursensations/banners/pc4.jpeg";
 import { ProductCollage } from "@/components/store/ProductCollage";
 import { StoreFooter } from "@/components/store/StoreFooter";
 import { StoreProductCard } from "@/components/store/store-product-card";
@@ -109,7 +112,7 @@ export function WholesaleLandingClient({
 }) {
   useReveal();
   const router = useRouter();
-  const { update } = useSession();
+  const { data: session, update, status: sessionStatus } = useSession();
   const { favorites, openProductModal, toggleFavorite, addToCart, showToast, cartCount } = useStorefrontUi();
   const wa = getWhatsAppDisplayNumber();
   const waHref = getWhatsAppHref(WHATSAPP_WHOLESALE_MESSAGE);
@@ -124,12 +127,15 @@ export function WholesaleLandingClient({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const isWholesale = Boolean(me?.isWholesale);
+  const isWholesale = Boolean(me?.isWholesale) || Boolean(session?.user?.isWholesale);
 
   useEffect(() => {
     void (async () => {
       try {
-        const res = await fetch("/api/wholesale/me", { cache: "no-store" });
+        const res = await fetch("/api/wholesale/me", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
         if (!res.ok) return;
         const data = (await res.json()) as WholesaleMe;
         setMe(data);
@@ -137,7 +143,7 @@ export function WholesaleLandingClient({
         /* ignore */
       }
     })();
-  }, []);
+  }, [sessionStatus, session?.user?.id]);
 
   const submitRegister = async () => {
     setError(null);
@@ -317,14 +323,23 @@ export function WholesaleLandingClient({
 
       <section className="wholesale-section wholesale-threshold section-pad" id="como-funciona">
         <div className="container">
-          <div className="wholesale-threshold-card reveal">
-            <div className="wholesale-threshold-copy">
+          <div className="wholesale-threshold-card wholesale-how-card reveal">
+            <div className="wholesale-threshold-copy wholesale-how-copy">
               <span className="wholesale-eyebrow wholesale-eyebrow--dark">Tu acceso</span>
               <h2>Así funciona el programa</h2>
               <p>
                 Atención de lunes a sábado, 9:00 a. m. a 6:00 p. m. WhatsApp {wa} · atencionalcliente.befs@gmail.com.
                 Políticas de envío y posventa iguales a las de la tienda.
               </p>
+              <div className="wholesale-how-media">
+                <Image
+                  src={howItWorksPhoto}
+                  alt="Laboratorio y producción Four Sensations"
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 42vw"
+                  className="wholesale-how-media__img"
+                />
+              </div>
             </div>
             <div className="wholesale-steps">
               {STEPS.map((s) => (
@@ -344,11 +359,20 @@ export function WholesaleLandingClient({
       <section className="wholesale-section wholesale-threshold section-pad" id="razones">
         <div className="container">
           <div className="wholesale-threshold-card wholesale-reasons-card reveal">
-            <div className="wholesale-threshold-copy">
+            <div className="wholesale-threshold-copy wholesale-reasons-copy">
               <h2>8 RAZONES PARA LLEVAR FOUR SENSATIONS A TU NEGOCIO 💗</h2>
               <p>Porque vender una marca que te encanta también puede convertirse en una gran oportunidad.</p>
+              <div className="wholesale-reasons-sticky">
+                <Image
+                  src={reasonsPhoto}
+                  alt="Productos Four Sensations para tu negocio"
+                  fill
+                  sizes="(max-width: 1024px) 50vw, 22vw"
+                  className="wholesale-reasons-sticky__img"
+                />
+              </div>
             </div>
-            <div className="wholesale-steps">
+            <div className="wholesale-steps wholesale-reasons-steps">
               {REASONS.map((s) => (
                 <article key={s.n} className="wholesale-step">
                   <span className="wholesale-step-n">{s.n}</span>
@@ -363,48 +387,57 @@ export function WholesaleLandingClient({
         </div>
       </section>
 
-      <section className="wholesale-section section-pad" id="catalogo-mayorista">
-        <div className="container">
-          <div className="wholesale-catalog-head">
-            <h2>Catálogo mayorista</h2>
-            <p>
-              Todos los productos con precio de volumen. El valor grande es mayorista; el tachado es el precio al
-              público.
-              {cartCount > 0 ? ` Llevas ${cartCount} ítem(s) en el carrito.` : ""}
-              {!isWholesale
-                ? " Regístrate arriba para activar tu cuenta mayorista y comprar con tarifa de volumen."
-                : ""}
-            </p>
+      {isWholesale ? (
+        <section className="wholesale-section section-pad" id="catalogo-mayorista">
+          <div className="container">
+            <div className="wholesale-catalog-head">
+              <h2>Catálogo mayorista</h2>
+              <p>
+                Todos los productos con precio de volumen. El valor grande es mayorista; el tachado es el precio al
+                público.
+                {cartCount > 0 ? ` Llevas ${cartCount} ítem(s) en el carrito.` : ""}
+              </p>
+            </div>
+            <div className="cat-mosaic">
+              {priced.map((p, i) => (
+                <div key={p.id} className="cat-mosaic__cell">
+                  <StoreProductCard
+                    product={p}
+                    isFav={favorites.includes(p.id)}
+                    onOpen={openProductModal}
+                    onToggleFav={toggleFavorite}
+                    onAddCart={addToCart}
+                    imagePriority={i < 4}
+                    compact
+                  />
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="cat-mosaic">
-            {priced.map((p, i) => (
-              <div key={p.id} className="cat-mosaic__cell">
-                <StoreProductCard
-                  product={p}
-                  isFav={favorites.includes(p.id)}
-                  onOpen={openProductModal}
-                  onToggleFav={toggleFavorite}
-                  onAddCart={addToCart}
-                  imagePriority={i < 4}
-                  compact
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       <section className="wholesale-section wholesale-cta-band section-pad">
         <div className="container">
           <div className="wholesale-cta-card reveal">
             <div>
               <h2>¿Lista para surtir tu negocio?</h2>
-              <p>Arma el pedido con tarifas de volumen. El carrito te muestra el acumulado de este pedido.</p>
+              <p>
+                {isWholesale
+                  ? "Arma el pedido con tarifas de volumen. El carrito te muestra el acumulado de este pedido."
+                  : "Regístrate como mayorista para ver el catálogo con precios de volumen y armar tu pedido."}
+              </p>
             </div>
             <div className="wholesale-hero-actions">
-              <a href="#catalogo-mayorista" className="btn btn-primary btn-lg">
-                Seguir eligiendo
-              </a>
+              {isWholesale ? (
+                <a href="#catalogo-mayorista" className="btn btn-primary btn-lg">
+                  Seguir eligiendo
+                </a>
+              ) : (
+                <a href="#registro-mayorista" className="btn btn-primary btn-lg">
+                  Quiero registrarme
+                </a>
+              )}
               <a href={waHref} className="btn btn-outline btn-lg" target="_blank" rel="noreferrer">
                 WhatsApp mayorista
               </a>

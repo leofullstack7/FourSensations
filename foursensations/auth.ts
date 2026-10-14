@@ -19,7 +19,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   /** Sin esto estable, el JWT puede invalidarse al reiniciar el servidor (sesión «desaparece» tras Google). */
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
-  session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 7 },
+  session: {
+    strategy: "jwt",
+    /** 30 días: evita que en móvil (Safari/Chrome) la sesión caduque al salir y volver a la app. */
+    maxAge: 60 * 60 * 24 * 30,
+    /** Renueva el JWT si queda menos de este margen (evita cookie «muerta» en segundo plano). */
+    updateAge: 60 * 60 * 24,
+  },
+  jwt: {
+    maxAge: 60 * 60 * 24 * 30,
+  },
+  cookies: {
+    sessionToken: {
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 60 * 60 * 24 * 30,
+      },
+    },
+  },
   pages: {
     signIn: "/",
   },

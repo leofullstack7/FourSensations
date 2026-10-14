@@ -257,11 +257,11 @@
 .wholesale-threshold-card {
   display: grid;
   grid-template-columns: 1fr 1.1fr;
-  gap: 40px;
-  align-items: start;
+  gap: 28px;
+  align-items: stretch;
   background: #fff;
   border-radius: var(--radius-xl);
-  padding: clamp(28px, 5vw, 48px);
+  padding: clamp(22px, 4vw, 36px);
   box-shadow: var(--shadow-lg);
   border: 1px solid rgba(196, 84, 122, 0.1);
 }
@@ -270,7 +270,7 @@
   font-family: var(--font-display);
   font-size: clamp(1.6rem, 3.5vw, 2.2rem);
   line-height: 1.2;
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   color: var(--dark);
 }
 
@@ -282,21 +282,76 @@
 .wholesale-threshold-copy p {
   margin: 0;
   color: var(--text-muted);
-  line-height: 1.7;
+  line-height: 1.65;
   font-size: 0.98rem;
+}
+
+.wholesale-how-copy {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.wholesale-how-media {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  margin-top: 18px;
+  min-height: 220px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--ivory);
+}
+
+.wholesale-how-media__img {
+  object-fit: cover;
+  object-position: center;
+}
+
+.wholesale-reasons-card {
+  align-items: stretch;
+}
+
+.wholesale-reasons-copy {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.wholesale-reasons-sticky {
+  position: sticky;
+  top: calc(var(--fs-nav-h, 118px) + 16px);
+  width: 50%;
+  margin-top: 20px;
+  aspect-ratio: 3 / 4.2;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--ivory);
+  align-self: flex-start;
+  /* El sticky viaja mientras la columna izquierda (estirada al alto de las 8 razones) sigue en viewport. */
+  z-index: 1;
+}
+
+.wholesale-reasons-sticky__img {
+  object-fit: cover;
+  object-position: center;
+}
+
+.wholesale-reasons-steps {
+  gap: 10px;
 }
 
 .wholesale-steps {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .wholesale-step {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   align-items: flex-start;
-  padding: 16px 18px;
+  padding: 12px 14px;
   border-radius: var(--radius-lg);
   background: var(--ivory);
   border: 1px solid var(--cream);
@@ -362,6 +417,22 @@
 
   .wholesale-threshold-card {
     grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .wholesale-how-media {
+    min-height: 240px;
+    aspect-ratio: 16 / 10;
+    flex: none;
+  }
+
+  .wholesale-reasons-sticky {
+    position: relative;
+    top: auto;
+    width: 50%;
+    max-width: 220px;
+    margin-top: 16px;
+    margin-bottom: 8px;
   }
 }
 
