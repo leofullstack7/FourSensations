@@ -68,9 +68,9 @@ const bySlug: Record<string, Partial<CategoryLandingCopy>> = {
   },
   mayorista: {
     eyebrow: "Programa mayorista · FOUR SENSATIONS S.A.S.",
-    headline: "Lleva Four Sensations a tu negocio",
+    headline: "TU VITRINA ESTÁ PIDIENDO FOUR SENSATIONS 👀💗",
     subtitle:
-      "Precios de volumen, acompañamiento 1:1 y despacho nacional desde Manizales. Pensado para salones, tiendas y emprendedoras que quieren stock con calidad y trazabilidad.",
+      "Una marca que tus clientes van a querer descubrir, probar y volver a comprar. Productos con identidad, fórmulas increíbles y una comunidad que ya ama Four Sensations.",
     ctaExplore: "Escribir por WhatsApp",
     commercialLine: "Pedidos desde $700.000 acceden a tarifa mayorista y a un agente del equipo.",
     benefits: [],

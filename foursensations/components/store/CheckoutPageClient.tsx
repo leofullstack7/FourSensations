@@ -29,6 +29,8 @@ import { isDisplayableImageUrl } from "@/lib/util/image-url";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { TechAmbient } from "@/components/ui/TechAmbient";
 import { createCheckoutOrderSchema } from "@/lib/validation/checkout-order";
+import addiLogo from "@/assets/foursensations/payments/addi.png";
+import mercadoPagoLogo from "@/assets/foursensations/payments/mercado-pago.png";
 
 function cartLineImageSrc(item: CartLine): string | null {
   const candidates = [item.img, item.imgHover, ...(item.gallery ?? [])];
@@ -1087,7 +1089,9 @@ export function CheckoutPageClient() {
                 whileTap={reduceMotion ? undefined : { scale: 0.99 }}
               >
                 <span className="gb-co-method-badge">Recomendado</span>
-                <span className="gb-co-method-icon">💳</span>
+                <span className="gb-co-method-logo">
+                  <Image src={mercadoPagoLogo} alt="" height={36} unoptimized />
+                </span>
                 <span className="gb-co-method-name">Mercado Pago</span>
                 <span className="gb-co-method-desc">Te redirige a Mercado Pago (tarjeta, PSE…)</span>
               </motion.button>
@@ -1100,7 +1104,9 @@ export function CheckoutPageClient() {
                 whileHover={reduceMotion ? undefined : { y: -3 }}
                 whileTap={reduceMotion ? undefined : { scale: 0.99 }}
               >
-                <span className="gb-co-method-icon">🛍️</span>
+                <span className="gb-co-method-logo">
+                  <Image src={addiLogo} alt="" height={32} unoptimized />
+                </span>
                 <span className="gb-co-method-name">Addi</span>
                 <span className="gb-co-method-desc">Paga a cuotas · Buy now, pay later</span>
               </motion.button>

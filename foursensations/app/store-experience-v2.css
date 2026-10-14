@@ -512,6 +512,19 @@ footer::before {
 .footer-links a:hover::after {
   transform: scaleX(1);
 }
+@media (max-width: 900px) {
+  .footer-links a:hover {
+    transform: none;
+  }
+  .footer-links a::after {
+    left: 50%;
+    transform: translateX(-50%) scaleX(0);
+    transform-origin: center;
+  }
+  .footer-links a:hover::after {
+    transform: translateX(-50%) scaleX(1);
+  }
+}
 
 .gb-co-brand-wrap {
   display: flex;

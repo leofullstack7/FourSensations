@@ -2478,9 +2478,20 @@ footer {
 }
 .footer-grid {
   display: grid;
-  grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  grid-template-columns: 1.35fr 1.65fr;
   gap: 40px;
   margin-bottom: 48px;
+  align-items: start;
+}
+.footer-cols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+}
+.footer-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 .footer-brand .logo-brand { color: white; }
 .footer-brand .logo-tagline { color: rgba(255,255,255,0.4); }
@@ -2532,7 +2543,31 @@ footer {
   font-size: 12px;
   color: rgba(255,255,255,0.35);
 }
-.footer-payments { display: flex; gap: 8px; align-items: center; }
+.footer-payments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.payment-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.payment-logo img {
+  width: auto !important;
+  height: 22px !important;
+  object-fit: contain;
+}
+.payment-logo--mp img { height: 26px !important; }
+.payment-logo--addi img { height: 24px !important; }
+.payment-logo--siste img { height: 18px !important; }
 .payment-chip {
   padding: 4px 10px;
   border: 1px solid rgba(255,255,255,0.12);
@@ -3318,6 +3353,43 @@ footer {
     font-size: 12px;
   }
   .hero-banner-inner { min-height: 480px; }
-  .footer-grid { grid-template-columns: 1fr; }
+  .footer-grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    text-align: center;
+  }
+  .footer-brand {
+    align-items: center;
+    text-align: center;
+  }
+  .footer-desc {
+    margin-left: auto;
+    margin-right: auto;
+    max-width: 34ch;
+  }
+  .footer-cols {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+  }
+  .footer-col h4 {
+    margin-bottom: 12px;
+    font-size: 11px;
+  }
+  .footer-links {
+    align-items: center;
+    gap: 8px;
+  }
+  .footer-links a {
+    font-size: 12px;
+  }
+  .footer-bottom {
+    flex-direction: column;
+    gap: 14px;
+    text-align: center;
+  }
+  .footer-payments {
+    justify-content: center;
+  }
   .cart-sidebar { width: 100%; right: -100%; }
 }
