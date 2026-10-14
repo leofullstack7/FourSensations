@@ -3144,6 +3144,13 @@ footer {
   .mobile-mega-group + .mobile-mega-group {
     border-top: 1px solid rgba(200, 168, 162, 0.2);
   }
+  .mobile-mega-group--flat {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 4px 2px;
+  }
   .mobile-mega-cat {
     width: 100%;
     padding: 12px 8px;
@@ -3154,53 +3161,30 @@ footer {
     font-weight: 600;
     color: var(--dark);
   }
-  .mobile-mega-cat-arrow {
-    transition: transform 0.25s ease;
-  }
-  .mobile-mega-cat.open .mobile-mega-cat-arrow {
-    transform: rotate(180deg);
-  }
-  .mobile-mega-subwrap {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease;
-  }
-  .mobile-mega-subwrap.open {
-    max-height: 70vh;
-    padding-bottom: 8px;
-  }
-  .mobile-mega-columns {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 4px 4px 8px;
-  }
-  .mobile-mega-column-link {
-    display: block;
-    width: 100%;
+  .mobile-mega-cat--nav {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-start;
     text-align: left;
-    font: inherit;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--dark);
-    background: var(--ivory);
-    border: 1px solid rgba(200, 168, 162, 0.28);
-    border-radius: 12px;
-    padding: 12px 14px;
+    background: none;
+    border: none;
     cursor: pointer;
-    transition: background 0.18s ease, border-color 0.18s ease;
   }
-  .mobile-mega-column-link:active {
-    background: rgba(246, 183, 215, 0.28);
-    border-color: rgba(196, 84, 122, 0.3);
-  }
-  .mobile-mega-see-all {
-    margin: 4px 6px 10px;
-    font-size: 12px;
+  .mobile-mega-ver-todo {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    font-size: 11px;
     font-weight: 600;
-    color: var(--dusty-rose);
-    border-bottom: 1px dashed rgba(200, 145, 139, 0.5);
-    padding-bottom: 2px;
+    letter-spacing: 0.02em;
+    color: #fff;
+    background: var(--dark);
+    border: none;
+    border-radius: 999px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .mobile-mega-ver-todo:active {
+    opacity: 0.88;
   }
   .products-grid { grid-template-columns: repeat(2, 1fr); }
   .testimonials-grid--desktop { display: none; }

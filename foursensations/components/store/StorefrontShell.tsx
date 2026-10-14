@@ -181,7 +181,6 @@ export function StorefrontShell({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [mobileExpandedCat, setMobileExpandedCat] = useState<string | null>(null);
   const [desktopMegaCat, setDesktopMegaCat] = useState<string | null>(null);
   const [megaAlignLeft, setMegaAlignLeft] = useState<number | null>(null);
   const megaCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -282,7 +281,6 @@ export function StorefrontShell({
     const onResize = () => {
       if (window.innerWidth > 900) {
         setMobileMenuOpen(false);
-        setMobileExpandedCat(null);
       } else {
         setDesktopMegaCat(null);
       }
@@ -584,7 +582,6 @@ export function StorefrontShell({
 
   const closeMobileMenu = useCallback(() => {
     setMobileMenuOpen(false);
-    setMobileExpandedCat(null);
   }, []);
 
   useEffect(() => {
@@ -917,51 +914,32 @@ export function StorefrontShell({
 
           <div className={`mobile-mega-menu${mobileMenuOpen ? " open" : ""}`}>
             <div className="mobile-mega-menu-inner">
-              {Object.entries(menuConfig).map(([cat, data]) => {
-                const isOpen = mobileExpandedCat === cat;
-                const groups = Object.keys(data.subs);
-                return (
-                  <div key={cat} className="mobile-mega-group">
-                    <button
-                      type="button"
-                      className={`mobile-mega-cat${isOpen ? " open" : ""}`}
-                      onClick={() => setMobileExpandedCat((prev) => (prev === cat ? null : cat))}
-                    >
-                      <span>
-                        {data.icon} {cat}
-                      </span>
-                      <span className="mobile-mega-cat-arrow">▾</span>
-                    </button>
-                    <div className={`mobile-mega-subwrap${isOpen ? " open" : ""}`}>
-                      <div className="mobile-mega-columns">
-                        {groups.map((group) => (
-                          <button
-                            key={group}
-                            type="button"
-                            className="mobile-mega-column-link"
-                            onClick={() => {
-                              navigateTo(resolveStoreMenuGroupHref(categoryPath(cat), group));
-                              closeMobileMenu();
-                            }}
-                          >
-                            {group}
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        type="button"
-                        className="mobile-mega-see-all"
-                        onClick={() => {
-                          navigateTo(resolveStoreCategoryHref(cat));
-                          closeMobileMenu();
-                        }}
-                      >
-                        Ver todo {cat}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+              {Object.entries(menuConfig).map(([cat, data]) => (
+                <div key={cat} className="mobile-mega-group mobile-mega-group--flat">
+                  <button
+                    type="button"
+                    className="mobile-mega-cat mobile-mega-cat--nav"
+                    onClick={() => {
+                      navigateTo(resolveStoreCategoryHref(cat));
+                      closeMobileMenu();
+                    }}
+                  >
+                    <span>
+                      {data.icon} {cat}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="mobile-mega-ver-todo"
+                    onClick={() => {
+                      navigateTo(resolveStoreCategoryHref(cat));
+                      closeMobileMenu();
+                    }}
+                  >
+                    Ver todo
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         </div>
