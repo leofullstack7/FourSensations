@@ -359,16 +359,18 @@ export function BeautyAiAdvisor() {
           <ul className="gb-ai-features emma-hearts">
             {EMMA_LEFT_COPY.hearts.map((label) => (
               <li key={label} className="emma-heart-badge">
+                <span className="emma-heart-badge__sparkle emma-heart-badge__sparkle--1" aria-hidden>
+                  ✦
+                </span>
+                <span className="emma-heart-badge__sparkle emma-heart-badge__sparkle--2" aria-hidden>
+                  ✧
+                </span>
+                <span className="emma-heart-badge__sparkle emma-heart-badge__sparkle--3" aria-hidden>
+                  ✦
+                </span>
                 <svg className="emma-heart-badge__shape" viewBox="0 0 120 110" aria-hidden>
-                  <defs>
-                    <linearGradient id={`emma-heart-grad-${label}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#b57ad4" />
-                      <stop offset="55%" stopColor="#8a4aaa" />
-                      <stop offset="100%" stopColor="#6e3a8f" />
-                    </linearGradient>
-                  </defs>
                   <path
-                    fill={`url(#emma-heart-grad-${label})`}
+                    className="emma-heart-badge__path"
                     d="M60 102 C22 74 6 50 16 30 C24 14 44 12 60 30 C76 12 96 14 104 30 C114 50 98 74 60 102 Z"
                   />
                 </svg>

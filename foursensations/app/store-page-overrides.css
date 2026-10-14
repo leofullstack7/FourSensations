@@ -2669,14 +2669,16 @@
 .emma-hearts {
   list-style: none;
   padding: 0;
+  justify-content: center;
 }
 .emma-hearts li.emma-heart-badge {
   display: grid;
   place-items: center;
   gap: 0;
-  background: transparent;
-  border: none;
+  background: transparent !important;
+  border: none !important;
   padding: 0;
+  box-shadow: none;
 }
 .emma-options {
   flex-wrap: wrap;
