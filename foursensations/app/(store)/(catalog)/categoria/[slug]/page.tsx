@@ -57,7 +57,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
   let cat = await getStorefrontCategoryBySlug(slug);
 
-  if (!cat && !process.env.DATABASE_URL) {
+  // Fallback estático (p. ej. Cuidado Corporal aún sin filas en DB).
+  if (!cat) {
     cat = categoryFromStaticMenu(slug);
   }
   if (!cat) return notFound();

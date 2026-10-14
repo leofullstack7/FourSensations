@@ -38,10 +38,11 @@ export const defaultMenuConfig: MenuConfig = {
     icon: "💇",
     subs: hairMenuSubs(),
   },
-  "Cuidado corporal": {
+  "Cuidado Corporal": {
     icon: "🧴",
+    /** Sin productos por ahora: la página y el menú ya existen; el catálogo se llenará después. */
     subs: {
-      Corporal: ["Explosión de Chocolate", "Exfoliante Corporal"],
+      Corporal: [],
     },
   },
   Accesorios: {
@@ -81,23 +82,49 @@ const STOREFRONT_NAV_NAMES = new Set(
   Object.keys(defaultMenuConfig).map((name) => normalizeCategoryLabel(name)),
 );
 
-/** Filtra el menú de tienda a las categorías de lanzamiento. */
+/** Filtra el menú de tienda a las categorías de lanzamiento (orden canónico). */
 export function filterStorefrontLaunchMenu<T extends { config: MenuConfig; slugByCategoryName: Record<string, string> }>(
   payload: T,
 ): T {
+  const byNorm = new Map<string, { name: string; cfg: MenuConfig[string]; slug?: string }>();
+  for (const [name, cfg] of Object.entries(payload.config)) {
+    const norm = normalizeCategoryLabel(name);
+    if (!STOREFRONT_NAV_NAMES.has(norm)) continue;
+    byNorm.set(norm, {
+      name,
+      cfg,
+      slug: payload.slugByCategoryName[name],
+    });
+  }
+
+  // Asegura que existan todas las categorías de lanzamiento (p. ej. Cuidado Corporal aunque falte en DB).
+  for (const [name, cfg] of Object.entries(defaultMenuConfig)) {
+    const norm = normalizeCategoryLabel(name);
+    if (byNorm.has(norm)) continue;
+    byNorm.set(norm, { name, cfg, slug: toCategorySlug(name) });
+  }
+
   const config: MenuConfig = {};
   const slugByCategoryName: Record<string, string> = {};
-  for (const [name, cfg] of Object.entries(payload.config)) {
-    if (!STOREFRONT_NAV_NAMES.has(normalizeCategoryLabel(name))) continue;
-    config[name] = cfg;
-    if (payload.slugByCategoryName[name]) slugByCategoryName[name] = payload.slugByCategoryName[name];
+  for (const [canonicalName, defaultCfg] of Object.entries(defaultMenuConfig)) {
+    const norm = normalizeCategoryLabel(canonicalName);
+    const hit = byNorm.get(norm);
+    if (!hit) continue;
+    const isCorporal = norm === normalizeCategoryLabel("Cuidado Corporal");
+    const isHair = norm === normalizeCategoryLabel("Cuidado capilar");
+    config[canonicalName] = {
+      icon: hit.cfg.icon || defaultCfg.icon,
+      subs: isCorporal
+        ? defaultCfg.subs
+        : isHair
+          ? remapHairMenuSubs(hit.cfg.subs)
+          : hit.cfg.subs,
+    };
+    slugByCategoryName[canonicalName] =
+      hit.slug || payload.slugByCategoryName[hit.name] || toCategorySlug(canonicalName);
   }
+
   if (Object.keys(config).length === 0) return payload;
-  for (const name of Object.keys(config)) {
-    if (normalizeCategoryLabel(name) !== normalizeCategoryLabel("Cuidado capilar")) continue;
-    const current = config[name]!;
-    config[name] = { ...current, subs: remapHairMenuSubs(current.subs) };
-  }
   return { ...payload, config, slugByCategoryName };
 }
 

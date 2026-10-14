@@ -25,7 +25,9 @@ function normalizeLabel(value: string): string {
 function footerProductNames(menuNames: string[]): string[] {
   const corporal = menuNames.filter((name) => normalizeLabel(name) === "cuidado corporal");
   const rest = menuNames.filter((name) => normalizeLabel(name) !== "cuidado corporal");
-  return [...rest, ...(corporal.length > 0 ? corporal : ["Cuidado Corporal"])];
+  return [...rest, ...(corporal.length > 0 ? corporal : ["Cuidado Corporal"])].map((name) =>
+    normalizeLabel(name) === "cuidado corporal" ? "Cuidado Corporal" : name,
+  );
 }
 
 export function StoreFooter() {

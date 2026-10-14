@@ -266,7 +266,7 @@ export function StoreHomeClient({
                   <em>corporal</em>
                 </div>
               </div>
-              <Link href={`/categoria/${categoryPath("Cuidado corporal")}`} className="btn btn-primary btn-sm" prefetch>
+              <Link href={`/categoria/${categoryPath("Cuidado Corporal")}`} className="btn btn-primary btn-sm" prefetch>
                 Explorar →
               </Link>
               <div className="promo-deco">✨</div>

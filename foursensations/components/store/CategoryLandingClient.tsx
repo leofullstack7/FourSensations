@@ -557,8 +557,14 @@ export function CategoryLandingClient({
             <div className="admin-card" style={{ padding: 22, textAlign: "center", color: "var(--text-muted)" }}>
               {catalogLoading || (hasActiveFilters && hasMore) ? (
                 <>Buscando productos con estos filtros…</>
-              ) : (
+              ) : hasActiveFilters ? (
                 <>No hay productos para estos filtros.</>
+              ) : (
+                <>
+                  {categorySlug === "cuidado-corporal"
+                    ? "Pronto verás aquí el catálogo de Cuidado Corporal. Mientras tanto, explora Cuidado Capilar y Accesorios."
+                    : "Aún no hay productos publicados en esta categoría."}
+                </>
               )}
             </div>
           ) : (
