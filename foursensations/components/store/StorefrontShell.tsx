@@ -237,6 +237,7 @@ export function StorefrontShell({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileExpandedCat, setMobileExpandedCat] = useState<string | null>(null);
   const [desktopMegaCat, setDesktopMegaCat] = useState<string | null>(null);
+  const [megaAlignLeft, setMegaAlignLeft] = useState<number | null>(null);
   const megaCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
@@ -692,18 +693,39 @@ export function StorefrontShell({
     document.body.style.overflow = "hidden";
   }, []);
 
-  const openDesktopMega = useCallback((cat: string) => {
-    if (megaCloseTimer.current) {
-      clearTimeout(megaCloseTimer.current);
-      megaCloseTimer.current = null;
+  const alignCompactMega = useCallback((cat: string) => {
+    const compact = cat.toLowerCase().includes("accesorio");
+    if (!compact) {
+      setMegaAlignLeft(null);
+      return;
     }
-    setDesktopMegaCat(cat);
+    const el = document.querySelector<HTMLElement>(`[data-mega-cat="${CSS.escape(cat)}"]`);
+    if (!el) {
+      setMegaAlignLeft(null);
+      return;
+    }
+    const left = Math.max(16, Math.round(el.getBoundingClientRect().left));
+    const maxLeft = Math.max(16, window.innerWidth - 520 - 16);
+    setMegaAlignLeft(Math.min(left, maxLeft));
   }, []);
+
+  const openDesktopMega = useCallback(
+    (cat: string) => {
+      if (megaCloseTimer.current) {
+        clearTimeout(megaCloseTimer.current);
+        megaCloseTimer.current = null;
+      }
+      setDesktopMegaCat(cat);
+      requestAnimationFrame(() => alignCompactMega(cat));
+    },
+    [alignCompactMega],
+  );
 
   const scheduleCloseDesktopMega = useCallback(() => {
     if (megaCloseTimer.current) clearTimeout(megaCloseTimer.current);
     megaCloseTimer.current = setTimeout(() => {
       setDesktopMegaCat(null);
+      setMegaAlignLeft(null);
       megaCloseTimer.current = null;
     }, 180);
   }, []);
@@ -713,6 +735,13 @@ export function StorefrontShell({
       if (megaCloseTimer.current) clearTimeout(megaCloseTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!desktopMegaCat) return;
+    const onResize = () => alignCompactMega(desktopMegaCat);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [alignCompactMega, desktopMegaCat]);
 
   const desktopMega = desktopMegaCat ? menuConfig[desktopMegaCat] : null;
 
@@ -817,6 +846,7 @@ export function StorefrontShell({
               {Object.entries(menuConfig).map(([cat, data]) => (
                 <li
                   key={cat}
+                  data-mega-cat={cat}
                   className={`nav-item${desktopMegaCat === cat ? " is-mega-open" : ""}`}
                   onMouseEnter={() => openDesktopMega(cat)}
                 >
@@ -1039,6 +1069,11 @@ export function StorefrontShell({
               className={`mega-dock__inner${
                 desktopMegaCat.toLowerCase().includes("accesorio") ? " mega-dock__inner--accesorios" : ""
               }`}
+              style={
+                megaAlignLeft != null
+                  ? ({ marginLeft: megaAlignLeft, marginRight: "auto" } as CSSProperties)
+                  : undefined
+              }
             >
               <div className="mega-dock__head">
                 <div>

@@ -628,8 +628,8 @@ input, select, textarea { font-family: inherit; }
 .mega-dock__inner--accesorios {
   width: min(520px, calc(100vw - 48px));
   max-width: min(520px, calc(100vw - 48px));
-  margin-left: auto;
-  margin-right: 40px;
+  margin-left: 0;
+  margin-right: auto;
 }
 .mega-dock__head {
   display: flex;
