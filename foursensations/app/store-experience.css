@@ -236,12 +236,12 @@
 .emma-wordmark {
   display: inline-block;
   vertical-align: middle;
-  height: 1.05em;
+  height: clamp(52px, 1.65em, 92px);
   width: auto;
-  margin: 0 0.06em;
+  margin: 0 0.08em -0.08em;
 }
 .emma-wordmark--console {
-  height: 1.35em;
+  height: 34px;
   display: block;
 }
 .emma-console-name {

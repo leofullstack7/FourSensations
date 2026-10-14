@@ -278,7 +278,7 @@ export function BeautyAiAdvisor() {
               src={emmaWordmark}
               alt="Emma"
               className="emma-wordmark"
-              height={64}
+              height={96}
               priority
             />
           </h2>
@@ -306,7 +306,7 @@ export function BeautyAiAdvisor() {
             </span>
             <div className="gb-ai-console-who">
               <strong className="emma-console-name">
-                <Image src={emmaWordmark} alt="Emma" className="emma-wordmark emma-wordmark--console" height={28} />
+                <Image src={emmaWordmark} alt="Emma" className="emma-wordmark emma-wordmark--console" height={36} />
               </strong>
               <span>Four Sensations · en línea</span>
             </div>
