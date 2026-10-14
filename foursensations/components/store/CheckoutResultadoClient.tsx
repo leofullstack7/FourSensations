@@ -101,7 +101,9 @@ export function CheckoutResultadoClient() {
       ? "Bold"
       : order?.paymentProvider === "EPAYCO"
         ? "ePayco"
-        : "Mercado Pago";
+        : order?.paymentProvider === "ADDI"
+          ? "Addi"
+          : "Mercado Pago";
 
   useEffect(() => {
     if (paid) saveCart([]);

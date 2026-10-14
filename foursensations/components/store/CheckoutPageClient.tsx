@@ -40,7 +40,7 @@ function cartLineImageSrc(item: CartLine): string | null {
 
 type PayPhase = "idle" | "order" | "session" | "widget" | "integrity" | "error";
 
-type PaymentMethod = "mercadopago" | "bold";
+type PaymentMethod = "mercadopago" | "addi" | "bold";
 
 /** Bold deshabilitado temporalmente en checkout. */
 const BOLD_CHECKOUT_ENABLED = false;
@@ -102,6 +102,7 @@ export function CheckoutPageClient() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [documentNumber, setDocumentNumber] = useState("");
   const [line1, setLine1] = useState("");
   const [line2, setLine2] = useState("");
   const [city, setCity] = useState("");
@@ -299,11 +300,33 @@ export function CheckoutPageClient() {
         },
         customerNote: note.trim() || undefined,
         shippingZoneId,
-        paymentProvider: provider === "mercadopago" ? ("MERCADOPAGO" as const) : ("BOLD" as const),
+        paymentProvider:
+          provider === "mercadopago"
+            ? ("MERCADOPAGO" as const)
+            : provider === "addi"
+              ? ("ADDI" as const)
+              : ("BOLD" as const),
+        ...(provider === "addi" && documentNumber.trim()
+          ? { customerDocument: documentNumber.replace(/\D/g, "") }
+          : {}),
         ...(couponApplied?.code ? { couponCode: couponApplied.code } : {}),
       };
     },
-    [cart, city, couponApplied?.code, email, line1, line2, name, note, phone, postalCode, region, shippingZoneId],
+    [
+      cart,
+      city,
+      couponApplied?.code,
+      documentNumber,
+      email,
+      line1,
+      line2,
+      name,
+      note,
+      phone,
+      postalCode,
+      region,
+      shippingZoneId,
+    ],
   );
 
   const validateForm = useCallback((): string | null => {
@@ -313,12 +336,27 @@ export function CheckoutPageClient() {
     if (name.trim().length < 2) return "Escribe tu nombre completo.";
     if (line1.trim().length < 3) return "Escribe una dirección completa (mínimo 3 caracteres).";
     if (city.trim().length < 2) return "Indica la ciudad.";
-    if (!paymentMethod) return "Elige Mercado Pago como método de pago.";
+    if (!paymentMethod) return "Elige un método de pago.";
+    if (paymentMethod === "addi") {
+      if (documentNumber.replace(/\D/g, "").length < 5) return "Addi requiere tu número de cédula.";
+      if (phone.replace(/\D/g, "").length < 7) return "Addi requiere un teléfono / WhatsApp válido.";
+    }
     if (isWholesaleCustomer && subtotal < wholesaleMin) {
       return wholesaleMinimumReminder(wholesaleMin, subtotal);
     }
     return null;
-  }, [city, email, isWholesaleCustomer, line1, name, paymentMethod, subtotal, wholesaleMin]);
+  }, [
+    city,
+    documentNumber,
+    email,
+    isWholesaleCustomer,
+    line1,
+    name,
+    paymentMethod,
+    phone,
+    subtotal,
+    wholesaleMin,
+  ]);
 
   const formComplete = useMemo(() => validateForm() === null && cart.length > 0, [cart.length, validateForm]);
 
@@ -327,6 +365,29 @@ export function CheckoutPageClient() {
     const t = window.setTimeout(() => setInfoModal(null), 2800);
     return () => window.clearTimeout(t);
   }, [infoModal]);
+
+  const createPendingOrder = useCallback(
+    async (provider: PaymentMethod): Promise<string | null> => {
+      const body = buildOrderPayload(provider);
+      const parsed = createCheckoutOrderSchema.safeParse(body);
+      if (!parsed.success) {
+        setInfoModal("Completa la información");
+        setErrorMsg("Revisa correo, nombre, dirección, zona de envío y datos del pago.");
+        setPhase("idle");
+        return null;
+      }
+      const res = await fetch("/api/checkout/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data),
+      });
+      const data = (await res.json()) as { error?: string; reference?: string };
+      if (!res.ok) throw new Error(data.error || "No se pudo crear el pedido");
+      if (!data.reference) throw new Error("Respuesta inválida");
+      return data.reference;
+    },
+    [buildOrderPayload],
+  );
 
   const runMercadoPagoPayment = useCallback(async () => {
     setErrorMsg(null);
@@ -339,29 +400,11 @@ export function CheckoutPageClient() {
     }
 
     setPhase("order");
-    const body = buildOrderPayload("mercadopago");
-    const parsed = createCheckoutOrderSchema.safeParse(body);
-    if (!parsed.success) {
-      setInfoModal("Completa la información");
-      setErrorMsg("Revisa correo, nombre, dirección y zona de envío.");
-      setPhase("idle");
-      return;
-    }
-
     let reference: string;
-
     try {
-      const res = await fetch("/api/checkout/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed.data),
-      });
-      const data = (await res.json()) as { error?: string; reference?: string };
-      if (!res.ok) {
-        throw new Error(data.error || "No se pudo crear el pedido");
-      }
-      if (!data.reference) throw new Error("Respuesta inválida");
-      reference = data.reference;
+      const ref = await createPendingOrder("mercadopago");
+      if (!ref) return;
+      reference = ref;
     } catch (e) {
       setPhase("error");
       setErrorMsg(e instanceof Error ? e.message : "Error al crear el pedido");
@@ -385,7 +428,49 @@ export function CheckoutPageClient() {
       setPhase("error");
       setErrorMsg(e instanceof Error ? e.message : "Error al abrir Mercado Pago");
     }
-  }, [buildOrderPayload, validateForm]);
+  }, [createPendingOrder, validateForm]);
+
+  const runAddiPayment = useCallback(async () => {
+    setErrorMsg(null);
+    const v = validateForm();
+    if (v) {
+      setInfoModal("Completa la información");
+      setErrorMsg(v);
+      setPhase("idle");
+      return;
+    }
+
+    setPhase("order");
+    let reference: string;
+    try {
+      const ref = await createPendingOrder("addi");
+      if (!ref) return;
+      reference = ref;
+    } catch (e) {
+      setPhase("error");
+      setErrorMsg(e instanceof Error ? e.message : "Error al crear el pedido");
+      return;
+    }
+
+    setPhase("session");
+    try {
+      const res = await fetch("/api/payments/addi/application", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reference,
+          documentNumber: documentNumber.replace(/\D/g, ""),
+        }),
+      });
+      const data = (await res.json()) as { error?: string; initPoint?: string };
+      if (!res.ok) throw new Error(data.error || "No se pudo iniciar Addi");
+      if (!data.initPoint) throw new Error("Addi no devolvió el enlace de pago");
+      window.location.assign(data.initPoint);
+    } catch (e) {
+      setPhase("error");
+      setErrorMsg(e instanceof Error ? e.message : "Error al abrir Addi");
+    }
+  }, [createPendingOrder, documentNumber, validateForm]);
 
   const runBoldPayment = useCallback(async () => {
     setErrorMsg(null);
@@ -497,6 +582,7 @@ export function CheckoutPageClient() {
       return;
     }
     if (paymentMethod === "bold" && BOLD_CHECKOUT_ENABLED) void runBoldPayment();
+    else if (paymentMethod === "addi") void runAddiPayment();
     else if (paymentMethod === "mercadopago") void runMercadoPagoPayment();
   };
 
@@ -505,10 +591,12 @@ export function CheckoutPageClient() {
     if (phase === "order") return "Creando pedido…";
     if (phase === "integrity") return "Firmando pago…";
     if (phase === "session" && paymentMethod === "mercadopago") return "Conectando con Mercado Pago…";
+    if (phase === "session" && paymentMethod === "addi") return "Conectando con Addi…";
     if (phase === "widget" && paymentMethod === "bold") return "Completa el pago arriba ↑";
     if (!formComplete) return "Completa tus datos para pagar";
     if (phase === "error") return "Reintentar";
     if (paymentMethod === "bold") return "Preparar pago con Bold";
+    if (paymentMethod === "addi") return "Pagar con Addi";
     return "Ir a Mercado Pago";
   })();
 
@@ -706,19 +794,36 @@ export function CheckoutPageClient() {
                   />
                 </div>
               </div>
-              <div className="gb-co-field gb-co-field--tight">
-                <label className="gb-co-label" htmlFor="gb-phone">
-                  Teléfono / WhatsApp
-                </label>
-                <input
-                  id="gb-phone"
-                  className="gb-co-input"
-                  type="tel"
-                  autoComplete="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+57 300 000 0000"
-                />
+              <div className="gb-co-grid2 gb-co-field--tight">
+                <div className="gb-co-field">
+                  <label className="gb-co-label" htmlFor="gb-phone">
+                    Teléfono / WhatsApp{paymentMethod === "addi" ? " *" : ""}
+                  </label>
+                  <input
+                    id="gb-phone"
+                    className="gb-co-input"
+                    type="tel"
+                    autoComplete="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+57 300 000 0000"
+                  />
+                </div>
+                <div className="gb-co-field">
+                  <label className="gb-co-label" htmlFor="gb-doc">
+                    Cédula{paymentMethod === "addi" ? " *" : " (Addi)"}
+                  </label>
+                  <input
+                    id="gb-doc"
+                    className="gb-co-input"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={documentNumber}
+                    onChange={(e) => setDocumentNumber(e.target.value.replace(/[^\d]/g, ""))}
+                    placeholder="Solo números"
+                  />
+                </div>
               </div>
             </motion.section>
 
@@ -986,6 +1091,19 @@ export function CheckoutPageClient() {
                 <span className="gb-co-method-name">Mercado Pago</span>
                 <span className="gb-co-method-desc">Te redirige a Mercado Pago (tarjeta, PSE…)</span>
               </motion.button>
+              <motion.button
+                type="button"
+                role="radio"
+                aria-checked={paymentMethod === "addi"}
+                className={`gb-co-method-card${paymentMethod === "addi" ? " gb-co-method-card--active" : ""}`}
+                onClick={() => setPaymentMethod("addi")}
+                whileHover={reduceMotion ? undefined : { y: -3 }}
+                whileTap={reduceMotion ? undefined : { scale: 0.99 }}
+              >
+                <span className="gb-co-method-icon">🛍️</span>
+                <span className="gb-co-method-name">Addi</span>
+                <span className="gb-co-method-desc">Paga a cuotas · Buy now, pay later</span>
+              </motion.button>
               {BOLD_CHECKOUT_ENABLED ? (
                 <motion.button
                   type="button"
@@ -1038,6 +1156,9 @@ export function CheckoutPageClient() {
 
             {phase === "session" && paymentMethod === "mercadopago" && (
               <div className="gb-co-status gb-co-status--loading gb-co-status--pulse">Preparando Mercado Pago…</div>
+            )}
+            {phase === "session" && paymentMethod === "addi" && (
+              <div className="gb-co-status gb-co-status--loading gb-co-status--pulse">Preparando Addi…</div>
             )}
           </motion.div>
         </aside>

@@ -37,7 +37,9 @@ export const createCheckoutOrderSchema = z
     customerNote: z.string().max(2000).optional(),
     shippingZoneId: z.enum(SHIPPING_ZONE_IDS),
     /** Preferencia de pasarela; el costo de envío lo calcula el servidor. */
-    paymentProvider: z.enum(["EPAYCO", "BOLD", "MERCADOPAGO"]).optional(),
+    paymentProvider: z.enum(["EPAYCO", "BOLD", "MERCADOPAGO", "ADDI"]).optional(),
+    /** Cédula (requerida para Addi). */
+    customerDocument: z.string().min(5).max(20).optional(),
     /** Código de cupón opcional. */
     couponCode: z.string().min(1).max(40).optional(),
   })
@@ -57,6 +59,24 @@ export const createCheckoutOrderSchema = z
         message: "Indica la ciudad de entrega.",
         path: ["shippingAddress", "city"],
       });
+    }
+    if (data.paymentProvider === "ADDI") {
+      const doc = (data.customerDocument ?? "").replace(/\D/g, "");
+      if (doc.length < 5) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Addi requiere tu número de cédula.",
+          path: ["customerDocument"],
+        });
+      }
+      const phone = (data.customerPhone ?? "").replace(/\D/g, "");
+      if (phone.length < 7) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Addi requiere un teléfono / WhatsApp válido.",
+          path: ["customerPhone"],
+        });
+      }
     }
   });
 

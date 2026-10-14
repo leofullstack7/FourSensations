@@ -205,7 +205,12 @@ export async function createPendingOrderFromCheckout(
         );
       }
 
-      const addr = { ...input.shippingAddress };
+      const addr = {
+        ...input.shippingAddress,
+        ...(input.customerDocument?.trim()
+          ? { documentNumber: input.customerDocument.replace(/\D/g, "") }
+          : {}),
+      };
       const city = (addr.city ?? "").trim();
       const region = addr.region?.trim();
       const zoneId = guessShippingZoneFromCity(city) || input.shippingZoneId;
