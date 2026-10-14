@@ -9,7 +9,7 @@ import Link from "next/link";
 import { StoreNavLink } from "@/components/store/StoreNavLink";
 import { useStoreNavigation } from "@/components/store/StoreNavigationProvider";
 import { useRouter } from "next/navigation";
-import { signIn, signOut, useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { toCategorySlug } from "@/lib/menu-config";
 import type { MenuConfig } from "@/lib/types/admin";
@@ -306,18 +306,6 @@ export function StorefrontShell({
     setToasts((t) => [...t, { id, msg, type, icon }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3800);
   }, []);
-
-  const startGoogleSignIn = useCallback(async () => {
-    setAuthBusyLabel("Redirigiendo a Google…");
-    try {
-      await signIn("google", {
-        callbackUrl: typeof window !== "undefined" ? window.location.href : "/",
-      });
-    } catch {
-      setAuthBusyLabel(null);
-      showToast("No se pudo conectar con Google. Intenta de nuevo.", "error", "⚠️");
-    }
-  }, [showToast]);
 
   useEffect(() => {
     const syncNavHeight = () => {
@@ -1535,17 +1523,6 @@ export function StorefrontShell({
                       <strong>Iniciar sesión</strong>
                       <span>Entra con el correo con el que te registraste.</span>
                     </MotionButton>
-                    <MotionButton
-                      type="button"
-                      className="gb-wish-guest-card"
-                      whileHover={{ scale: 1.01 }}
-                      whileTap={{ scale: 0.99 }}
-                      disabled={!!authBusyLabel}
-                      onClick={() => void startGoogleSignIn()}
-                    >
-                      <strong>Iniciar sesión con Google</strong>
-                      <span>Accede rápido con tu cuenta de Google.</span>
-                    </MotionButton>
                   </div>
                 </>
               )}
@@ -1587,17 +1564,6 @@ export function StorefrontShell({
           </div>
           <div className="auth-title">Bienvenido/a</div>
           <p className="auth-sub">Inicia sesión para una experiencia de compra personalizada</p>
-          <div className="auth-social-btns">
-            <button
-              type="button"
-              className="auth-social-btn"
-              disabled={!!authBusyLabel}
-              onClick={() => void startGoogleSignIn()}
-            >
-              <span style={{ fontSize: 18 }}>🔴</span> Continuar con Google
-            </button>
-          </div>
-          <div className="auth-divider">o con correo electrónico</div>
           <CustomerEmailAuthForm
             tab={customerAuthTab}
             showToast={showToast}

@@ -35,16 +35,13 @@ export function StoreFooter() {
           <div className="footer-brand">
             <BrandLogo variant="store" inverted />
             <p className="footer-desc">
-              Four Sensations — marca colombiana de cuidado capilar. El Club de los Cabellos Perfectos.
-              Envíos a todo Colombia desde Manizales.
-            </p>
-            <p className="footer-desc footer-desc--privileges">
-              Ser Four Girl tiene sus privilegios,
+              Four Sensations
               <br />
-              SIEMPRE TIENEN LAS PRIMICIAS💌
+              ¡Creamos nuevas formas de amar, cuidar y disfrutar tu cabello!💗
               <br />
-              Lanzamientos, ediciones limitadas, sorpresas, secretos capilares y novedades que
-              definitivamente vas a querer tener en el radar.
+              <strong>BE YOU, BE FOUR SENSATIONS</strong>
+              <br />
+              Marca Colombiana 🇨🇴 · Hecho en Colombia
             </p>
           </div>
           <div className="footer-col">
@@ -83,7 +80,7 @@ export function StoreFooter() {
       </div>
       <div className="container">
         <div className="footer-bottom">
-          <span>© 2026 Four Sensations. Todos los derechos reservados.</span>
+          <span>© 2026 Four Sensations S.A.S. Todos los derechos reservados</span>
           <div className="footer-payments">
             <span className="payment-chip">Mercado Pago</span>
             <span className="payment-chip">PSE</span>

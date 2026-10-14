@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { MotionDiv, MotionSpan } from "@/components/store/store-framer-motion";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
@@ -15,10 +15,12 @@ import {
   matchCatalogProductId,
   type EmmaAnswers,
 } from "@/lib/emma/flow";
+import { buildAdvisorReply, type AdvisorHistoryTurn, type AiAdvisorReply } from "@/lib/ai-advisor";
+import { ADVISOR_MAX_TURNS } from "@/lib/ai-advisor-context";
 import type { StoreProduct } from "@/lib/types/product";
 import emmaWordmark from "@/assets/foursensations/emma.png";
 
-type Phase = "intro" | "question" | "loading" | "result";
+type Phase = "intro" | "question" | "loading" | "result" | "chat";
 
 type ChatLine = {
   id: string;
@@ -29,6 +31,37 @@ type ChatLine = {
 
 function nid() {
   return `emma-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+async function fetchAdvisorReply(message: string, history: AdvisorHistoryTurn[]): Promise<AiAdvisorReply | null> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12_000);
+  try {
+    const res = await fetch("/api/store/advisor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+      body: JSON.stringify({ message, history }),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as AiAdvisorReply;
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function toHistory(lines: ChatLine[]): AdvisorHistoryTurn[] {
+  return lines
+    .filter((l) => l.id !== "intro")
+    .map((l) => ({
+      role: l.role,
+      text: l.text,
+      ...(l.productIds?.length ? { productIds: l.productIds } : {}),
+    }))
+    .slice(-ADVISOR_MAX_TURNS);
 }
 
 export function BeautyAiAdvisor() {
@@ -49,9 +82,11 @@ export function BeautyAiAdvisor() {
   const [lines, setLines] = useState<ChatLine[]>([{ id: "intro", role: "bot", text: EMMA_INTRO }]);
   const [resultIds, setResultIds] = useState<string[]>([]);
   const [resultReasons, setResultReasons] = useState<Record<string, string>>({});
-  const [extraIds, setExtraIds] = useState<string[]>([]);
+  const [draft, setDraft] = useState("");
+  const [typing, setTyping] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const catalogEnsured = useRef(false);
+  const inputId = useId();
 
   useEffect(() => {
     if (catalogProducts.length > 0 || catalogEnsured.current) return;
@@ -63,10 +98,11 @@ export function BeautyAiAdvisor() {
     const el = threadRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [lines, phase, selected]);
+  }, [lines, phase, selected, typing]);
 
   const question = EMMA_QUESTIONS[questionIndex];
   const productMap = useMemo(() => new Map(catalogProducts.map((p) => [p.id, p])), [catalogProducts]);
+  const composerLocked = typing || phase === "loading";
 
   const toggleOption = useCallback(
     (id: string) => {
@@ -75,7 +111,6 @@ export function BeautyAiAdvisor() {
         setSelected([id]);
         return;
       }
-      // multi rules
       if (question.id === 2) {
         if (id === "natural") {
           setSelected(["natural"]);
@@ -87,18 +122,7 @@ export function BeautyAiAdvisor() {
         });
         return;
       }
-      if (question.id === 4) {
-        if (id === "ninguna") {
-          setSelected(["ninguna"]);
-          return;
-        }
-        setSelected((prev) => {
-          const without = prev.filter((x) => x !== "ninguna");
-          return without.includes(id) ? without.filter((x) => x !== id) : [...without, id];
-        });
-        return;
-      }
-      if (question.id === 6) {
+      if (question.id === 4 || question.id === 6) {
         if (id === "ninguna") {
           setSelected(["ninguna"]);
           return;
@@ -150,7 +174,6 @@ export function BeautyAiAdvisor() {
           }
         }
         setResultIds(ids);
-        setExtraIds(extras);
         setResultReasons(reasons);
         setLines((prev) => [
           ...prev,
@@ -168,7 +191,7 @@ export function BeautyAiAdvisor() {
           {
             id: nid(),
             role: "bot",
-            text: "Si quieres, te explico por qué elegí cada uno o agregamos la rutina al carrito 💗",
+            text: "Si quieres, te explico por qué elegí cada uno, agregamos la rutina al carrito o me escribes aquí abajo 💗",
           },
         ]);
         setPhase("result");
@@ -216,6 +239,60 @@ export function BeautyAiAdvisor() {
     setLines((prev) => [...prev, { id: nid(), role: "bot", text: EMMA_QUESTIONS[nextIndex]!.prompt }]);
   }, [question, selected, answers, questionIndex, finishAndRecommend]);
 
+  const sendFreeMessage = useCallback(
+    (raw: string) => {
+      const text = raw.trim();
+      if (!text || composerLocked) return;
+
+      const userLine: ChatLine = { id: nid(), role: "user", text };
+      let historyForApi: AdvisorHistoryTurn[] = [];
+
+      setLines((prev) => {
+        const next = [...prev, userLine].slice(-ADVISOR_MAX_TURNS);
+        historyForApi = toHistory(next);
+        return next;
+      });
+      setDraft("");
+      setTyping(true);
+      setPhase("chat");
+
+      void (async () => {
+        let reply: AiAdvisorReply | null = null;
+        if (catalogProducts.length > 0) {
+          reply = buildAdvisorReply(text, catalogProducts, {
+            historyTurns: historyForApi,
+            engine: "rules",
+          });
+        }
+        if (!reply || !(reply.messages?.length)) {
+          reply = await fetchAdvisorReply(text, historyForApi);
+        }
+        if (!reply) {
+          reply = buildAdvisorReply(text, catalogProducts, {
+            historyTurns: historyForApi,
+            engine: "rules",
+          });
+        }
+        const botLines: ChatLine[] = (reply?.messages || []).map((m) => ({
+          id: nid(),
+          role: "bot",
+          text: m.text,
+          productIds: m.productIds,
+        }));
+        if (!botLines.length) {
+          botLines.push({
+            id: nid(),
+            role: "bot",
+            text: "Cuéntame un poquito más de tu cabello y te ayudo con productos Four Sensations 💗",
+          });
+        }
+        setLines((prev) => [...prev, ...botLines].slice(-ADVISOR_MAX_TURNS));
+        setTyping(false);
+      })();
+    },
+    [catalogProducts, composerLocked],
+  );
+
   const addRoutineToCart = useCallback(() => {
     for (const id of resultIds) {
       const p = productMap.get(id);
@@ -230,8 +307,9 @@ export function BeautyAiAdvisor() {
     setSelected([]);
     setAnswers({});
     setResultIds([]);
-    setExtraIds([]);
     setResultReasons({});
+    setDraft("");
+    setTyping(false);
     setLines([{ id: "intro", role: "bot", text: EMMA_INTRO }]);
   }, []);
 
@@ -274,20 +352,27 @@ export function BeautyAiAdvisor() {
           </MotionSpan>
           <h2 id="gb-ai-title" className="gb-ai-title">
             Hola, soy{" "}
-            <Image
-              src={emmaWordmark}
-              alt="Emma"
-              className="emma-wordmark"
-              height={96}
-              priority
-            />
+            <Image src={emmaWordmark} alt="Emma" className="emma-wordmark" height={96} priority />
           </h2>
           <p className="gb-ai-kicker">{EMMA_LEFT_COPY.greeting}</p>
           <p className="gb-ai-desc">{EMMA_LEFT_COPY.body}</p>
           <ul className="gb-ai-features emma-hearts">
             {EMMA_LEFT_COPY.hearts.map((label) => (
-              <li key={label}>
-                <span aria-hidden>💗</span> {label}
+              <li key={label} className="emma-heart-badge">
+                <svg className="emma-heart-badge__shape" viewBox="0 0 120 110" aria-hidden>
+                  <defs>
+                    <linearGradient id={`emma-heart-grad-${label}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#b57ad4" />
+                      <stop offset="55%" stopColor="#8a4aaa" />
+                      <stop offset="100%" stopColor="#6e3a8f" />
+                    </linearGradient>
+                  </defs>
+                  <path
+                    fill={`url(#emma-heart-grad-${label})`}
+                    d="M60 102 C22 74 6 50 16 30 C24 14 44 12 60 30 C76 12 96 14 104 30 C114 50 98 74 60 102 Z"
+                  />
+                </svg>
+                <span className="emma-heart-badge__label">{label}</span>
               </li>
             ))}
           </ul>
@@ -326,13 +411,13 @@ export function BeautyAiAdvisor() {
                 </div>
               </div>
             ))}
-            {phase === "loading" ? (
+            {typing || phase === "loading" ? (
               <div className="gb-ai-msg gb-ai-msg--bot gb-ai-msg--typing emma-loading">
                 <span className="gb-ai-msg-avatar" aria-hidden>
                   💗
                 </span>
                 <div className="gb-ai-msg-body">
-                  <div className="emma-hearts-loader" aria-label="Emma está armando tu rutina">
+                  <div className="emma-hearts-loader" aria-label="Emma está escribiendo">
                     <span>💗</span>
                     <span>💖</span>
                     <span>💗</span>
@@ -342,76 +427,119 @@ export function BeautyAiAdvisor() {
             ) : null}
           </div>
 
-          {phase === "intro" ? (
-            <div className="gb-ai-chips">
-              <button type="button" className="gb-ai-chip gb-ai-chip--primary" onClick={startQuiz}>
-                {EMMA_START_BUTTON}
-              </button>
-            </div>
-          ) : null}
-
-          {phase === "question" && question ? (
-            <div className="emma-quiz">
-              <div className="gb-ai-chips emma-options">
-                {question.options.map((opt) => {
-                  const active = selected.includes(opt.id);
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      className={`gb-ai-chip${active ? " is-active" : ""}`}
-                      onClick={() => toggleOption(opt.id)}
-                    >
-                      {opt.label}
-                      {opt.hint ? <small className="emma-option-hint">{opt.hint}</small> : null}
-                    </button>
-                  );
-                })}
+          <div className="emma-console-footer">
+            {phase === "intro" ? (
+              <div className="gb-ai-chips">
+                <button type="button" className="gb-ai-chip gb-ai-chip--primary" onClick={startQuiz}>
+                  {EMMA_START_BUTTON}
+                </button>
               </div>
-              <button
-                type="button"
-                className="btn btn-primary emma-continue"
-                disabled={selected.length === 0}
-                onClick={confirmAnswer}
-              >
-                Continuar 💗
-              </button>
-            </div>
-          ) : null}
+            ) : null}
 
-          {phase === "result" ? (
-            <div className="gb-ai-chips emma-result-actions">
-              <button type="button" className="gb-ai-chip gb-ai-chip--primary" onClick={addRoutineToCart}>
-                Agregar mi rutina al carrito 💗
-              </button>
+            {phase === "question" && question ? (
+              <div className="emma-quiz">
+                <div className="gb-ai-chips emma-options">
+                  {question.options.map((opt) => {
+                    const active = selected.includes(opt.id);
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        className={`gb-ai-chip${active ? " is-active" : ""}`}
+                        onClick={() => toggleOption(opt.id)}
+                      >
+                        {opt.label}
+                        {opt.hint ? <small className="emma-option-hint">{opt.hint}</small> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary emma-continue"
+                  disabled={selected.length === 0}
+                  onClick={confirmAnswer}
+                >
+                  Continuar 💗
+                </button>
+              </div>
+            ) : null}
+
+            {phase === "result" ? (
+              <div className="gb-ai-chips emma-result-actions">
+                <button type="button" className="gb-ai-chip gb-ai-chip--primary" onClick={addRoutineToCart}>
+                  Agregar mi rutina al carrito 💗
+                </button>
+                <button
+                  type="button"
+                  className="gb-ai-chip"
+                  onClick={() =>
+                    setLines((prev) => [
+                      ...prev,
+                      {
+                        id: nid(),
+                        role: "bot",
+                        text:
+                          resultIds
+                            .map((id) => {
+                              const p = productMap.get(id);
+                              return p ? `• ${p.name}: ${resultReasons[id] || "Porque encaja con lo que me contaste."}` : "";
+                            })
+                            .filter(Boolean)
+                            .join("\n") || "Cada producto responde a lo que me contaste en el cuestionario 💗",
+                      },
+                    ])
+                  }
+                >
+                  ¿Por qué para mí?
+                </button>
+                <button type="button" className="gb-ai-chip" onClick={restart}>
+                  Empezar de nuevo
+                </button>
+              </div>
+            ) : null}
+
+            {phase === "chat" ? (
+              <div className="gb-ai-chips emma-result-actions">
+                <button type="button" className="gb-ai-chip" onClick={restart}>
+                  Empezar de nuevo
+                </button>
+                <button type="button" className="gb-ai-chip gb-ai-chip--primary" onClick={startQuiz}>
+                  Hacer el cuestionario 💗
+                </button>
+              </div>
+            ) : null}
+
+            <form
+              className="gb-ai-composer"
+              onSubmit={(e) => {
+                e.preventDefault();
+                sendFreeMessage(draft);
+              }}
+            >
+              <label htmlFor={inputId} className="sr-only">
+                Escribe a Emma
+              </label>
+              <input
+                id={inputId}
+                type="text"
+                className="gb-ai-input"
+                placeholder="Ej. tengo frizz y las puntas muy secas…"
+                value={draft}
+                disabled={composerLocked}
+                onChange={(e) => setDraft(e.target.value)}
+                autoComplete="off"
+              />
               <button
-                type="button"
-                className="gb-ai-chip"
-                onClick={() =>
-                  setLines((prev) => [
-                    ...prev,
-                    {
-                      id: nid(),
-                      role: "bot",
-                      text:
-                        resultIds
-                          .map((id) => {
-                            const p = productMap.get(id);
-                            return p ? `• ${p.name}: ${resultReasons[id] || "Porque encaja con lo que me contaste."}` : "";
-                          })
-                          .filter(Boolean)
-                          .join("\n") || "Cada producto responde a lo que me contaste en el cuestionario 💗",
-                    },
-                  ])
-                }
+                type="submit"
+                className="gb-ai-send"
+                disabled={composerLocked || !draft.trim()}
+                aria-label="Enviar"
               >
-                ¿Por qué para mí?
+                ↑
               </button>
-              <button type="button" className="gb-ai-chip" onClick={restart}>
-                Empezar de nuevo
-              </button>
-            </div>
-          ) : null}
+            </form>
+          </div>
         </MotionDiv>
       </div>
     </section>

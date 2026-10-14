@@ -240,6 +240,41 @@
   width: auto;
   margin: 0 0.08em -0.08em;
 }
+.emma-hearts {
+  gap: 14px 16px;
+  align-items: center;
+}
+.emma-heart-badge {
+  position: relative;
+  width: 118px;
+  height: 108px;
+  display: grid;
+  place-items: center;
+  list-style: none;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+.emma-heart-badge__shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 10px 16px rgba(138, 74, 170, 0.35));
+}
+.emma-heart-badge__label {
+  position: relative;
+  z-index: 1;
+  max-width: 78%;
+  margin-top: 4px;
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(60, 20, 80, 0.35);
+}
 .emma-wordmark--console {
   height: 34px;
   display: block;
@@ -271,7 +306,7 @@
   padding: 0;
   margin: 0;
 }
-.gb-ai-features li {
+.gb-ai-features li:not(.emma-heart-badge) {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -293,7 +328,26 @@
 .gb-ai-console--chat {
   display: flex;
   flex-direction: column;
-  max-height: min(580px, 74vh);
+  max-height: min(640px, 78vh);
+  min-height: min(480px, 70vh);
+  overflow: hidden;
+}
+.emma-console-footer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.emma-quiz {
+  max-height: min(180px, 28vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+.emma-continue {
+  margin: 8px 0 0;
+  width: 100%;
 }
 .gb-ai-console-header {
   display: flex;
@@ -344,14 +398,14 @@
   min-height: 120px;
 }
 .gb-ai-chat--thread {
-  flex: 1;
-  min-height: 200px;
-  max-height: 320px;
+  flex: 1 1 auto;
+  min-height: 180px;
+  max-height: none;
   overflow-y: auto;
   overflow-anchor: none;
   overscroll-behavior: contain;
   padding-right: 4px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .gb-ai-chat--thread::-webkit-scrollbar {
   width: 5px;
@@ -987,6 +1041,16 @@
     font-size: clamp(33px, 8.5vw, 50px);
     text-align: left;
   }
+  .emma-wordmark {
+    height: clamp(57px, 1.82em, 101px);
+  }
+  .emma-heart-badge {
+    width: 104px;
+    height: 96px;
+  }
+  .emma-heart-badge__label {
+    font-size: 9.5px;
+  }
   .gb-ai-desc {
     font-size: 15.52px;
     line-height: 1.72;
@@ -995,7 +1059,7 @@
     text-justify: inter-word;
     hyphens: auto;
   }
-  .gb-ai-features li {
+  .gb-ai-features li:not(.emma-heart-badge) {
     font-size: 10.7px;
     padding: 7px 12px;
   }
@@ -1007,14 +1071,18 @@
     box-sizing: border-box;
   }
   .gb-ai-console--chat {
-    max-height: min(520px, 68vh);
+    max-height: min(620px, 78vh);
+    min-height: min(460px, 68vh);
   }
   .gb-ai-chat--thread {
-    max-height: 280px;
+    max-height: none;
     padding-inline: 2px;
     margin-inline: 0;
     width: 100%;
     box-sizing: border-box;
+  }
+  .emma-quiz {
+    max-height: min(160px, 26vh);
   }
   .gb-ai-msg {
     max-width: 100%;

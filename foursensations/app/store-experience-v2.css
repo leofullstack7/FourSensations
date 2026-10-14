@@ -731,7 +731,8 @@ footer::before {
 }
 .cat-showcase-viewport {
   overflow: hidden;
-  padding: 12px 0 8px;
+  padding: 12px 16px 8px;
+  margin-inline: 0;
 }
 .cat-showcase-track--desktop {
   display: grid;
@@ -745,7 +746,7 @@ footer::before {
   display: flex;
   width: max-content;
   gap: 10px;
-  padding: 0 4px 4px;
+  padding: 0 8px 4px;
 }
 .cat-showcase-viewport--mobile {
   overflow-x: auto;
@@ -755,15 +756,15 @@ footer::before {
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  margin: 0 -12px;
-  padding: 12px 12px 8px;
+  margin: 0;
+  padding: 12px 20px 8px;
 }
 .cat-showcase-viewport--mobile::-webkit-scrollbar {
   display: none;
 }
 .cat-showcase-track--mobile .cat-showcase-card {
-  flex: 0 0 calc((100vw - 48px) / 3);
-  max-width: calc((100vw - 48px) / 3);
+  flex: 0 0 calc((100vw - 80px) / 3);
+  max-width: calc((100vw - 80px) / 3);
   scroll-snap-align: start;
   box-sizing: border-box;
 }

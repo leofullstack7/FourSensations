@@ -2666,10 +2666,17 @@
   font-size: 1.05rem;
   color: #6b5578;
 }
-.emma-hearts li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.emma-hearts {
+  list-style: none;
+  padding: 0;
+}
+.emma-hearts li.emma-heart-badge {
+  display: grid;
+  place-items: center;
+  gap: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
 }
 .emma-options {
   flex-wrap: wrap;
@@ -2690,8 +2697,8 @@
   border: none;
 }
 .emma-continue {
-  margin: 12px 16px 16px;
-  width: calc(100% - 32px);
+  margin: 8px 0 0;
+  width: 100%;
 }
 .emma-hearts-loader {
   display: flex;
