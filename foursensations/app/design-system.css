@@ -92,35 +92,16 @@ input, select, textarea { font-family: inherit; }
 .topbar-msg {
   grid-column: 2;
   color: var(--gold-light);
+  font-size: 12px;
   font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1.35;
   justify-self: center;
   text-align: center;
 }
 .topbar-msg--marquee {
   display: none;
-}
-.topbar-marquee-track {
-  display: flex;
-  width: max-content;
-  animation: topbar-marquee 36s linear infinite;
-}
-.topbar-marquee-copy,
-.topbar-marquee-item {
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-}
-.topbar-marquee-dot {
-  display: inline-flex;
-  margin: 0 0.7em;
-  opacity: 0.85;
-}
-@keyframes topbar-marquee {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .topbar-marquee-track { animation: none; }
 }
 .topbar-user-slot {
   grid-column: 3;
@@ -625,11 +606,76 @@ input, select, textarea { font-family: inherit; }
   box-shadow: 0 18px 36px rgba(90, 50, 120, 0.12);
   padding: 10px 10px 12px;
 }
+.mega-dock__inner--vertical {
+  width: min(340px, calc(100vw - 32px));
+  max-width: min(340px, calc(100vw - 32px));
+  margin-left: 0;
+  margin-right: auto;
+  padding: 14px 12px 16px;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(90, 50, 120, 0.14);
+}
+.mega-dock__columns {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 2px 2px;
+}
+.mega-dock__column-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--dark);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(201, 166, 232, 0.22);
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.mega-dock__column-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+.mega-dock__column-arrow {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--dusty-rose);
+  opacity: 0.75;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.mega-dock__column-link:hover {
+  background: linear-gradient(90deg, rgba(246, 183, 215, 0.28), rgba(255, 255, 255, 0.9));
+  border-color: rgba(196, 84, 122, 0.28);
+  transform: translateX(2px);
+  box-shadow: 0 6px 16px rgba(90, 50, 120, 0.08);
+}
+.mega-dock__column-link:hover .mega-dock__column-arrow {
+  opacity: 1;
+  transform: translateX(3px);
+}
 .mega-dock__inner--accesorios {
   width: min(520px, calc(100vw - 48px));
   max-width: min(520px, calc(100vw - 48px));
   margin-left: 0;
   margin-right: auto;
+}
+.mega-dock__inner--vertical .mega-dock__head {
+  margin: 0 4px 12px;
+  padding: 0 4px 12px;
+  align-items: center;
+}
+.mega-dock__inner--vertical .mega-promo-btn {
+  padding: 8px 12px;
+  font-size: 11px;
+  white-space: nowrap;
 }
 .mega-dock__head {
   display: flex;
@@ -3120,40 +3166,33 @@ footer {
     transition: max-height 0.3s ease;
   }
   .mobile-mega-subwrap.open {
-    max-height: 520px;
+    max-height: 70vh;
     padding-bottom: 8px;
   }
-  .mobile-mega-subgroup {
-    padding: 2px 6px 8px;
+  .mobile-mega-columns {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 4px 4px 8px;
   }
-  .mobile-mega-subtitle {
+  .mobile-mega-column-link {
     display: block;
     width: 100%;
     text-align: left;
-    background: none;
-    border: none;
-    padding: 0;
     font: inherit;
-    font-size: 10px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 6px;
+    font-size: 14px;
     font-weight: 600;
-    cursor: pointer;
-  }
-  .mobile-mega-links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .mobile-mega-link {
-    font-size: 12px;
-    color: var(--text);
+    color: var(--dark);
     background: var(--ivory);
     border: 1px solid rgba(200, 168, 162, 0.28);
-    border-radius: 999px;
-    padding: 7px 10px;
+    border-radius: 12px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease;
+  }
+  .mobile-mega-column-link:active {
+    background: rgba(246, 183, 215, 0.28);
+    border-color: rgba(196, 84, 122, 0.3);
   }
   .mobile-mega-see-all {
     margin: 4px 6px 10px;
@@ -3275,26 +3314,28 @@ footer {
 }
 @media (max-width: 600px) {
   .container { padding: 0 16px; }
-  .topbar { padding: 8px 12px; }
+  .topbar { padding: 9px 12px; font-size: 12px; }
   .topbar-inner {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
   }
+  /* Misma tipografía y rotación que en PC (sin marquee reducido). */
   .topbar-msg--rotate {
-    display: none;
-  }
-  .topbar-msg--marquee {
     display: block;
     grid-column: 1;
     justify-self: stretch;
     width: 100%;
     max-width: 100%;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: clip;
-    font-size: 10px;
-    letter-spacing: 0.06em;
-    text-align: left;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    font-weight: 500;
+    text-transform: uppercase;
+    line-height: 1.35;
+    text-align: center;
+    white-space: normal;
+  }
+  .topbar-msg--marquee {
+    display: none;
   }
   .topbar-user-slot {
     grid-column: 2;

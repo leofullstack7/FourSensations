@@ -30,6 +30,12 @@ export function resolveStoreMenuItemHref(opts: {
 }
 
 export function resolveStoreMenuGroupHref(categorySlug: string, group: string): string {
+  const slugKey = normalizeMenuLookup(categorySlug);
+  if (slugKey.includes("mayorista")) return "/mayorista";
+  /** Accesorios filtra por tipo (`linea`), no por familia capilar. */
+  if (slugKey === "accesorios") {
+    return `/categoria/${categorySlug}?linea=${encodeURIComponent(group)}`;
+  }
   return `/categoria/${categorySlug}?grupo=${encodeURIComponent(group)}`;
 }
 

@@ -519,13 +519,25 @@
   gap: 8px;
   padding: 0 28px;
   font-size: 12px;
+  font-weight: 500;
   color: rgba(255,255,255,0.75);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  line-height: 1.35;
   border-right: 1px solid rgba(255,255,255,0.15);
   flex-shrink: 0;
 }
 .marquee-item span { color: var(--gold-light); }
+@media (max-width: 768px) {
+  .marquee-strip { padding: 12px 0; }
+  .marquee-item {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    padding: 0 28px;
+    line-height: 1.35;
+  }
+}
 @keyframes marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }

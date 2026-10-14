@@ -47,11 +47,21 @@ export const defaultMenuConfig: MenuConfig = {
   },
   Accesorios: {
     icon: "👜",
-    subs: { Capilar: ["Diademas", "Gorros", "Cepillos", "Ligas", "Pinzas"] },
+    /** Cada tipo es una columna del menú (filtro `linea` en la landing). */
+    subs: {
+      Diademas: [],
+      Gorros: [],
+      Cepillos: [],
+      Ligas: [],
+      Pinzas: [],
+    },
   },
   Mayorista: {
     icon: "📦",
-    subs: { Programa: ["Registrarme como mayorista"], Paquetes: ["Kit Capilar"] },
+    subs: {
+      Programa: [],
+      Paquetes: [],
+    },
   },
 };
 
@@ -112,9 +122,11 @@ export function filterStorefrontLaunchMenu<T extends { config: MenuConfig; slugB
     if (!hit) continue;
     const isCorporal = norm === normalizeCategoryLabel("Cuidado Corporal");
     const isHair = norm === normalizeCategoryLabel("Cuidado capilar");
+    const isAccesorios = norm === normalizeCategoryLabel("Accesorios");
+    const isMayorista = norm === normalizeCategoryLabel("Mayorista");
     config[canonicalName] = {
       icon: hit.cfg.icon || defaultCfg.icon,
-      subs: isCorporal
+      subs: isCorporal || isAccesorios || isMayorista
         ? defaultCfg.subs
         : isHair
           ? remapHairMenuSubs(hit.cfg.subs)

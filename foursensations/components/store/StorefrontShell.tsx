@@ -50,14 +50,10 @@ import {
   resolveStorefrontDisplayAfterFilter,
 } from "@/lib/store/variant-groups";
 import {
-  normalizeMenuLookup,
   resolveStoreCategoryHref,
   resolveStoreMenuGroupHref,
-  resolveStoreMenuItemHref,
 } from "@/lib/store/menu-item-href";
-import { megaPromoForCategory, type MegaPromoByCategory, type MegaPromoImageSlot } from "@/lib/site-settings";
-import accesoriosMegaA from "@/assets/productos/FS027 Accesorios/FS027-1.webp";
-import accesoriosMegaB from "@/assets/productos/FS027 Accesorios/FS027-2.webp";
+import type { MegaPromoByCategory } from "@/lib/site-settings";
 
 type ToastItem = { id: number; msg: string; type: string; icon: string };
 
@@ -102,46 +98,13 @@ function normalizeSearchText(value: string): string {
     .trim();
 }
 
-function resolveMegaVisualSlots(
-  categoryName: string,
-  megaPromo: MegaPromoByCategory | undefined,
-): MegaPromoImageSlot[] {
-  const fromAdmin = megaPromoForCategory({ megaPromo }, categoryName).slice(0, 2);
-  if (fromAdmin.length >= 2) return fromAdmin;
-  if (fromAdmin.length === 1) {
-    return [
-      fromAdmin[0]!,
-      {
-        imageUrl: accesoriosMegaB.src,
-        href: `/categoria/${toCategorySlug("Accesorios")}`,
-        label: "Accesorios",
-      },
-    ];
-  }
-  if (categoryName.toLowerCase().includes("accesorio")) {
-    return [
-      {
-        imageUrl: accesoriosMegaA.src,
-        href: `/categoria/${toCategorySlug("Accesorios")}`,
-        label: "Colección",
-      },
-      {
-        imageUrl: accesoriosMegaB.src,
-        href: `/categoria/${toCategorySlug("Accesorios")}`,
-        label: "Detalles",
-      },
-    ];
-  }
-  return [];
-}
-
 export function StorefrontShell({
   children,
   catalogProducts,
   initialMenuConfig,
   categorySlugByName,
-  menuProductSlugs = {},
-  megaPromo,
+  menuProductSlugs: _menuProductSlugs = {},
+  megaPromo: _megaPromo,
   hideNavChrome = false,
 }: {
   children: ReactNode;
@@ -154,6 +117,8 @@ export function StorefrontShell({
   /** Oculta topbar + header de tienda (modales y carrito siguen activos). Útil para labs A/B. */
   hideNavChrome?: boolean;
 }) {
+  void _menuProductSlugs;
+  void _megaPromo;
   const [products, setProducts] = useState<StoreProduct[]>(catalogProducts);
   const [menuConfig] = useState<MenuConfig>(initialMenuConfig);
   const fullCatalogLoaded = useRef(false);
@@ -196,26 +161,6 @@ export function StorefrontShell({
     [categorySlugByName]
   );
 
-  const productSlugByName = useMemo(() => {
-    const map: Record<string, string> = { ...menuProductSlugs };
-    for (const p of products) {
-      const slug = p.slug?.trim();
-      if (!slug) continue;
-      map[normalizeMenuLookup(p.name)] = slug;
-    }
-    return map;
-  }, [menuProductSlugs, products]);
-
-  const menuItemHref = useCallback(
-    (cat: string, group: string, item: string) =>
-      resolveStoreMenuItemHref({
-        categorySlug: categoryPath(cat),
-        group,
-        item,
-        productSlugByName,
-      }),
-    [categoryPath, productSlugByName],
-  );
   const [cart, setCart] = useState<CartLine[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [favoritesHydrated, setFavoritesHydrated] = useState(false);
@@ -683,18 +628,14 @@ export function StorefrontShell({
   }, []);
 
   const alignCompactMega = useCallback((cat: string) => {
-    const compact = cat.toLowerCase().includes("accesorio");
-    if (!compact) {
-      setMegaAlignLeft(null);
-      return;
-    }
     const el = document.querySelector<HTMLElement>(`[data-mega-cat="${CSS.escape(cat)}"]`);
     if (!el) {
       setMegaAlignLeft(null);
       return;
     }
+    const panelWidth = 340;
     const left = Math.max(16, Math.round(el.getBoundingClientRect().left));
-    const maxLeft = Math.max(16, window.innerWidth - 520 - 16);
+    const maxLeft = Math.max(16, window.innerWidth - panelWidth - 16);
     setMegaAlignLeft(Math.min(left, maxLeft));
   }, []);
 
@@ -777,21 +718,6 @@ export function StorefrontShell({
           >
             {STOREFRONT_TOPBAR_MESSAGES[topbarIndex]}
           </MotionSpan>
-          <div className="topbar-msg topbar-msg--marquee" aria-hidden>
-            <div className="topbar-marquee-track">
-              {[0, 1].map((copy) => (
-                <span key={copy} className="topbar-marquee-copy">
-                  {STOREFRONT_TOPBAR_MESSAGES.map((msg, i) => (
-                    <span key={`${copy}-${i}`} className="topbar-marquee-item">
-                      {i > 0 ? <span className="topbar-marquee-dot">•</span> : null}
-                      {msg}
-                    </span>
-                  ))}
-                  <span className="topbar-marquee-dot">•</span>
-                </span>
-              ))}
-            </div>
-          </div>
           {isStoreCustomer ? (
             <div className="topbar-user-slot">
               <Link href="/cuenta/perfil" className="topbar-user" title={`Hola, ${customerLabel}`}>
@@ -993,6 +919,7 @@ export function StorefrontShell({
             <div className="mobile-mega-menu-inner">
               {Object.entries(menuConfig).map(([cat, data]) => {
                 const isOpen = mobileExpandedCat === cat;
+                const groups = Object.keys(data.subs);
                 return (
                   <div key={cat} className="mobile-mega-group">
                     <button
@@ -1006,11 +933,12 @@ export function StorefrontShell({
                       <span className="mobile-mega-cat-arrow">▾</span>
                     </button>
                     <div className={`mobile-mega-subwrap${isOpen ? " open" : ""}`}>
-                      {Object.entries(data.subs).map(([group, items]) => (
-                        <div key={group} className="mobile-mega-subgroup">
+                      <div className="mobile-mega-columns">
+                        {groups.map((group) => (
                           <button
+                            key={group}
                             type="button"
-                            className="mobile-mega-subtitle"
+                            className="mobile-mega-column-link"
                             onClick={() => {
                               navigateTo(resolveStoreMenuGroupHref(categoryPath(cat), group));
                               closeMobileMenu();
@@ -1018,23 +946,8 @@ export function StorefrontShell({
                           >
                             {group}
                           </button>
-                          <div className="mobile-mega-links">
-                            {items.map((i) => (
-                              <button
-                                key={i}
-                                type="button"
-                                className="mobile-mega-link"
-                                onClick={() => {
-                                  navigateTo(menuItemHref(cat, group, i));
-                                  closeMobileMenu();
-                                }}
-                              >
-                                {i}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                       <button
                         type="button"
                         className="mobile-mega-see-all"
@@ -1055,9 +968,7 @@ export function StorefrontShell({
         {desktopMegaCat && desktopMega ? (
           <div className="mega-dock" onMouseEnter={() => openDesktopMega(desktopMegaCat)}>
             <div
-              className={`mega-dock__inner${
-                desktopMegaCat.toLowerCase().includes("accesorio") ? " mega-dock__inner--accesorios" : ""
-              }`}
+              className="mega-dock__inner mega-dock__inner--vertical"
               style={
                 megaAlignLeft != null
                   ? ({ marginLeft: megaAlignLeft, marginRight: "auto" } as CSSProperties)
@@ -1073,67 +984,20 @@ export function StorefrontShell({
                   Ver todo
                 </StoreNavLink>
               </div>
-              {(() => {
-                const visualSlots = resolveMegaVisualSlots(desktopMegaCat, megaPromo);
-                const showVisual = visualSlots.length > 0;
-                const colCount = Object.keys(desktopMega.subs).length;
-                return (
-                  <div
-                    className={`mega-dock__body${showVisual ? " mega-dock__body--with-visual" : ""}`}
+              <nav className="mega-dock__columns" aria-label={`Subcategorías de ${desktopMegaCat}`}>
+                {Object.keys(desktopMega.subs).map((group) => (
+                  <StoreNavLink
+                    key={group}
+                    href={resolveStoreMenuGroupHref(categoryPath(desktopMegaCat), group)}
+                    className="mega-dock__column-link"
                   >
-                    <div
-                      className="mega-dock__grid"
-                      style={
-                        {
-                          "--mega-cols": String(Math.max(1, colCount)),
-                        } as CSSProperties
-                      }
-                    >
-                      {Object.entries(desktopMega.subs).map(([group, items]) => (
-                        <div key={group} className="mega-col">
-                          <StoreNavLink
-                            href={resolveStoreMenuGroupHref(categoryPath(desktopMegaCat), group)}
-                            className="mega-col__title"
-                          >
-                            {group}
-                          </StoreNavLink>
-                          <ul className="mega-col__list">
-                            {items.map((item) => (
-                              <li key={`${group}-${item}`}>
-                                <StoreNavLink
-                                  href={menuItemHref(desktopMegaCat, group, item)}
-                                  className="mega-col__link"
-                                >
-                                  {item}
-                                </StoreNavLink>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
-                    </div>
-                    {showVisual ? (
-                      <div className="mega-dock__visual" aria-hidden={false}>
-                        {visualSlots.slice(0, 2).map((slot, idx) => {
-                          const href = slot.href || resolveStoreCategoryHref(desktopMegaCat);
-                          return (
-                            <StoreNavLink
-                              key={`${slot.imageUrl}-${idx}`}
-                              href={href}
-                              className={`mega-dock__visual-panel mega-dock__visual-panel--${idx + 1}`}
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={slot.imageUrl} alt={slot.label || desktopMegaCat} className="mega-dock__visual-img" />
-                              <span className="mega-dock__visual-veil" />
-                              {slot.label ? <span className="mega-dock__visual-label">{slot.label}</span> : null}
-                            </StoreNavLink>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })()}
+                    <span className="mega-dock__column-label">{group}</span>
+                    <span className="mega-dock__column-arrow" aria-hidden>
+                      →
+                    </span>
+                  </StoreNavLink>
+                ))}
+              </nav>
             </div>
           </div>
         ) : null}
