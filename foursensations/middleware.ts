@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { SITE_LOCKED, isAllowedWhileLocked } from "@/lib/site-lock";
 
 function adminJsonError(status: 401 | 403, message: string) {
   return NextResponse.json(
@@ -18,6 +19,30 @@ function adminJsonError(status: 401 | 403, message: string) {
 
 export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
+
+  if (SITE_LOCKED && !isAllowedWhileLocked(path)) {
+    if (path.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Pronto estaremos al aire" },
+        {
+          status: 503,
+          headers: {
+            "Cache-Control": "no-store",
+            "X-Robots-Tag": "noindex, nofollow",
+          },
+        }
+      );
+    }
+
+    const url = req.nextUrl.clone();
+    url.pathname = "/proximamente";
+    url.search = "";
+    const locked = NextResponse.rewrite(url);
+    locked.headers.set("Cache-Control", "no-store");
+    locked.headers.set("X-Robots-Tag", "noindex, nofollow");
+    return locked;
+  }
+
   const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
 
   const token = secret
@@ -63,5 +88,7 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin", "/admin/:path*", "/api/admin/:path*"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|xml|woff2?)$).*)",
+  ],
 };
