@@ -12,6 +12,7 @@ import { isDisplayableImageUrl } from "@/lib/util/image-url";
 import { productHeroThemeFromSlug } from "@/lib/store/product-hero-theme";
 import { getCategoryLabel } from "@/lib/category-labels";
 import { getCatalogProductCopy } from "@/lib/catalog-product-copy";
+import { getProductDisplayName } from "@/lib/product-display-names";
 import { ProductColorSwatchField } from "@/components/store/ProductColorSwatchField";
 
 function galleryPool(product: StoreProduct): string[] {

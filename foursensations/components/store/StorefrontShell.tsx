@@ -907,6 +907,7 @@ export function StorefrontShell({
                         </p>
                         <p className="gb-customer-popover__text">
                           Spoiler: Te va a encantar estar en el Club de los Cabellos Perfectos
+                        </p>
                         <nav className="gb-customer-popover__nav" aria-label="Tu cuenta">
                           <Link
                             href="/cuenta/perfil"
