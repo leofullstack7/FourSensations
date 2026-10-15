@@ -18,6 +18,7 @@ import {
   shippingZoneContextMessage,
 } from "@/lib/checkout/shipping-zones";
 import { loadCart, saveCart, syncCartPricesFromCatalog } from "@/lib/cart-storage";
+import { searchColombiaCities, type ColombiaCity } from "@/lib/checkout/colombia-cities";
 import { formatPrice } from "@/lib/format";
 import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
 import { loadWholesaleCheckoutMode, saveWholesaleCheckoutMode, type WholesaleCheckoutMode } from "@/lib/wholesale-checkout-mode";
@@ -112,6 +113,8 @@ export function CheckoutPageClient() {
   const [line1, setLine1] = useState("");
   const [line2, setLine2] = useState("");
   const [city, setCity] = useState("");
+  const [cityOpen, setCityOpen] = useState(false);
+  const [cityActive, setCityActive] = useState(0);
   const [region, setRegion] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [note, setNote] = useState("");
@@ -235,12 +238,19 @@ export function CheckoutPageClient() {
     };
   }, []);
 
+  const chooseCity = (row: ColombiaCity) => {
+    setCity(row.city);
+    setRegion(row.department);
+    setCityOpen(false);
+  };
+
   const persist = useCallback((next: CartLine[]) => {
     setCart(next);
     saveCart(next);
   }, []);
 
   const subtotal = useMemo(() => cart.reduce((s, i) => s + i.price * i.qty, 0), [cart]);
+  const citySuggestions = useMemo(() => (city.trim().length < 1 ? [] : searchColombiaCities(city, 8)), [city]);
   const enviaExclusion = useMemo(() => findEnviaExclusion(city, region), [city, region]);
   const enviaBlocked = Boolean(enviaExclusion);
   const shippingAmount = useMemo(
@@ -920,18 +930,68 @@ export function CheckoutPageClient() {
                   </label>
                   <input id="gb-line2" className="gb-co-input" value={line2} onChange={(e) => setLine2(e.target.value)} />
                 </div>
-                <div className="gb-co-field">
+                <div className="gb-co-field gb-co-city">
                   <label className="gb-co-label" htmlFor="gb-city">
                     Ciudad *
                   </label>
                   <input
                     id="gb-city"
                     className="gb-co-input"
+                    autoComplete="off"
+                    role="combobox"
+                    aria-expanded={cityOpen && citySuggestions.length > 0}
+                    aria-controls="gb-city-list"
+                    aria-autocomplete="list"
                     value={city}
-                    onChange={(e) => setCity(e.target.value)}
+                    onChange={(e) => {
+                      setCity(e.target.value);
+                      setCityOpen(true);
+                      setCityActive(0);
+                    }}
+                    onFocus={() => setCityOpen(true)}
+                    onBlur={() => window.setTimeout(() => setCityOpen(false), 120)}
+                    onKeyDown={(e) => {
+                      if (!cityOpen || citySuggestions.length === 0) return;
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setCityActive((i) => (i + 1) % citySuggestions.length);
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setCityActive((i) => (i - 1 + citySuggestions.length) % citySuggestions.length);
+                      } else if (e.key === "Enter" && citySuggestions[cityActive]) {
+                        e.preventDefault();
+                        const pick = citySuggestions[cityActive]!;
+                        setCity(pick.city);
+                        setRegion(pick.department);
+                        setCityOpen(false);
+                      } else if (e.key === "Escape") {
+                        setCityOpen(false);
+                      }
+                    }}
                     placeholder="Manizales, Medellín…"
                     required
                   />
+                  {cityOpen && citySuggestions.length > 0 ? (
+                    <ul id="gb-city-list" className="gb-co-city-list" role="listbox">
+                      {citySuggestions.map((row, i) => (
+                        <li key={`${row.city}-${row.department}`}>
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={i === cityActive}
+                            className={i === cityActive ? "is-active" : ""}
+                            onMouseDown={(ev) => {
+                              ev.preventDefault();
+                              chooseCity(row);
+                            }}
+                          >
+                            <strong>{row.city}</strong>
+                            <span>{row.department}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </div>
                 <div className="gb-co-field">
                   <label className="gb-co-label" htmlFor="gb-region">

@@ -81,16 +81,11 @@ export async function applyMercadoPagoPayment(
         }
         for (const line of current.items) {
           if (!line.productId) continue;
-          const p = await tx.product.findUnique({ where: { id: line.productId } });
-          if (!p || p.stock < line.quantity) {
-            throw new Error(`Stock insuficiente para ${line.name}`);
-          }
-        }
-        for (const line of current.items) {
-          if (!line.productId) continue;
+          const p = await tx.product.findUnique({ where: { id: line.productId }, select: { stock: true } });
+          if (!p) continue;
           await tx.product.update({
             where: { id: line.productId },
-            data: { stock: { decrement: line.quantity } },
+            data: { stock: Math.max(0, p.stock - line.quantity) },
           });
         }
         await tx.order.update({

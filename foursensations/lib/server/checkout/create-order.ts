@@ -202,15 +202,12 @@ export async function createPendingOrderFromCheckout(
         });
       }
 
-      for (const [pid, need] of stockNeed) {
+      for (const [pid] of stockNeed) {
         const p =
           byId.get(pid) ??
           (await tx.product.findUnique({ where: { id: pid } }));
         if (!p || !p.active) {
           throw new Error(`Producto no disponible: ${pid}`);
-        }
-        if (p.stock < need) {
-          throw new Error(`Stock insuficiente para «${p.name}»`);
         }
       }
 
