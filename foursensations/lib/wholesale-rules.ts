@@ -8,6 +8,8 @@ export type WholesalePaidOrder = {
   createdAt: Date | string;
   paymentStatus?: string | null;
   status?: string | null;
+  paymentProvider?: string | null;
+  checkoutChannel?: string | null;
 };
 
 export type WholesaleCycleStatus = {
@@ -25,15 +27,24 @@ function toDate(value: Date | string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function isPaidOrder(order: WholesalePaidOrder): boolean {
-  const pay = (order.paymentStatus ?? "").toUpperCase();
+function countsAsWholesaleOrder(order: WholesalePaidOrder): boolean {
+  if ((order.checkoutChannel ?? "").toLowerCase() === "retail") return false;
   const status = (order.status ?? "").toUpperCase();
-  return pay === "APPROVED" || status === "PAID";
+  if (status === "CANCELLED" || status === "FAILED") return false;
+  const pay = (order.paymentStatus ?? "").toUpperCase();
+  if (pay === "APPROVED" || status === "PAID") return true;
+  return (order.paymentProvider ?? "").toUpperCase() === "CONTRAENTREGA";
+}
+
+export function checkoutChannelFromAddress(address: unknown): string | null {
+  if (!address || typeof address !== "object" || Array.isArray(address)) return null;
+  const channel = (address as { checkoutChannel?: unknown }).checkoutChannel;
+  return typeof channel === "string" ? channel : null;
 }
 
 export function resolveWholesaleCycle(orders: WholesalePaidOrder[], now = new Date()): WholesaleCycleStatus {
   const paid = orders
-    .filter(isPaidOrder)
+    .filter(countsAsWholesaleOrder)
     .map((o) => ({ total: o.total, at: toDate(o.createdAt) }))
     .filter((o): o is { total: number; at: Date } => o.at != null)
     .sort((a, b) => b.at.getTime() - a.at.getTime());
@@ -89,5 +100,6 @@ export function wholesaleMinimumReminder(minimumOrder: number, cartSubtotal: num
   if (missing <= 0) {
     return `Tu pedido mayorista ya supera el mínimo de ${minimumOrder.toLocaleString("es-CO")}.`;
   }
-  return `Recuerda completar tu pedido: el mínimo mayorista es $${minimumOrder.toLocaleString("es-CO")}. Te faltan $${missing.toLocaleString("es-CO")} para poder pagar.`;
+  const money = (n: number) => `$${n.toLocaleString("es-CO")}`;
+  return `Recuerda que debes acumular un mínimo de ${money(minimumOrder)} para poder pagar con los precios para mayorista, este pedido vale ${money(cartSubtotal)}, te falta ${money(missing)}.`;
 }

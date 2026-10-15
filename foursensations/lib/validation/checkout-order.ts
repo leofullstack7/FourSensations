@@ -37,7 +37,9 @@ export const createCheckoutOrderSchema = z
     customerNote: z.string().max(2000).optional(),
     shippingZoneId: z.enum(SHIPPING_ZONE_IDS),
     /** Preferencia de pasarela; el costo de envío lo calcula el servidor. */
-    paymentProvider: z.enum(["EPAYCO", "BOLD", "MERCADOPAGO", "ADDI"]).optional(),
+    paymentProvider: z.enum(["EPAYCO", "BOLD", "MERCADOPAGO", "ADDI", "CONTRAENTREGA"]).optional(),
+    /** Mayorista: precios de volumen. Detal: precios públicos, sin mínimo. */
+    pricingMode: z.enum(["wholesale", "retail"]).optional(),
     /** Cédula (requerida para Addi). */
     customerDocument: z.string().min(5).max(20).optional(),
     /** Código de cupón opcional. */

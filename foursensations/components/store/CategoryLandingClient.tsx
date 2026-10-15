@@ -8,7 +8,6 @@ import { useStoreNavigation } from "@/components/store/StoreNavigationProvider";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreProductCard } from "@/components/store/store-product-card";
 import { ProductCollage } from "@/components/store/ProductCollage";
-import { AccessoriesPhotoGallery } from "@/components/store/AccessoriesPhotoGallery";
 import type { StoreProduct } from "@/lib/types/product";
 import { getCategoryLandingCopy, HAIR_FILTER_GROUPS } from "@/lib/category-landing-theme";
 import {
@@ -32,7 +31,6 @@ type CategoryLandingClientProps = {
   defaultProductTag: string;
   defaultLine?: string;
   collageUrls?: string[];
-  galleryUrls?: string[];
 };
 
 const CATEGORY_PAGE_SIZE = 24;
@@ -121,7 +119,6 @@ export function CategoryLandingClient({
   defaultProductTag,
   defaultLine = "",
   collageUrls = [],
-  galleryUrls = [],
 }: CategoryLandingClientProps) {
   const { openProductModal, addToCart, toggleFavorite, favorites, mergeCatalogProducts } = useStorefrontUi();
   const { categoryNavFilters } = useStoreNavigation();
@@ -403,7 +400,7 @@ export function CategoryLandingClient({
   return (
     <main className="category-landing-page">
       <section
-        className={`fs-account-hero fs-cat-hero${accessoryMode && galleryUrls.length > 0 ? " fs-cat-hero--gallery" : ""}`}
+        className="fs-account-hero fs-cat-hero"
         data-landing-slug={categorySlug}
         aria-label={`Categoría ${categoryLabel}`}
       >
@@ -411,7 +408,7 @@ export function CategoryLandingClient({
           <p className="fs-account-hero__eyebrow">{copy.eyebrow}</p>
           <h1>{copy.headline}</h1>
           <p>{copy.subtitle}</p>
-          <p className="fs-cat-commercial">{copy.commercialLine}</p>
+          {copy.commercialLine ? <p className="fs-cat-commercial">{copy.commercialLine}</p> : null}
           <div className="category-landing-cta-row" style={{ marginTop: 18 }}>
             <Link href="/" className="btn btn-outline btn-sm">
               {copy.ctaBack}
@@ -428,11 +425,7 @@ export function CategoryLandingClient({
             </button>
           </div>
         </div>
-        {accessoryMode && galleryUrls.length > 0 ? (
-          <AccessoriesPhotoGallery urls={galleryUrls} />
-        ) : (
-          <ProductCollage sources={collageUrls} />
-        )}
+        <ProductCollage sources={collageUrls} />
       </section>
 
       {copy.benefits.length > 0 ? (
@@ -451,6 +444,7 @@ export function CategoryLandingClient({
 
       <section className="section-pad reveal" id="cat-catalog" style={{ paddingTop: 8 }}>
         <div className="container">
+          {hairMode || categorySlug === "cuidado-corporal" ? null : (
           <div className="category-filter-panel">
             <div className="category-filter-title">Filtrar el catálogo</div>
             {hairMode ? (
@@ -516,6 +510,7 @@ export function CategoryLandingClient({
               </div>
             ) : null}
           </div>
+          )}
 
           <p className="fs-cat-count">
             {showInitialSkeleton

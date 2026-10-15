@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { buildCustomerOrderConfirmationPayload, sendOrderConfirmationToCustomer } from "@/lib/server/email/order-confirmation-customer";
+import { orderPayloadForEmail, sendOrderNotification } from "@/lib/server/email/order-notification";
 import { createPendingOrderFromCheckout } from "@/lib/server/checkout/create-order";
+import { prisma } from "@/lib/prisma";
 import { createCheckoutOrderSchema } from "@/lib/validation/checkout-order";
 
 export async function POST(req: Request) {
@@ -26,6 +29,24 @@ export async function POST(req: Request) {
   const result = await createPendingOrderFromCheckout(parsed.data, { userId });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
+  }
+
+  if (result.paymentProvider === "CONTRAENTREGA") {
+    const order = await prisma.order.findUnique({
+      where: { id: result.orderId },
+      include: { items: true },
+    });
+    if (order) {
+      void sendOrderNotification(orderPayloadForEmail(order)).catch((err) =>
+        console.error("[email] contraentrega admin", err),
+      );
+      const customerPayload = buildCustomerOrderConfirmationPayload(order);
+      if (customerPayload) {
+        void sendOrderConfirmationToCustomer(customerPayload).catch((err) =>
+          console.error("[email] contraentrega cliente", err),
+        );
+      }
+    }
   }
 
   return NextResponse.json({

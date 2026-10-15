@@ -18,6 +18,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="preload" as="image" href="/brand/splash/logo-fs.webp" type="image/webp" />
         <link rel="preload" as="image" href="/brand/splash/el-club.webp" type="image/webp" />
+        <link rel="preload" as="image" href="/brand/loader/fondo-loader-pc.jpeg" media="(min-width: 769px)" />
+        <link rel="preload" as="image" href="/brand/loader/contenido-loader-pc.png" media="(min-width: 769px)" />
+        <link rel="preload" as="image" href="/brand/loader/fondo-loader-movil.jpeg" media="(max-width: 768px)" />
+        <link rel="preload" as="image" href="/brand/loader/contenido-loader-movil.png" media="(max-width: 768px)" />
       </head>
       <body>
         <Providers>{children}</Providers>

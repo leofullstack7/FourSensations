@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ENVIA_REEXPEDITION_DESTINATIONS, findEnviaExclusion } from "@/lib/checkout/envia-exclusions";
 import {
@@ -19,6 +20,7 @@ import {
 import { loadCart, saveCart, syncCartPricesFromCatalog } from "@/lib/cart-storage";
 import { formatPrice } from "@/lib/format";
 import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
+import { loadWholesaleCheckoutMode, saveWholesaleCheckoutMode, type WholesaleCheckoutMode } from "@/lib/wholesale-checkout-mode";
 import { withWholesalePrices } from "@/lib/wholesale-pricing";
 import { wholesaleMinimumReminder } from "@/lib/wholesale-rules";
 import { useSession } from "next-auth/react";
@@ -42,7 +44,7 @@ function cartLineImageSrc(item: CartLine): string | null {
 
 type PayPhase = "idle" | "order" | "session" | "widget" | "integrity" | "error";
 
-type PaymentMethod = "mercadopago" | "addi" | "bold";
+type PaymentMethod = "mercadopago" | "addi" | "bold" | "contraentrega";
 
 /** Bold deshabilitado temporalmente en checkout. */
 const BOLD_CHECKOUT_ENABLED = false;
@@ -95,8 +97,10 @@ function mountBoldButton(opts: {
 
 export function CheckoutPageClient() {
   const reduceMotion = useReducedMotion();
+  const router = useRouter();
   const itemVariants = useMemo(() => listItem(Boolean(reduceMotion)), [reduceMotion]);
   const boldMountRef = useRef<HTMLDivElement>(null);
+  const publicCatalogRef = useRef<StoreProduct[]>([]);
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -131,8 +135,39 @@ export function CheckoutPageClient() {
   const { data: session } = useSession();
   const isWholesaleCustomer = session?.user?.role === "CUSTOMER" && Boolean(session.user.isWholesale);
   const [wholesaleMin, setWholesaleMin] = useState(WHOLESALE_THRESHOLD_COP);
+  const [wholesaleMode, setWholesaleMode] = useState<WholesaleCheckoutMode>("wholesale");
+  const buyingAsWholesale = isWholesaleCustomer && wholesaleMode === "wholesale";
+
+  const repriceCart = useCallback((mode: WholesaleCheckoutMode, wholesale: boolean) => {
+    const catalog = publicCatalogRef.current;
+    if (catalog.length === 0) return;
+    const priced = wholesale && mode === "wholesale" ? withWholesalePrices(catalog) : catalog;
+    setCart((prev) => {
+      const next = syncCartPricesFromCatalog(prev, priced);
+      if (next !== prev) saveCart(next);
+      return next;
+    });
+  }, []);
+
+  const chooseWholesaleMode = useCallback(
+    (mode: WholesaleCheckoutMode) => {
+      setWholesaleMode(mode);
+      saveWholesaleCheckoutMode(mode);
+      if (mode === "wholesale") {
+        setPaymentMethod("contraentrega");
+        setCouponApplied(null);
+        setCouponError(null);
+      } else if (paymentMethod === "contraentrega") {
+        setPaymentMethod("mercadopago");
+      }
+      repriceCart(mode, isWholesaleCustomer);
+    },
+    [isWholesaleCustomer, paymentMethod, repriceCart],
+  );
 
   useEffect(() => {
+    const initialMode = loadWholesaleCheckoutMode();
+    setWholesaleMode(initialMode);
     setCart(loadCart());
     setHydrated(true);
     void (async () => {
@@ -148,12 +183,15 @@ export function CheckoutPageClient() {
         if (!catalogRes.ok) return;
         const data = (await catalogRes.json()) as { products?: StoreProduct[] };
         if (!Array.isArray(data.products) || data.products.length === 0) return;
-        const priced = isWholesaleCustomer ? withWholesalePrices(data.products) : data.products;
+        publicCatalogRef.current = data.products;
+        const priced =
+          isWholesaleCustomer && initialMode === "wholesale" ? withWholesalePrices(data.products) : data.products;
         setCart((prev) => {
           const next = syncCartPricesFromCatalog(prev, priced);
           if (next !== prev) saveCart(next);
           return next;
         });
+        if (isWholesaleCustomer && initialMode === "wholesale") setPaymentMethod("contraentrega");
       } catch {
         /* catálogo opcional: el checkout cobra precio de DB */
       }
@@ -303,18 +341,22 @@ export function CheckoutPageClient() {
         customerNote: note.trim() || undefined,
         shippingZoneId,
         paymentProvider:
-          provider === "mercadopago"
-            ? ("MERCADOPAGO" as const)
-            : provider === "addi"
-              ? ("ADDI" as const)
-              : ("BOLD" as const),
+          provider === "contraentrega"
+            ? ("CONTRAENTREGA" as const)
+            : provider === "mercadopago"
+              ? ("MERCADOPAGO" as const)
+              : provider === "addi"
+                ? ("ADDI" as const)
+                : ("BOLD" as const),
+        pricingMode: buyingAsWholesale ? ("wholesale" as const) : ("retail" as const),
         ...(provider === "addi" && documentNumber.trim()
           ? { customerDocument: documentNumber.replace(/\D/g, "") }
           : {}),
-        ...(couponApplied?.code ? { couponCode: couponApplied.code } : {}),
+        ...(!buyingAsWholesale && couponApplied?.code ? { couponCode: couponApplied.code } : {}),
       };
     },
     [
+      buyingAsWholesale,
       cart,
       city,
       couponApplied?.code,
@@ -343,15 +385,15 @@ export function CheckoutPageClient() {
       if (documentNumber.replace(/\D/g, "").length < 5) return "Addi requiere tu número de cédula.";
       if (phone.replace(/\D/g, "").length < 7) return "Addi requiere un teléfono / WhatsApp válido.";
     }
-    if (isWholesaleCustomer && subtotal < wholesaleMin) {
+    if (buyingAsWholesale && subtotal < wholesaleMin) {
       return wholesaleMinimumReminder(wholesaleMin, subtotal);
     }
     return null;
   }, [
+    buyingAsWholesale,
     city,
     documentNumber,
     email,
-    isWholesaleCustomer,
     line1,
     name,
     paymentMethod,
@@ -576,6 +618,27 @@ export function CheckoutPageClient() {
     }
   }, [buildOrderPayload, email, name, phone, validateForm]);
 
+  const runContraentrega = useCallback(async () => {
+    setErrorMsg(null);
+    const v = validateForm();
+    if (v) {
+      setInfoModal("Completa la información");
+      setErrorMsg(v);
+      setPhase("idle");
+      return;
+    }
+    setPhase("order");
+    try {
+      const ref = await createPendingOrder("contraentrega");
+      if (!ref) return;
+      saveCart([]);
+      router.push(`/checkout/resultado?ref=${encodeURIComponent(ref)}`);
+    } catch (e) {
+      setPhase("error");
+      setErrorMsg(e instanceof Error ? e.message : "No se pudo confirmar el pedido");
+    }
+  }, [createPendingOrder, router, validateForm]);
+
   const handlePay = () => {
     const v = validateForm();
     if (v) {
@@ -583,7 +646,8 @@ export function CheckoutPageClient() {
       setErrorMsg(v);
       return;
     }
-    if (paymentMethod === "bold" && BOLD_CHECKOUT_ENABLED) void runBoldPayment();
+    if (paymentMethod === "contraentrega") void runContraentrega();
+    else if (paymentMethod === "bold" && BOLD_CHECKOUT_ENABLED) void runBoldPayment();
     else if (paymentMethod === "addi") void runAddiPayment();
     else if (paymentMethod === "mercadopago") void runMercadoPagoPayment();
   };
@@ -597,6 +661,7 @@ export function CheckoutPageClient() {
     if (phase === "widget" && paymentMethod === "bold") return "Completa el pago arriba ↑";
     if (!formComplete) return "Completa tus datos para pagar";
     if (phase === "error") return "Reintentar";
+    if (paymentMethod === "contraentrega") return "Confirmar pedido contraentrega";
     if (paymentMethod === "bold") return "Preparar pago con Bold";
     if (paymentMethod === "addi") return "Pagar con Addi";
     return "Ir a Mercado Pago";
@@ -1027,6 +1092,27 @@ export function CheckoutPageClient() {
                 )}
               </strong>
             </div>
+            {isWholesaleCustomer ? (
+              <div className="cart-channel-switch" role="group" aria-label="Tipo de compra" style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  className={wholesaleMode === "wholesale" ? "is-active" : ""}
+                  aria-pressed={wholesaleMode === "wholesale"}
+                  onClick={() => chooseWholesaleMode("wholesale")}
+                >
+                  Comprar como mayorista
+                </button>
+                <button
+                  type="button"
+                  className={wholesaleMode === "retail" ? "is-active" : ""}
+                  aria-pressed={wholesaleMode === "retail"}
+                  onClick={() => chooseWholesaleMode("retail")}
+                >
+                  Comprar al detal
+                </button>
+              </div>
+            ) : null}
+            {buyingAsWholesale ? null : (
             <div className="gb-co-coupon">
               <label className="gb-co-coupon__label" htmlFor="checkout-coupon">
                 Cupón
@@ -1063,6 +1149,7 @@ export function CheckoutPageClient() {
                 </p>
               ) : null}
             </div>
+            )}
             {couponDiscount > 0 ? (
               <div className="gb-co-total-row">
                 <span>Descuento cupón</span>
@@ -1079,6 +1166,19 @@ export function CheckoutPageClient() {
               ¿Cómo quieres pagar?
             </div>
             <div className="gb-co-pay-grid" role="radiogroup" aria-label="Método de pago">
+              {buyingAsWholesale ? (
+                <motion.button
+                  type="button"
+                  role="radio"
+                  aria-checked
+                  className="gb-co-method-card gb-co-method-card--active"
+                  onClick={() => setPaymentMethod("contraentrega")}
+                >
+                  <span className="gb-co-method-name">Pago contraentrega</span>
+                  <span className="gb-co-method-desc">Los pedidos mayorista se pagan al recibir el pedido.</span>
+                </motion.button>
+              ) : (
+              <>
               <motion.button
                 type="button"
                 role="radio"
@@ -1125,6 +1225,8 @@ export function CheckoutPageClient() {
                   <span className="gb-co-method-desc">Pago embebido Bold</span>
                 </motion.button>
               ) : null}
+              </>
+              )}
             </div>
 
             {BOLD_CHECKOUT_ENABLED ? <div ref={boldMountRef} className="gb-co-bold-mount" id="gb-bold-embed" /> : null}
@@ -1134,7 +1236,7 @@ export function CheckoutPageClient() {
               servidor.
             </div>
 
-            {isWholesaleCustomer ? (
+            {buyingAsWholesale ? (
               <p className="gb-co-wholesale-hint" role="status">
                 {wholesaleMinimumReminder(wholesaleMin, subtotal)}
               </p>
@@ -1144,7 +1246,7 @@ export function CheckoutPageClient() {
               type="button"
               className={`gb-co-pay${!formComplete && !payBusy ? " gb-co-pay--incomplete" : ""}`}
               onClick={handlePay}
-              disabled={payBusy || !paymentMethod || (isWholesaleCustomer && subtotal < wholesaleMin)}
+              disabled={payBusy || !paymentMethod}
             >
               {payBusy && <span className="gb-co-spinner" aria-hidden />}
               {payLabel}

@@ -9,7 +9,8 @@ import { slugify } from "@/lib/slugify";
 import { findStorefrontProductByMenuName } from "@/lib/products";
 import { productPagePath } from "@/lib/store/menu-item-href";
 import { pickRandomCollageImages } from "@/lib/server/pick-collage-images";
-import { listSkuMediaUrls } from "@/lib/server/product-photo-files";
+import { getSiteSettingsData } from "@/lib/server/site-settings";
+import { landingCollageUrls } from "@/lib/site-settings";
 
 export const revalidate = 300;
 
@@ -102,8 +103,12 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const lineNames = cat.subcategories.map((s) => s.name);
   const defaultLine = matchFromList(lineNames, searchParams?.linea) || matchFromList(lineNames, searchParams?.sub);
 
-  const collageUrls = await pickRandomCollageImages([slug], 3);
-  const galleryUrls = slug === "accesorios" ? listSkuMediaUrls("FS027") : [];
+  const settings = await getSiteSettingsData();
+  const customCollage = landingCollageUrls(settings, slug);
+  const collageUrls =
+    customCollage.length >= 3
+      ? customCollage.slice(0, 3)
+      : [...customCollage, ...(await pickRandomCollageImages([slug], 3))].slice(0, 3);
 
   return (
     <CategoryLandingClient
@@ -119,7 +124,6 @@ export default async function CategoryPage({ params, searchParams }: Props) {
       defaultProductTag={defaultProductTag}
       defaultLine={defaultLine}
       collageUrls={collageUrls}
-      galleryUrls={galleryUrls}
     />
   );
 }

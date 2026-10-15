@@ -2869,6 +2869,28 @@
   white-space: normal;
 }
 
+.cart-channel-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.cart-channel-switch button {
+  border: 1px solid var(--cream);
+  background: #fff;
+  color: var(--dark);
+  border-radius: 999px;
+  padding: 10px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.cart-channel-switch button.is-active {
+  background: var(--dark);
+  color: #fff;
+  border-color: var(--dark);
+}
+
 .cart-wholesale-block {
   margin: 0 0 14px;
   padding: 14px 16px;

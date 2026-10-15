@@ -95,15 +95,18 @@ export function CheckoutResultadoClient() {
     return () => window.clearInterval(t);
   }, [reference, fetchOrder]);
 
-  const paid = order?.status === "PAID" && order?.paymentStatus === "APPROVED";
+  const cashOnDelivery = order?.paymentProvider === "CONTRAENTREGA";
+  const paid = (order?.status === "PAID" && order?.paymentStatus === "APPROVED") || cashOnDelivery;
   const providerLabel =
-    order?.paymentProvider === "BOLD" || isBoldReturn
-      ? "Bold"
-      : order?.paymentProvider === "EPAYCO"
-        ? "ePayco"
-        : order?.paymentProvider === "ADDI"
-          ? "Addi"
-          : "Mercado Pago";
+    cashOnDelivery
+      ? "contraentrega"
+      : order?.paymentProvider === "BOLD" || isBoldReturn
+        ? "Bold"
+        : order?.paymentProvider === "EPAYCO"
+          ? "ePayco"
+          : order?.paymentProvider === "ADDI"
+            ? "Addi"
+            : "Mercado Pago";
 
   useEffect(() => {
     if (paid) saveCart([]);
@@ -126,12 +129,14 @@ export function CheckoutResultadoClient() {
             boxShadow: "0 12px 40px rgba(0,0,0,0.06)",
           }}
         >
-        <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>{paid ? "✨" : "💳"}</div>
+        <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>{cashOnDelivery ? "📦" : paid ? "✨" : "💳"}</div>
         <h1 style={{ fontFamily: "var(--font-display, Georgia, serif)", fontSize: "1.75rem", marginBottom: 8 }}>
-          {paid ? "¡Pago confirmado!" : "Procesando tu pago"}
+          {cashOnDelivery ? "Pedido contraentrega listo" : paid ? "¡Pago confirmado!" : "Procesando tu pago"}
         </h1>
         <p style={{ color: "var(--text-muted, #6b6560)", lineHeight: 1.6, marginBottom: 20 }}>
-          {paid
+          {cashOnDelivery
+            ? "Tu pedido mayorista quedó registrado. Pagas al recibir el pedido."
+            : paid
             ? "Gracias por tu compra en Four Sensations. Recibirás la confirmación por correo."
             : isBoldReturn && boldTxStatus
               ? `Estado en Bold: ${boldTxStatus}. Consultamos tu pedido en nuestra base de datos; la confirmación definitiva puede tardar unos segundos.`
@@ -160,8 +165,9 @@ export function CheckoutResultadoClient() {
           </Link>
         </div>
         <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 24, lineHeight: 1.5 }}>
-          ¿Necesitas ayuda? Escríbenos por WhatsApp desde el sitio. No confirmamos el pago solo por esta pantalla: el
-          estado real es el que ves arriba según nuestro servidor (webhook {providerLabel} o sincronización).
+          {cashOnDelivery
+            ? "¿Necesitas ayuda? Escríbenos por WhatsApp desde el sitio. El pago se hace contraentrega al recibir el pedido."
+            : `¿Necesitas ayuda? Escríbenos por WhatsApp desde el sitio. No confirmamos el pago solo por esta pantalla: el estado real es el que ves arriba según nuestro servidor (webhook ${providerLabel} o sincronización).`}
         </p>
         </motion.div>
       </div>

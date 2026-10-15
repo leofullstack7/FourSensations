@@ -8,10 +8,33 @@ export type MegaPromoImageSlot = {
 
 export type MegaPromoByCategory = Record<string, MegaPromoImageSlot[]>;
 
+export const LANDING_COLLAGE_SLUGS = ["cuidado-capilar", "cuidado-corporal", "accesorios"] as const;
+export type LandingCollageSlug = (typeof LANDING_COLLAGE_SLUGS)[number];
+export type LandingCollages = Record<LandingCollageSlug, [string, string, string]>;
+
 export type SiteSettingsData = {
   megaPromo?: MegaPromoByCategory;
+  landingCollages?: LandingCollages;
   [key: string]: unknown;
 };
+
+export function normalizeLandingCollages(raw: unknown): LandingCollages {
+  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const out = {} as LandingCollages;
+  for (const slug of LANDING_COLLAGE_SLUGS) {
+    const slots = Array.isArray(source[slug]) ? source[slug] : [];
+    const urls = slots.slice(0, 3).map((slot) => (typeof slot === "string" ? slot.trim() : ""));
+    while (urls.length < 3) urls.push("");
+    out[slug] = [urls[0] ?? "", urls[1] ?? "", urls[2] ?? ""];
+  }
+  return out;
+}
+
+export function landingCollageUrls(data: SiteSettingsData | null | undefined, slug: string): string[] {
+  const map = normalizeLandingCollages(data?.landingCollages);
+  if (!(LANDING_COLLAGE_SLUGS as readonly string[]).includes(slug)) return [];
+  return map[slug as LandingCollageSlug].filter((url) => url.length > 0);
+}
 
 export function normalizeMegaPromo(raw: unknown): MegaPromoByCategory {
   if (!raw || typeof raw !== "object") return {};

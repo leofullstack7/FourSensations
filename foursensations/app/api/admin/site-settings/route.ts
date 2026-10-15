@@ -1,7 +1,7 @@
 import { requireAdminApi } from "@/lib/server/require-admin-api";
 import { noStoreJson } from "@/lib/server/no-store-json";
 import { getSiteSettingsData, mergeSiteSettingsData } from "@/lib/server/site-settings";
-import { normalizeMegaPromo, type SiteSettingsData } from "@/lib/site-settings";
+import { normalizeLandingCollages, normalizeMegaPromo, type SiteSettingsData } from "@/lib/site-settings";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -12,6 +12,7 @@ export async function GET() {
   const data = await getSiteSettingsData();
   return noStoreJson({
     megaPromo: normalizeMegaPromo(data.megaPromo),
+    landingCollages: normalizeLandingCollages(data.landingCollages),
   });
 }
 
@@ -29,11 +30,15 @@ export async function PUT(req: Request) {
   if ("megaPromo" in rec) {
     patch.megaPromo = normalizeMegaPromo(rec.megaPromo);
   }
+  if ("landingCollages" in rec) {
+    patch.landingCollages = normalizeLandingCollages(rec.landingCollages);
+  }
   if (Object.keys(patch).length === 0) {
     return noStoreJson({ error: "Nada que actualizar" }, { status: 400 });
   }
   const data = await mergeSiteSettingsData(patch);
   return noStoreJson({
     megaPromo: normalizeMegaPromo(data.megaPromo),
+    landingCollages: normalizeLandingCollages(data.landingCollages),
   });
 }

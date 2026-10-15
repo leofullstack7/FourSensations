@@ -12,7 +12,7 @@ import { getActiveStoreComboById } from "@/lib/server/store-combos";
 import type { CreateCheckoutOrderInput } from "@/lib/validation/checkout-order";
 import { generateOrderReference } from "@/lib/server/checkout/reference";
 import { getWholesaleUnitPrice } from "@/lib/wholesale-pricing";
-import { resolveWholesaleCycle } from "@/lib/wholesale-rules";
+import { checkoutChannelFromAddress, resolveWholesaleCycle } from "@/lib/wholesale-rules";
 import { quoteCouponForCart } from "@/lib/server/coupons";
 
 export type CreateOrderResult =
@@ -26,6 +26,7 @@ export type CreateOrderResult =
       total: number;
       currency: string;
       couponCode?: string | null;
+      paymentProvider?: string | null;
     }
   | { ok: false; error: string; status: number };
 
@@ -103,7 +104,8 @@ export async function createPendingOrderFromCheckout(
   }
 
   let wholesaleMin: number | null = null;
-  if (options?.userId) {
+  const wantsRetail = input.pricingMode === "retail";
+  if (options?.userId && !wantsRetail) {
     try {
       const user = await prisma.user.findUnique({
         where: { id: options.userId },
@@ -118,15 +120,29 @@ export async function createPendingOrderFromCheckout(
               ...(emailNorm ? [{ customerEmail: { equals: emailNorm, mode: "insensitive" as const } }] : []),
             ],
           },
-          select: { total: true, createdAt: true, paymentStatus: true, status: true },
+          select: {
+            total: true,
+            createdAt: true,
+            paymentStatus: true,
+            status: true,
+            paymentProvider: true,
+            shippingAddress: true,
+          },
           take: 80,
         });
-        wholesaleMin = resolveWholesaleCycle(paid).minimumOrder;
+        wholesaleMin = resolveWholesaleCycle(
+          paid.map((order) => ({
+            ...order,
+            checkoutChannel: checkoutChannelFromAddress(order.shippingAddress),
+          })),
+        ).minimumOrder;
       }
     } catch {
       wholesaleMin = null;
     }
   }
+
+  const wholesaleCheckout = wholesaleMin != null;
 
   try {
     const data = await prisma.$transaction(async (tx) => {
@@ -173,8 +189,7 @@ export async function createPendingOrderFromCheckout(
         }
         stockNeed.set(productId, (stockNeed.get(productId) ?? 0) + line.quantity);
         const publicPrice = resolveProductPrice(p).price;
-        const unitPrice =
-          wholesaleMin != null ? getWholesaleUnitPrice(p.name, publicPrice) : publicPrice;
+        const unitPrice = wholesaleCheckout ? getWholesaleUnitPrice(p.name, publicPrice) : publicPrice;
         const lineTotal = unitPrice * line.quantity;
         subtotal += lineTotal;
         lines.push({
@@ -199,9 +214,19 @@ export async function createPendingOrderFromCheckout(
         }
       }
 
-      if (wholesaleMin != null && subtotal < wholesaleMin) {
+      if (wholesaleCheckout && input.couponCode?.trim()) {
+        throw new Error("Los pedidos mayorista no aceptan cupones ni bonos.");
+      }
+      if (wholesaleCheckout && input.paymentProvider && input.paymentProvider !== "CONTRAENTREGA") {
+        throw new Error("Los pedidos mayorista se pagan contraentrega.");
+      }
+      if (!wholesaleCheckout && input.paymentProvider === "CONTRAENTREGA") {
+        throw new Error("El pago contraentrega es solo para compras como mayorista.");
+      }
+      if (wholesaleCheckout && wholesaleMin != null && subtotal < wholesaleMin) {
+        const missing = Math.max(0, wholesaleMin - subtotal);
         throw new Error(
-          `El pedido mayorista debe superar $${wholesaleMin.toLocaleString("es-CO")}. Completa tu pedido antes de pagar.`,
+          `Recuerda que debes acumular un mínimo de $${wholesaleMin.toLocaleString("es-CO")} para poder pagar con los precios para mayorista, este pedido vale $${subtotal.toLocaleString("es-CO")}, te falta $${missing.toLocaleString("es-CO")}.`,
         );
       }
 
@@ -222,7 +247,7 @@ export async function createPendingOrderFromCheckout(
       let couponId: string | null = null;
       let couponCode: string | null = null;
 
-      if (input.couponCode?.trim()) {
+      if (!wholesaleCheckout && input.couponCode?.trim()) {
         const quoted = await quoteCouponForCart(input.couponCode, {
           subtotal,
           shipping: shippingBase,
@@ -257,14 +282,16 @@ export async function createPendingOrderFromCheckout(
         shippingCarrier: carrier,
         shippingCarrierLabel: carrier === "envia" ? "Envía" : "Interrapidísimo",
         ...(couponCode ? { couponCode, couponDiscount: discount } : {}),
+        checkoutChannel: wholesaleCheckout ? "wholesale" : "retail",
       } as unknown as Prisma.InputJsonValue;
+      const paymentProvider = wholesaleCheckout ? "CONTRAENTREGA" : input.paymentProvider ?? null;
 
       const order = await tx.order.create({
         data: {
           reference,
           status: OrderStatus.PENDING_PAYMENT,
           paymentStatus: PaymentStatus.PENDING,
-          paymentProvider: input.paymentProvider ?? null,
+          paymentProvider,
           subtotal,
           shipping,
           discount,
@@ -300,13 +327,14 @@ export async function createPendingOrderFromCheckout(
         total: finalTotal,
         currency: order.currency,
         couponCode,
+        paymentProvider,
       };
     });
 
     return { ok: true, ...data };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "No se pudo crear el pedido";
-    const isClient = /Producto no disponible|Combo no disponible|Stock insuficiente|Total inválido|pedido mayorista|cupón|Cupón|Envío gratis|agotó|mínima/.test(msg);
+    const isClient = /Producto no disponible|Combo no disponible|Stock insuficiente|Total inválido|pedido mayorista|cupón|Cupón|Envío gratis|agotó|mínima|contraentrega|mayorista/.test(msg);
     return { ok: false, error: msg, status: isClient ? 400 : 500 };
   }
 }

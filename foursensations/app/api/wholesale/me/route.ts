@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { resolveWholesaleCycle } from "@/lib/wholesale-rules";
+import { checkoutChannelFromAddress, resolveWholesaleCycle } from "@/lib/wholesale-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -42,12 +42,17 @@ export async function GET() {
           ...(emailNorm ? [{ customerEmail: { equals: emailNorm, mode: "insensitive" as const } }] : []),
         ],
       },
-      select: { total: true, createdAt: true, paymentStatus: true, status: true },
+      select: { total: true, createdAt: true, paymentStatus: true, status: true, paymentProvider: true, shippingAddress: true },
       orderBy: { createdAt: "desc" },
       take: 80,
     });
 
-    const cycle = resolveWholesaleCycle(orders);
+    const cycle = resolveWholesaleCycle(
+      orders.map((order) => ({
+        ...order,
+        checkoutChannel: checkoutChannelFromAddress(order.shippingAddress),
+      })),
+    );
     return NextResponse.json({
       isWholesale: true,
       authenticated: true,

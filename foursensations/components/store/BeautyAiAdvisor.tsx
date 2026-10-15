@@ -336,7 +336,6 @@ export function BeautyAiAdvisor() {
       <div className="gb-ai-bg" aria-hidden>
         <div className="gb-ai-orb gb-ai-orb--1" />
         <div className="gb-ai-orb gb-ai-orb--2" />
-        <div className="gb-ai-heart" />
       </div>
       <div className="container gb-ai-inner reveal">
         <div className="gb-ai-copy">

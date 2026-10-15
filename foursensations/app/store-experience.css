@@ -1200,6 +1200,10 @@
     min-width: 0;
     width: 100%;
   }
+  .gb-ai-orb,
+  .gb-ai-heart {
+    display: none;
+  }
   .gb-ai-input {
     min-width: 0;
     font-size: 13.58px;

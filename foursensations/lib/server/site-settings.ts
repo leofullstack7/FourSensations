@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { normalizeMegaPromo, type SiteSettingsData } from "@/lib/site-settings";
+import { normalizeLandingCollages, normalizeMegaPromo, type SiteSettingsData } from "@/lib/site-settings";
 
 const SETTINGS_ID = 1;
 
@@ -20,6 +20,9 @@ export async function mergeSiteSettingsData(patch: Partial<SiteSettingsData>): P
   const next: SiteSettingsData = { ...current, ...patch };
   if (patch.megaPromo !== undefined) {
     next.megaPromo = normalizeMegaPromo(patch.megaPromo);
+  }
+  if (patch.landingCollages !== undefined) {
+    next.landingCollages = normalizeLandingCollages(patch.landingCollages);
   }
   await prisma.siteSettings.upsert({
     where: { id: SETTINGS_ID },

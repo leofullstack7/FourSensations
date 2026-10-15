@@ -22,6 +22,7 @@ import { preloadStorefrontProductImages } from "@/lib/preload-storefront-image";
 import { computeShippingCop, loadCart, saveCart, syncCartPricesFromCatalog } from "@/lib/cart-storage";
 import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
 import { applyWholesalePricing, withWholesalePrices } from "@/lib/wholesale-pricing";
+import { loadWholesaleCheckoutMode, saveWholesaleCheckoutMode, type WholesaleCheckoutMode } from "@/lib/wholesale-checkout-mode";
 import { wholesaleMinimumReminder } from "@/lib/wholesale-rules";
 import { StoreDiscountBadge, StoreProductPrice } from "@/components/store/StoreProductPrice";
 import { formatDiscountBadge, resolveProductPrice } from "@/lib/product-discount";
@@ -163,6 +164,8 @@ export function StorefrontShell({
   const isStoreCustomer = status === "authenticated" && session?.user?.role === "CUSTOMER";
   const isWholesaleCustomer = isStoreCustomer && Boolean(session?.user?.isWholesale);
   const [wholesaleMin, setWholesaleMin] = useState(WHOLESALE_THRESHOLD_COP);
+  const [wholesaleMode, setWholesaleMode] = useState<WholesaleCheckoutMode>("wholesale");
+  const [wholesaleModeReady, setWholesaleModeReady] = useState(false);
   const customerId = session?.user?.id;
   const customerLabel = (session?.user?.name?.trim() || session?.user?.email?.split("@")[0] || "Cliente") as string;
   const customerTopbarName = formatTopbarName(customerLabel);
@@ -196,6 +199,8 @@ export function StorefrontShell({
 
   useEffect(() => {
     setCart(loadCart());
+    setWholesaleMode(loadWholesaleCheckoutMode());
+    setWholesaleModeReady(true);
   }, []);
 
   useEffect(() => {
@@ -214,20 +219,26 @@ export function StorefrontShell({
     })();
   }, [isWholesaleCustomer]);
 
+  const buyingAsWholesale = isWholesaleCustomer && wholesaleMode === "wholesale";
   const catalogForCart = useMemo(
-    () => (isWholesaleCustomer ? withWholesalePrices(products) : products),
-    [isWholesaleCustomer, products],
+    () => (buyingAsWholesale ? withWholesalePrices(products) : products),
+    [buyingAsWholesale, products],
   );
 
+  const chooseWholesaleMode = useCallback((mode: WholesaleCheckoutMode) => {
+    setWholesaleMode(mode);
+    saveWholesaleCheckoutMode(mode);
+  }, []);
+
   useEffect(() => {
-    if (catalogForCart.length === 0) return;
+    if (!wholesaleModeReady || catalogForCart.length === 0) return;
     setCart((prev) => {
       const next = syncCartPricesFromCatalog(prev, catalogForCart);
       if (next === prev) return prev;
       saveCart(next);
       return next;
     });
-  }, [catalogForCart]);
+  }, [catalogForCart, wholesaleModeReady]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -319,7 +330,7 @@ export function StorefrontShell({
         setCart((prev) => {
           let next = prev;
           for (const item of kit) {
-            const priced = isWholesaleCustomer ? applyWholesalePricing(item) : item;
+            const priced = buyingAsWholesale ? applyWholesalePricing(item) : { ...item, isWholesalePrice: false };
             const existing = next.find((i) => i.id === item.id);
             next = existing
               ? next.map((i) => (i.id === item.id ? { ...i, qty: i.qty + 1, ...priced } : i))
@@ -338,7 +349,7 @@ export function StorefrontShell({
         showToast("No se pudo agregar al carrito. Abre el producto e inténtalo de nuevo.", "danger", "⚠️");
         return;
       }
-      const priced = isWholesaleCustomer ? applyWholesalePricing(product) : { ...product, isWholesalePrice: false };
+      const priced = buyingAsWholesale ? applyWholesalePricing(product) : { ...product, isWholesalePrice: false };
       if (productSnapshot) {
         mergeCatalogProducts([product]);
       }
@@ -353,7 +364,7 @@ export function StorefrontShell({
       showToast(`${product.name} agregado al carrito`, "success", "🛒");
       setCartOpen(true);
     },
-    [isWholesaleCustomer, mergeCatalogProducts, showToast],
+    [buyingAsWholesale, mergeCatalogProducts, showToast],
   );
 
   const addComboToCart = useCallback(
@@ -1145,20 +1156,40 @@ export function StorefrontShell({
             </div>
           </div>
           {isWholesaleCustomer ? (
+            <div className="cart-channel-switch" role="group" aria-label="Tipo de compra">
+              <button
+                type="button"
+                className={wholesaleMode === "wholesale" ? "is-active" : ""}
+                aria-pressed={wholesaleMode === "wholesale"}
+                onClick={() => chooseWholesaleMode("wholesale")}
+              >
+                Comprar como mayorista
+              </button>
+              <button
+                type="button"
+                className={wholesaleMode === "retail" ? "is-active" : ""}
+                aria-pressed={wholesaleMode === "retail"}
+                onClick={() => chooseWholesaleMode("retail")}
+              >
+                Comprar al detal
+              </button>
+            </div>
+          ) : null}
+          {buyingAsWholesale ? (
             <div className="cart-wholesale-block">
               <p className="cart-wholesale-kicker">Acumulado de este pedido</p>
               <strong className="cart-wholesale-total">{formatPrice(subtotal)}</strong>
               <p className="cart-wholesale-hint">{wholesaleMinimumReminder(wholesaleMin, subtotal)}</p>
             </div>
           ) : null}
-          {isWholesaleCustomer && subtotal < wholesaleMin ? (
+          {buyingAsWholesale && subtotal < wholesaleMin ? (
             <button
               type="button"
               className="btn btn-primary"
-              style={{ width: "100%", justifyContent: "center", opacity: 0.55, cursor: "not-allowed" }}
-              disabled
+              style={{ width: "100%", justifyContent: "center" }}
+              onClick={() => showToast(wholesaleMinimumReminder(wholesaleMin, subtotal), "danger", "💗")}
             >
-              Completa el mínimo para pagar
+              Ir a pagar
             </button>
           ) : (
           <Link

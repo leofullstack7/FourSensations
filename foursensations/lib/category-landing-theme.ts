@@ -64,16 +64,11 @@ const bySlug: Record<string, Partial<CategoryLandingCopy>> = {
   },
   accesorios: {
     eyebrow: "Accesorios capilares · Four Sensations",
-    headline: "El detalle que cierra el ritual",
-    subtitle:
-      "Diademas, gorros, cepillos, ligas y pinzas para acompañar la fórmula: un cepillo que masajea, un recoger que no maltrata, un accesorio que viste el peinado. Piezas pensadas para el cabello, no para el cajón.",
+    headline: "Cepillos, Scrunchies, Gorritos y esos pequeños Must - Haves que hacen la diferencia en tu Rutina.",
+    subtitle: "¡El toque mas girly para consentir tu cabello y elevar cada look! ✨",
     ctaExplore: "Ver todos los accesorios",
-    commercialLine: "Suma textura, sujeción y cuidado a tu rutina con piezas que se sienten Four Sensations.",
-    benefits: [
-      { icon: "🎀", title: "Hechos para el cabello", text: "Accesorios que respetan la fibra: recoger, peinar y vestir sin agresiones." },
-      { icon: "🪞", title: "Look + cuidado", text: "El mismo encanto de las fórmulas, ahora en piezas que usas todos los días." },
-      { icon: "📦", title: "Llega con tu pedido", text: "Combínalos con tratamientos y rutinas: un solo despacho desde Manizales." },
-    ],
+    commercialLine: "",
+    benefits: [],
   },
   mayorista: {
     eyebrow: "Programa mayorista · FOUR SENSATIONS S.A.S.",
