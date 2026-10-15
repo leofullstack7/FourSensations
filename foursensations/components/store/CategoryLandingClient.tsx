@@ -536,7 +536,7 @@ export function CategoryLandingClient({
                 <>No hay productos para estos filtros.</>
               ) : (
                 <>
-                  "Aún no hay productos publicados en esta categoría."
+                  Aún no hay productos publicados en esta categoría.
                 </>
               )}
             </div>
