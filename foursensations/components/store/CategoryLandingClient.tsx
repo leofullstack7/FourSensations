@@ -15,7 +15,7 @@ import {
   enrichStorefrontDisplayProducts,
   resolveStorefrontDisplayAfterFilter,
 } from "@/lib/store/variant-groups";
-import { hairSubcategoryForProductName } from "@/lib/hair-subcategories";
+import { productMatchesHairSubcategory } from "@/lib/hair-subcategories";
 
 export type SubcategoryRow = {
   name: string;
@@ -59,9 +59,7 @@ function subcategoryMatches(productSub: string, filterSub: string): boolean {
 }
 
 function productMatchesHairGroup(p: StoreProduct, group: string, allowedLines: string[]): boolean {
-  if (subcategoryMatches(p.subcategory, group)) return true;
-  const fromName = hairSubcategoryForProductName(p.name);
-  if (fromName && subcategoryMatches(fromName, group)) return true;
+  if (productMatchesHairSubcategory(p, group)) return true;
   return allowedLines.some(
     (name) => subcategoryMatches(p.subcategory, name) || fold(p.name) === fold(name),
   );
@@ -97,10 +95,6 @@ function computeDisplayCount(allProducts: StoreProduct[], filterOpts: FilterOpts
     resolveStorefrontDisplayAfterFilter(filtered, allProducts),
     allProducts,
   ).length;
-}
-
-function productHairBucket(p: StoreProduct): string {
-  return hairSubcategoryForProductName(p.name) ?? (HAIR_FILTER_GROUPS as readonly string[]).find((g) => fold(g) === fold(p.subcategory)) ?? "Más líneas";
 }
 
 function CategoryProductSkeleton() {
@@ -247,13 +241,12 @@ export function CategoryLandingClient({
         mergeCatalogProducts(first.batch);
         let skip = first.batch.length;
         let more = first.hasMore;
-        const total = first.totalCount ?? 0;
-        if (total > TOTAL_SKU_THRESHOLD && more) {
+        if (more) {
           const filled = await fillUntilDisplayCards({
             startProducts: local,
             startSkip: skip,
             startHasMore: more,
-            minDisplay: INITIAL_VISIBLE,
+            minDisplay: 9999,
             minNewCards: 0,
             displayBefore: 0,
           });
@@ -343,7 +336,7 @@ export function CategoryLandingClient({
   );
 
   const hasActiveFilters = Boolean(selectedGrupo || selectedLine);
-  const shouldCapVisible = totalProductCount > TOTAL_SKU_THRESHOLD || displayProducts.length > TOTAL_SKU_THRESHOLD;
+  const shouldCapVisible = false;
   const shownProducts = shouldCapVisible ? displayProducts.slice(0, visibleLimit) : displayProducts;
   const hasHiddenLoaded = shownProducts.length < displayProducts.length;
   const showMoreButton = hasHiddenLoaded || (hasMore && shouldCapVisible);
@@ -382,7 +375,7 @@ export function CategoryLandingClient({
 
   const lineChips = useMemo(() => {
     if (accessoryMode) {
-      return subcategoriesFromDb.map((s) => s.name).filter(Boolean);
+      return ["Cepillos", "Gorros", "Toallas", "Batas de baño", "Scrunchies", "Ondas", "Cosmetiqueras"];
     }
     if (!hairMode || !selectedGrupo) return [];
     return subcategoriesFromDb
@@ -401,25 +394,7 @@ export function CategoryLandingClient({
     syncUrl(selectedGrupo, line);
   };
 
-  const groupedShown = useMemo(() => {
-    if (accessoryMode || selectedGrupo || selectedLine) {
-      return [{ title: selectedLine || selectedGrupo || null, items: shownProducts }];
-    }
-    if (!hairMode) {
-      return [{ title: null, items: shownProducts }];
-    }
-    const buckets = new Map<string, StoreProduct[]>();
-    for (const p of shownProducts) {
-      const key = productHairBucket(p);
-      const list = buckets.get(key) ?? [];
-      list.push(p);
-      buckets.set(key, list);
-    }
-    const ordered = [...HAIR_FILTER_GROUPS, "Más líneas"];
-    return ordered
-      .filter((title) => (buckets.get(title) ?? []).length > 0)
-      .map((title) => ({ title, items: buckets.get(title)! }));
-  }, [accessoryMode, hairMode, selectedGrupo, selectedLine, shownProducts]);
+  const groupedShown = useMemo(() => [{ title: null, items: shownProducts }], [shownProducts]);
 
   useReveal();
 
@@ -485,7 +460,7 @@ export function CategoryLandingClient({
               </p>
             ) : accessoryMode ? (
               <p className="fs-cat-filter-lead">
-                Accesorios en una sola colección. Filtra por tipo: diademas, gorros, cepillos, ligas o pinzas.
+                Accesorios en una sola colección. Filtra por tipo: cepillos, gorros, toallas, batas, scrunchies, ondas o cosmetiqueras.
               </p>
             ) : (
               <p className="fs-cat-filter-lead">Encuentra lo que buscas dentro de {categoryLabel}.</p>
@@ -561,9 +536,7 @@ export function CategoryLandingClient({
                 <>No hay productos para estos filtros.</>
               ) : (
                 <>
-                  {categorySlug === "cuidado-corporal"
-                    ? "Pronto verás aquí el catálogo de Cuidado Corporal. Mientras tanto, explora Cuidado Capilar y Accesorios."
-                    : "Aún no hay productos publicados en esta categoría."}
+                  "Aún no hay productos publicados en esta categoría."
                 </>
               )}
             </div>

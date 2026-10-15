@@ -18,6 +18,7 @@ import { StoreProductCard } from "@/components/store/store-product-card";
 import { CategoryShowcaseStrip } from "@/components/store/CategoryShowcaseStrip";
 import { TechAmbient } from "@/components/ui/TechAmbient";
 import { TintHomePreview } from "@/components/store/tints/TintHomePreview";
+import { homeClubFavoriteRank, isHomeClubFavoriteProduct } from "@/lib/home-club-favorites";
 import { sortProductsForHomeDisplay } from "@/lib/storefront-product-order";
 import {
   enrichStorefrontDisplayProducts,
@@ -118,16 +119,20 @@ export function StoreHomeClient({
     if (manualSub) {
       list = products.filter((p) => productMatchesHairSubcategory(p, manualSub));
     } else {
-      // Home: catálogo completo (antes solo “favoritos del Club”).
-      list = [...products];
+      list = products.filter((p) => isHomeClubFavoriteProduct(p.name));
+      list.sort((a, b) => homeClubFavoriteRank(a.name) - homeClubFavoriteRank(b.name) || a.name.localeCompare(b.name, "es"));
     }
 
-    if (sortValue === "default") {
+    if (sortValue === "default" && manualSub) {
       const sorted = sortProductsForHomeDisplay(list);
       return enrichStorefrontDisplayProducts(
         resolveStorefrontDisplayAfterFilter(sorted, products),
         products
       );
+    }
+
+    if (sortValue === "default") {
+      return enrichStorefrontDisplayProducts(resolveStorefrontDisplayAfterFilter(list, products), products);
     }
 
     const copy = [...list];
@@ -355,8 +360,8 @@ export function StoreHomeClient({
             </select>
           </div>
 
-          <div className="products-grid" id="products-grid-main">
-            {filteredProducts.slice(0, visibleCount).map((p, i) => (
+          <div className={`products-grid${manualSub ? "" : " products-grid--club"}`} id="products-grid-main">
+            {(manualSub ? filteredProducts.slice(0, visibleCount) : filteredProducts).map((p, i) => (
               <StoreProductCard
                 key={p.id}
                 product={p}
@@ -369,7 +374,7 @@ export function StoreHomeClient({
             ))}
           </div>
 
-          {filteredProducts.length > visibleCount && (
+          {manualSub && filteredProducts.length > visibleCount && (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 40 }}>
               <button
                 type="button"
@@ -397,17 +402,21 @@ export function StoreHomeClient({
           <div className="newsletter-title">
             Esto te va a <em>interesar…</em>
           </div>
-          <p className="newsletter-sub">
-            Ser Four Girl tiene sus privilegios, SIEMPRE TIENEN LAS PRIMICIAS💌 Lanzamientos, ediciones limitadas,
-            sorpresas, secretos capilares y novedades que definitivamente vas a querer tener en el radar.
+          <p className="newsletter-sub newsletter-sub--privileges">
+            Ser Four Girl tiene sus privilegios
+            <br />
+            <strong>SIEMPRE TIENEN LAS PRIMICIAS💌</strong>
+            <br />
+            Lanzamientos, ediciones limitadas, sorpresas, secretos capilares y novedades que definitivamente vas a
+            querer tener en el radar.
           </p>
           <p className="newsletter-sub" style={{ marginTop: 8 }}>
             Déjanos tu correo y entra al Club de los Cabellos Perfectos
           </p>
           <form className="newsletter-form newsletter-form--club" onSubmit={(e) => e.preventDefault()}>
-            <input type="text" name="name" placeholder="Tu nombre" autoComplete="name" />
-            <input type="tel" name="phone" placeholder="+57 celular" autoComplete="tel" />
-            <input type="email" name="email" placeholder="tu@correo.com" autoComplete="email" />
+            <input type="text" name="name" placeholder="Tu nombre" autoComplete="name" aria-label="Tu nombre" />
+            <input type="tel" name="phone" placeholder="+57 celular" autoComplete="tel" aria-label="Celular" />
+            <input type="email" name="email" placeholder="tu@correo.com" autoComplete="email" aria-label="Correo" />
             <button type="button" onClick={() => showToast("¡Bienvenida al Club! 💗", "success", "💌")}>
               Suscribirme
             </button>

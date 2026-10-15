@@ -142,7 +142,22 @@ export type CategoryProductsPage = {
   hasMore: boolean;
 };
 
-/** Página de productos de una categoría (excluye vitrina ya mostrada en SSR). */
+const CROSS_LISTED_SLUGS: Record<string, string[]> = {
+  "cuidado-corporal": ["suspiros"],
+};
+
+function categoryProductWhere(categorySlug: string, excludeIds: string[] = []) {
+  const also = CROSS_LISTED_SLUGS[categorySlug] ?? [];
+  return {
+    active: true,
+    AND: [
+      {
+        OR: [{ category: categorySlug }, ...(also.length > 0 ? [{ slug: { in: also } }] : [])],
+      },
+      ...(excludeIds.length > 0 ? [{ id: { notIn: excludeIds } }] : []),
+    ],
+  };
+}
 export async function getStorefrontCategoryProductsPage(
   categorySlug: string,
   opts: { skip: number; take: number; excludeIds?: string[] },
@@ -167,14 +182,10 @@ export async function getStorefrontCategoryProductsPage(
 
   try {
     const exclude = excludeIds.filter(Boolean);
-    const where = {
-      active: true,
-      category: categorySlug,
-      ...(exclude.length > 0 ? { id: { notIn: exclude } } : {}),
-    };
+    const where = categoryProductWhere(categorySlug, exclude);
 
     const [totalCount, rows] = await Promise.all([
-      prisma.product.count({ where: { active: true, category: categorySlug } }),
+      prisma.product.count({ where }),
       prisma.product.findMany({
         where,
         orderBy: [{ featuredInHome: "desc" }, { name: "asc" }],
@@ -462,6 +473,22 @@ export async function getStorefrontProductBySlug(slug: string): Promise<StorePro
     };
   } catch {
     return null;
+  }
+}
+
+export async function getStorefrontColorSiblings(product: StoreProduct): Promise<StoreProduct[]> {
+  const code = product.variantGroupCode?.trim();
+  if (!code || !process.env.DATABASE_URL) return [product];
+  try {
+    const rows = await prisma.product.findMany({
+      where: { active: true, variantGroupCode: code },
+      orderBy: [{ variantGroupOrder: "asc" }, { name: "asc" }],
+      include: productStoreInclude,
+    });
+    const list = rows.map((row) => rowToStore(row, row.images));
+    return list.length > 0 ? list : [product];
+  } catch {
+    return [product];
   }
 }
 

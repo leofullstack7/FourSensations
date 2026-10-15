@@ -28,12 +28,6 @@ import { formatDiscountBadge, resolveProductPrice } from "@/lib/product-discount
 import { loadFavorites, saveFavorites } from "@/lib/favorites-storage";
 import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
 import { findBombaCapilarParts, isBombaCapilarProduct } from "@/lib/bomba-capilar";
-import {
-  POLICY_HREF_SHIPPING,
-  POLICY_TRUST_PAY_SHORT,
-  POLICY_TRUST_RETURNS_SHORT,
-  POLICY_TRUST_SHIPPING_SHORT,
-} from "@/lib/storefront-policies";
 import { isDisplayableImageUrl, isHttpImageUrl } from "@/lib/util/image-url";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { StoreFloatingActions } from "@/components/store/StoreFloatingActions";
@@ -178,6 +172,7 @@ export function StorefrontShell({
   );
   const [customerProfileOpen, setCustomerProfileOpen] = useState(false);
   const customerProfileWrapRef = useRef<HTMLDivElement>(null);
+  const liveSearchRef = useRef<HTMLDivElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -560,25 +555,32 @@ export function StorefrontShell({
 
   const openSearch = () => {
     void ensureFullCatalog();
-    setSearchQuery("");
-    setSearchOpen(true);
-    document.body.style.overflow = "hidden";
-    setTimeout(() => document.getElementById("search-input-big")?.focus(), 100);
+    document.getElementById("fs-live-search-input")?.focus();
   };
 
   const openSearchWithQuery = useCallback((query: string) => {
     void ensureFullCatalog();
-    setSearchQuery(query.trim());
-    setSearchOpen(true);
-    document.body.style.overflow = "hidden";
-    setTimeout(() => document.getElementById("search-input-big")?.focus(), 100);
+    const next = query.trim();
+    setSearchQuery(next);
+    setSearchOpen(next.length > 0);
+    window.setTimeout(() => document.getElementById("fs-live-search-input")?.focus(), 40);
   }, [ensureFullCatalog]);
 
-  const closeSearch = () => {
-    setSearchOpen(false);
-    setSearchQuery("");
-    document.body.style.overflow = "";
-  };
+  useEffect(() => {
+    if (!searchOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!liveSearchRef.current?.contains(event.target as Node)) setSearchOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSearchOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [searchOpen]);
 
   const closeMobileMenu = useCallback(() => {
     setMobileMenuOpen(false);
@@ -649,13 +651,26 @@ export function StorefrontShell({
   );
 
   const scheduleCloseDesktopMega = useCallback(() => {
-    if (megaCloseTimer.current) clearTimeout(megaCloseTimer.current);
-    megaCloseTimer.current = setTimeout(() => {
-      setDesktopMegaCat(null);
-      setMegaAlignLeft(null);
-      megaCloseTimer.current = null;
-    }, 180);
+    setDesktopMegaCat(null);
+    setMegaAlignLeft(null);
   }, []);
+
+  useEffect(() => {
+    if (!desktopMegaCat) return;
+    const onMove = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      const header = document.getElementById("main-header");
+      const overItem = header?.querySelector(".nav-item.is-mega-open")?.contains(target);
+      const overPanel = header?.querySelector(".mega-dock__inner")?.contains(target);
+      if (!overItem && !overPanel) {
+        setDesktopMegaCat(null);
+        setMegaAlignLeft(null);
+      }
+    };
+    document.addEventListener("mousemove", onMove);
+    return () => document.removeEventListener("mousemove", onMove);
+  }, [desktopMegaCat]);
 
   useEffect(() => {
     return () => {
@@ -783,12 +798,55 @@ export function StorefrontShell({
 
           <div className="header-actions">
             <div className="header-toolbar-inner">
-              <div className="search-bar header-toolbar-search">
-                <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <circle cx="11" cy="11" r="8" />
-                  <path d="m21 21-4.35-4.35" />
-                </svg>
-                <input type="search" placeholder="Buscar en Four Sensations…" readOnly onClick={openSearch} />
+              <div className="fs-live-search" ref={liveSearchRef}>
+                <div className="search-bar header-toolbar-search">
+                  <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.35-4.35" />
+                  </svg>
+                  <input
+                    id="fs-live-search-input"
+                    type="search"
+                    placeholder="Buscar en Four Sensations…"
+                    value={searchQuery}
+                    autoComplete="off"
+                    onChange={(e) => {
+                      const next = e.target.value.replace(/[\u200B-\u200D\uFEFF]/g, "");
+                      setSearchQuery(next);
+                      setSearchOpen(next.trim().length > 0);
+                      void ensureFullCatalog();
+                    }}
+                    onFocus={() => {
+                      void ensureFullCatalog();
+                      if (searchQuery.trim()) setSearchOpen(true);
+                    }}
+                  />
+                </div>
+                {searchOpen && hasSearchQuery ? (
+                  <div className="fs-live-search__panel" role="region" aria-label="Resultados de búsqueda">
+                    <p className="fs-live-search__label">Resultados para “{searchQuery.trim()}”</p>
+                    {searchResults.length === 0 ? (
+                      <p className="fs-live-search__empty">No encontramos productos con esa búsqueda.</p>
+                    ) : (
+                      <div className="fs-live-search__grid">
+                        {searchResults.slice(0, 8).map((p, i) => (
+                          <StoreProductCard
+                            key={p.id}
+                            product={p}
+                            isFav={favorites.includes(p.id)}
+                            onOpen={(id) => {
+                              openProductModal(id);
+                              setSearchOpen(false);
+                            }}
+                            onToggleFav={toggleFavorite}
+                            onAddCart={addToCart}
+                            imagePriority={i < 2}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
               </div>
               <div className="header-icon-group">
                 {isStoreCustomer ? (
@@ -842,12 +900,13 @@ export function StorefrontShell({
                           <span>✿</span>
                         </div>
                         <p id="gb-customer-welcome-title" className="gb-customer-popover__title">
-                          ¡Qué gusto verte, <em>{customerLabel}</em>!
+                          ¡Amamos verte, <em>{customerLabel}</em>!
                         </p>
                         <p className="gb-customer-popover__text">
-                          Ya eres parte del Club de los Cabellos Perfectos. Busca lo que necesitas con nosotras: te
-                          ofrecemos la mejor calidad.
+                          Ponte cómoda, explora a tu ritmo y déjate sorprender
                         </p>
+                        <p className="gb-customer-popover__text">
+                          Spoiler: Te va a encantar estar en el Club de los Cabellos Perfectos
                         <nav className="gb-customer-popover__nav" aria-label="Tu cuenta">
                           <Link
                             href="/cuenta/perfil"
@@ -1155,7 +1214,6 @@ export function StorefrontShell({
               <div className="product-modal-layout">
                 <ProductModalGallery product={selectedProduct} />
                 <div className="modal-details modal-details--tech">
-                  <span className="gb-tech-chip modal-product-badge">Detalle premium · HD</span>
                   <div>
                     <div className="breadcrumbs">
                       <Link href="/" prefetch>
@@ -1258,13 +1316,6 @@ export function StorefrontShell({
                     >
                       {favorites.includes(selectedProduct.id) ? "♥" : "♡"}
                     </button>
-                  </div>
-                  <div className="modal-trust-strip">
-                    <span>🚚 {POLICY_TRUST_SHIPPING_SHORT}</span>
-                    <Link href={POLICY_HREF_SHIPPING} style={{ color: "inherit", textDecoration: "underline" }}>
-                      🔄 {POLICY_TRUST_RETURNS_SHORT}
-                    </Link>
-                    <span>✅ {POLICY_TRUST_PAY_SHORT}</span>
                   </div>
                 </div>
               </div>
@@ -1447,66 +1498,6 @@ export function StorefrontShell({
               </>
             )}
           </p>
-          </div>
-        </div>
-      </div>
-
-      <div className={`search-overlay${searchOpen ? " open" : ""}`} id="search-overlay">
-        <button
-          type="button"
-          className="modal-close"
-          style={{ position: "fixed", top: 20, right: 24, zIndex: 10, width: 42, height: 42, background: "var(--cream)" }}
-          onClick={closeSearch}
-        >
-          ✕
-        </button>
-        <div className="search-big">
-          <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-          <input
-            type="text"
-            id="search-input-big"
-            placeholder="¿Qué estás buscando?"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value.replace(/[\u200B-\u200D\uFEFF]/g, ""))}
-          />
-          <button type="button" onClick={() => {}}>
-            →
-          </button>
-        </div>
-        <div className="search-results-scroll">
-          <div className="search-results-grid" id="search-results-grid" key={normalizedSearchQuery}>
-            {hasSearchQuery &&
-              (searchResults.length === 0 ? (
-                <p style={{ gridColumn: "1/-1", textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>Sin resultados para &quot;{searchQuery}&quot;</p>
-              ) : (
-                searchResults.map((p, i) => (
-                  <StoreProductCard
-                    key={p.id}
-                    product={p}
-                    isFav={favorites.includes(p.id)}
-                    onOpen={(id) => {
-                      openProductModal(id);
-                      closeSearch();
-                    }}
-                    onToggleFav={toggleFavorite}
-                    onAddCart={addToCart}
-                    imagePriority={i === 0}
-                  />
-                ))
-              ))}
-          </div>
-        </div>
-        <div id="search-suggestions" style={{ maxWidth: 680, width: "100%", marginTop: 0 }}>
-          <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, letterSpacing: "0.1em", textTransform: "uppercase" }}>Búsquedas populares</p>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {["sérum", "labial", "sombras", "mascarilla", "shampoo"].map((w) => (
-              <button key={w} type="button" className="chip" onClick={() => setSearchQuery(w)}>
-                {w.charAt(0).toUpperCase() + w.slice(1)}
-              </button>
-            ))}
           </div>
         </div>
       </div>

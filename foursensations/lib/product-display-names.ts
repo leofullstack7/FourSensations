@@ -17,6 +17,7 @@ const ENTRIES: Array<{ match: RegExp | string; title: string; subtitle: string }
   { match: /secreto\s*de\s*primavera/i, title: "Secreto de Primavera", subtitle: "Tónico Capilar" },
   { match: /shots?/i, title: "Shots Capilares", subtitle: "Anticaída • Reparación • Crecimiento" },
   { match: /scrub\s*glow/i, title: "Scrub Glow", subtitle: "Exfoliante Capilar" },
+  { match: /cepillo\s*desenredante/i, title: "Cepillo Desenredante", subtitle: "Accesorio capilar" },
   { match: /cepillo|masajeador/i, title: "Cepillo", subtitle: "Masajeador Capilar" },
   { match: /fantas[ií]a\s*natural|bloqueador/i, title: "Fantasía Natural", subtitle: "Bloqueador Capilar" },
   { match: /shine\s*gloss|[oó]leo/i, title: "Shine Gloss", subtitle: "Óleo Capilar" },
@@ -27,6 +28,12 @@ const ENTRIES: Array<{ match: RegExp | string; title: string; subtitle: string }
   { match: /luna\s*llena/i, title: "Luna Llena", subtitle: "Suero Capilar" },
   { match: /suspiros/i, title: "Suspiros", subtitle: "Aceite Multipropósito" },
   { match: /bomba\s*capilar/i, title: "Bomba Capilar", subtitle: "Dulce Renacer + Repolarizador Capilar" },
+  { match: /explosi[oó]n\s*de\s*chocolate/i, title: "Explosión de Chocolate", subtitle: "Exfoliante Corporal • Facial" },
+  { match: /gorro\s*de\s*aluminio/i, title: "Gorro de aluminio", subtitle: "Tratamientos capilares" },
+  { match: /gorro\s*de\s*seda/i, title: "Gorro de seda", subtitle: "Accesorio capilar" },
+  { match: /toalla\s*turbante/i, title: "Toalla turbante", subtitle: "Accesorio capilar" },
+  { match: /bata\s*de\s*ba[nñ]o/i, title: "Bata de baño", subtitle: "Accesorio" },
+  { match: /scrunchie/i, title: "Scrunchie", subtitle: "Accesorio capilar" },
 ];
 
 function normalize(value: string): string {

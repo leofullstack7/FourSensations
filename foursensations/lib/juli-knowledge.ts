@@ -28,7 +28,7 @@ export const JULI_CONCERN_TRIGGERS: {
   {
     id: "seco",
     keywords: ["seco", "seca", "resec", "opaco", "opaca", "poroso", "porosa", "aspereza", "aspero", "áspero", "deshidrat"],
-    products: ["Dulce Renacer", "Tentación Nutrición", "Sensación Primaveral", "Luna Llena"],
+    products: ["Dulce Renacer", "Botanical", "Sensación Primaveral", "Luna Llena"],
     hint: "nutrición para cabello seco",
   },
   {
@@ -58,7 +58,7 @@ export const JULI_CONCERN_TRIGGERS: {
   {
     id: "graso",
     keywords: ["graso", "grasa", "mixto", "raiz grasa", "raíz grasa", "sebo", "pesadez", "apelmaz"],
-    products: ["Tentación Equilibrio", "Scalp Therapy", "Scrub Glow"],
+    products: ["Botanical", "Scrub Glow"],
     hint: "equilibrio raíz/puntas",
   },
   {
@@ -100,7 +100,7 @@ export const JULI_CONCERN_TRIGGERS: {
   {
     id: "rutina",
     keywords: ["rutina", "shampoo", "champu", "acondicionador", "lavado"],
-    products: ["Tentación Nutrición", "Tentación Equilibrio", "Botanical", "Scalp Therapy"],
+    products: ["Botanical", "Scrub Glow"],
     hint: "rutina de lavado",
   },
   {

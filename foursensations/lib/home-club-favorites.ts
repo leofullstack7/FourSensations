@@ -1,16 +1,17 @@
 /**
- * Productos “Favoritos del Club” en el home (guía 09).
+ * Productos “Favoritos del Club” en el home.
  * Matching por nombre (case-insensitive, sin acentos).
  */
 export const HOME_CLUB_FAVORITE_NAMES: readonly string[] = [
   "Bomba Capilar",
   "Fantasía Natural",
+  "Bloqueador Capilar",
   "Shine Gloss",
   "Botanical",
   "Scrub Glow",
-  "Sweet Love",
   "Bloom Shine",
   "BloomShine",
+  "Sweet Love",
   "Scarlette",
   "Golden Glow",
 ];
@@ -24,10 +25,14 @@ function normalizeProductKey(value: string): string {
     .toLowerCase();
 }
 
-export function isHomeClubFavoriteProduct(name: string): boolean {
+export function homeClubFavoriteRank(name: string): number {
   const key = normalizeProductKey(name);
-  return HOME_CLUB_FAVORITE_NAMES.some((fav) => {
-    const f = normalizeProductKey(fav);
-    return key === f || key.includes(f) || f.includes(key);
+  return HOME_CLUB_FAVORITE_NAMES.findIndex((fav) => {
+    const listed = normalizeProductKey(fav);
+    return key === listed || key.includes(listed);
   });
+}
+
+export function isHomeClubFavoriteProduct(name: string): boolean {
+  return homeClubFavoriteRank(name) >= 0;
 }

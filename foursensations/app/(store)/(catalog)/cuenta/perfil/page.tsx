@@ -33,7 +33,7 @@ export default async function AccountProfilePage() {
   return (
     <AccountFrame
       title={`Hola, ${customer.name.split(/\s+/)[0] || customer.name}`}
-      subtitle="Este es tu rincón en Four Sensations: datos de cuenta, pedidos y el pulso de la tienda."
+      subtitle="Este es tu rinconcito VIP en Four Sensations 🩷 Todo lo que necesitas para disfrutar tu experiencia en el ¡CLUB DE LOS CABELLOS PERFECTOS!"
     >
       <h2>Mi Perfil</h2>
       <p className="fs-account-lead">

@@ -225,7 +225,7 @@ export function buildEmmaRoutine(answers: EmmaAnswers): {
   // 1. Limpieza
   if (answers.priority === "caspa" || (groupC && (answers.hairType === "graso" || answers.hairType === "mixto"))) {
     push(primary, {
-      productKey: "Kit Scalp Therapy",
+      productKey: "Botanical",
       step: "Limpieza",
       reason: "Por tu cuero cabelludo y prioridad de detox / grasa / caspa.",
     });
@@ -238,13 +238,13 @@ export function buildEmmaRoutine(answers: EmmaAnswers): {
     }
   } else if (answers.hairType === "seco") {
     push(primary, {
-      productKey: "Kit Tentación Nutrición",
+      productKey: "Botanical",
       step: "Limpieza",
       reason: "Base de limpieza para cabello seco.",
     });
   } else if (answers.hairType === "graso" || answers.hairType === "mixto") {
     push(primary, {
-      productKey: "Kit Tentación Equilibrio",
+      productKey: "Botanical",
       step: "Limpieza",
       reason: "Base de limpieza para raíz grasa / equilibrar.",
     });
@@ -274,7 +274,7 @@ export function buildEmmaRoutine(answers: EmmaAnswers): {
       break;
     case "grasa":
       push(primary, {
-        productKey: "Kit Tentación Equilibrio",
+        productKey: "Botanical",
         step: "Prioridad",
         reason: "Prioridad: controlar grasa.",
       });

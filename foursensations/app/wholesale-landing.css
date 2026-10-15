@@ -321,19 +321,18 @@
 .wholesale-reasons-sticky {
   position: sticky;
   top: calc(var(--fs-nav-h, 118px) + 16px);
-  width: 50%;
+  width: 100%;
   margin-top: 20px;
-  aspect-ratio: 3 / 4.2;
+  aspect-ratio: 16 / 10;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background: var(--ivory);
+  background: #f7c6e0;
   align-self: flex-start;
-  /* El sticky viaja mientras la columna izquierda (estirada al alto de las 8 razones) sigue en viewport. */
   z-index: 1;
 }
 
 .wholesale-reasons-sticky__img {
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
 }
 
@@ -429,8 +428,9 @@
   .wholesale-reasons-sticky {
     position: relative;
     top: auto;
-    width: 50%;
-    max-width: 220px;
+    width: 100%;
+    max-width: none;
+    aspect-ratio: 16 / 10;
     margin-top: 16px;
     margin-bottom: 8px;
   }

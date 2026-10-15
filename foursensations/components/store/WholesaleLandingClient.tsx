@@ -5,7 +5,6 @@ import Link from "next/link";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import howItWorksPhoto from "@/assets/foursensations/sobre-nosotros-lab.jpg";
 import reasonsPhoto from "@/assets/foursensations/banners/pc4.jpeg";
 import { ProductCollage } from "@/components/store/ProductCollage";
 import { StoreFooter } from "@/components/store/StoreFooter";
@@ -13,37 +12,10 @@ import { StoreProductCard } from "@/components/store/store-product-card";
 import { useReveal } from "@/hooks/useReveal";
 import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
 import { formatPrice } from "@/lib/format";
-import {
-  getWhatsAppDisplayNumber,
-  getWhatsAppHref,
-  WHATSAPP_WHOLESALE_MESSAGE,
-} from "@/lib/storefront-contact";
+import { getWhatsAppHref, WHATSAPP_WHOLESALE_MESSAGE } from "@/lib/storefront-contact";
 import type { StoreProduct } from "@/lib/types/product";
 import { withWholesalePrices } from "@/lib/wholesale-pricing";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
-
-const BENEFITS = [
-  {
-    icon: "📍",
-    title: "Origen Manizales",
-    desc: "FOUR SENSATIONS S.A.S. despacha desde Calle 65A #23A-15, Manizales, Caldas, a todo Colombia.",
-  },
-  {
-    icon: "⏱️",
-    title: "Preparación ágil",
-    desc: "Máximo 2 días hábiles desde la confirmación del pedido. El tránsito lo define la transportadora.",
-  },
-  {
-    icon: "🚚",
-    title: "Cobertura nacional",
-    desc: "Envía como vía principal e Interrapidísimo en zonas con reexpedición. No hay recogida en tienda ni entrega el mismo día.",
-  },
-  {
-    icon: "💎",
-    title: "Tarifa de volumen",
-    desc: `Pedidos desde ${formatPrice(WHOLESALE_THRESHOLD_COP)} acceden a precios mayoristas y a un agente dedicado.`,
-  },
-] as const;
 
 const REASONS = [
   {
@@ -88,13 +60,6 @@ const REASONS = [
   },
 ] as const;
 
-const STEPS = [
-  { n: "01", title: "Regístrate", desc: "Crea tu cuenta mayorista con correo, ciudad y dirección." },
-  { n: "02", title: "Elige tu mix", desc: "Arma el surtido con precios de volumen en el catálogo de esta página." },
-  { n: "03", title: "Paga y despachamos", desc: "Checkout con Mercado Pago o Addi. Despacho desde Manizales en máximo 2 días hábiles." },
-  { n: "04", title: "Reposiciones", desc: "Quedas en el programa: precios de volumen y acompañamiento por WhatsApp." },
-] as const;
-
 type WholesaleMe = {
   isWholesale: boolean;
   authenticated?: boolean;
@@ -103,18 +68,11 @@ type WholesaleMe = {
   name?: string | null;
 };
 
-export function WholesaleLandingClient({
-  collageUrls,
-  products,
-}: {
-  collageUrls: string[];
-  products: StoreProduct[];
-}) {
+export function WholesaleLandingClient({ products }: { products: StoreProduct[] }) {
   useReveal();
   const router = useRouter();
   const { data: session, update, status: sessionStatus } = useSession();
   const { favorites, openProductModal, toggleFavorite, addToCart, showToast, cartCount } = useStorefrontUi();
-  const wa = getWhatsAppDisplayNumber();
   const waHref = getWhatsAppHref(WHATSAPP_WHOLESALE_MESSAGE);
   const priced = useMemo(() => withWholesalePrices(products), [products]);
 
@@ -218,19 +176,9 @@ export function WholesaleLandingClient({
             </a>
           </div>
         </div>
-        <ProductCollage sources={collageUrls} />
-      </section>
-
-      <section className="fs-cat-benefits">
-        <div className="container fs-cat-benefits__grid">
-          {BENEFITS.map((b) => (
-            <article key={b.title} className="fs-cat-benefit">
-              <span aria-hidden>{b.icon}</span>
-              <h3>{b.title}</h3>
-              <p>{b.desc}</p>
-            </article>
-          ))}
-        </div>
+        <ProductCollage
+          sources={["/mayorista/vitrina-1.png", "/mayorista/vitrina-2.png", "/mayorista/vitrina-3.png"]}
+        />
       </section>
 
       <section className="wholesale-register-band section-pad" id="registro-mayorista">
@@ -318,41 +266,6 @@ export function WholesaleLandingClient({
               </button>
             </form>
           )}
-        </div>
-      </section>
-
-      <section className="wholesale-section wholesale-threshold section-pad" id="como-funciona">
-        <div className="container">
-          <div className="wholesale-threshold-card wholesale-how-card reveal">
-            <div className="wholesale-threshold-copy wholesale-how-copy">
-              <span className="wholesale-eyebrow wholesale-eyebrow--dark">Tu acceso</span>
-              <h2>Así funciona el programa</h2>
-              <p>
-                Atención de lunes a sábado, 9:00 a. m. a 6:00 p. m. WhatsApp {wa} · atencionalcliente.befs@gmail.com.
-                Políticas de envío y posventa iguales a las de la tienda.
-              </p>
-              <div className="wholesale-how-media">
-                <Image
-                  src={howItWorksPhoto}
-                  alt="Laboratorio y producción Four Sensations"
-                  fill
-                  sizes="(max-width: 1024px) 100vw, 42vw"
-                  className="wholesale-how-media__img"
-                />
-              </div>
-            </div>
-            <div className="wholesale-steps">
-              {STEPS.map((s) => (
-                <div key={s.n} className="wholesale-step">
-                  <span className="wholesale-step-n">{s.n}</span>
-                  <div>
-                    <strong>{s.title}</strong>
-                    <p>{s.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </section>
 

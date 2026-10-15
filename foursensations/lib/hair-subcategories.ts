@@ -19,14 +19,9 @@ export type HairSubcategoryName = (typeof HAIR_SUBCATEGORY_ORDER)[number];
 /** Productos canónicos por subcategoría (títulos de marca). */
 export const HAIR_SUBCATEGORY_PRODUCTS: Record<HairSubcategoryName, readonly string[]> = {
   Tratamientos: ["Dulce Renacer", "Sensación Primaveral", "Proteína Capilar"],
-  "Shampoo y Acondicionador": [
-    "Botanical",
-    "Kit Tentación Equilibrio",
-    "Kit Tentación Nutrición",
-    "Kit Scalp Therapy",
-  ],
+  "Shampoo y Acondicionador": ["Botanical"],
   "Crecimiento y Fortalecimiento": ["Secreto de Primavera", "Shots Capilares"],
-  "Detox y Cuero Cabelludo": ["Scrub Glow", "Kit Scalp Therapy", "Cepillo"],
+  "Detox y Cuero Cabelludo": ["Scrub Glow", "Cepillo Masajeador"],
   "Finalizadores y Protección": ["Fantasía Natural", "Shine Gloss"],
   "Hair Mist": ["Sweet Love", "BloomShine", "Scarlette", "Golden Glow"],
   "Reparación de Puntas": ["Luna Llena", "Suspiros"],
@@ -48,10 +43,10 @@ const NAME_RULES: Array<{ sub: HairSubcategoryName; patterns: RegExp[] }> = [
   { sub: "Tratamientos", patterns: [/dulce\s*renacer/i, /sensaci[oó]n\s*primaveral|repolarizador/i, /prote[ií]na|10\s*en\s*1/i] },
   {
     sub: "Shampoo y Acondicionador",
-    patterns: [/botanical/i, /tentaci[oó]n\s*equilibrio/i, /tentaci[oó]n\s*nutrici[oó]n/i, /scalp\s*therapy/i],
+    patterns: [/botanical/i],
   },
   { sub: "Crecimiento y Fortalecimiento", patterns: [/secreto\s*de\s*primavera/i, /shots?/i] },
-  { sub: "Detox y Cuero Cabelludo", patterns: [/scrub\s*glow/i, /cepillo|masajeador/i, /scalp\s*therapy/i] },
+  { sub: "Detox y Cuero Cabelludo", patterns: [/scrub\s*glow/i, /cepillo\s*masajeador|masajeador/i] },
   { sub: "Finalizadores y Protección", patterns: [/fantas[ií]a\s*natural|bloqueador/i, /shine\s*gloss/i] },
   { sub: "Hair Mist", patterns: [/sweet\s*love/i, /bloom\s*shine|bloomshine/i, /scarlette/i, /golden\s*glow/i, /brumas?/i] },
   { sub: "Reparación de Puntas", patterns: [/luna\s*llena/i, /suspiros/i] },
@@ -68,7 +63,24 @@ const LEGACY_SUB_MAP: Record<string, HairSubcategoryName> = {
   multiuso: "Reparación de Puntas",
 };
 
+function namesLooselyMatch(productName: string, listedName: string): boolean {
+  const key = normalizeName(productName);
+  const listed = normalizeName(listedName);
+  if (!key || !listed) return false;
+  return key === listed || key.includes(listed) || listed.includes(key);
+}
+
+/** Subcategorías en las que el nombre está listado de forma explícita. */
+export function listedHairSubcategories(name: string): HairSubcategoryName[] {
+  return HAIR_SUBCATEGORY_ORDER.filter((sub) =>
+    HAIR_SUBCATEGORY_PRODUCTS[sub].some((listed) => namesLooselyMatch(name, listed)),
+  );
+}
+
 export function hairSubcategoryForProductName(name: string, dbSubcategory?: string | null): HairSubcategoryName | null {
+  const listed = listedHairSubcategories(name);
+  if (listed.length > 0) return listed[0]!;
+
   for (const rule of NAME_RULES) {
     if (rule.patterns.some((re) => re.test(name))) return rule.sub;
   }
@@ -87,6 +99,7 @@ export function productMatchesHairSubcategory(
   subcategory: string,
 ): boolean {
   const want = normalizeName(subcategory);
+  if (listedHairSubcategories(product.name).some((sub) => normalizeName(sub) === want)) return true;
   const resolved = hairSubcategoryForProductName(product.name, product.subcategory);
   if (resolved && normalizeName(resolved) === want) return true;
   if (product.subcategory && normalizeName(product.subcategory) === want) return true;

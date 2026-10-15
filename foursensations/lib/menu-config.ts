@@ -49,18 +49,19 @@ export const defaultMenuConfig: MenuConfig = {
     icon: "👜",
     /** Cada tipo es una columna del menú (filtro `linea` en la landing). */
     subs: {
-      Diademas: [],
-      Gorros: [],
       Cepillos: [],
-      Ligas: [],
-      Pinzas: [],
+      Gorros: [],
+      Toallas: [],
+      "Batas de baño": [],
+      Scrunchies: [],
+      Ondas: [],
+      Cosmetiqueras: [],
     },
   },
   Mayorista: {
     icon: "📦",
     subs: {
       Programa: [],
-      Paquetes: [],
     },
   },
 };

@@ -57,26 +57,10 @@ const bySlug: Record<string, Partial<CategoryLandingCopy>> = {
     eyebrow: "Cuidado Corporal · Four Sensations",
     headline: "Tu piel también merece un ritual Four Sensations 💗",
     subtitle:
-      "Texturas que se disfrutan, aromas que enamoran y fórmulas pensadas para consentir tu cuerpo con la misma intención que amas en el cabello. Muy pronto aquí estarán tus nuevas obsesiones corporales.",
+      "Texturas que se disfrutan, aromas que enamoran y fórmulas pensadas para consentir tu cuerpo con la misma intención que amas en el cabello.",
     ctaExplore: "Ver la categoría",
-    commercialLine: "Estamos preparando el catálogo corporal. Mientras tanto, explora capilar y accesorios.",
-    benefits: [
-      {
-        icon: "🧴",
-        title: "MISMA INTENCIÓN",
-        text: "El cuidado corporal Four Sensations sigue la misma filosofía: fórmulas con propósito y resultados que se sienten.",
-      },
-      {
-        icon: "✨",
-        title: "PRÓXIMAMENTE",
-        text: "Estamos armando la vitrina. Pronto verás aquí cada producto listo para sumar a tu ritual.",
-      },
-      {
-        icon: "📦",
-        title: "DESPACHO NACIONAL",
-        text: "Cuando lleguen, saldrán desde Manizales a todo Colombia con la misma logística de la tienda.",
-      },
-    ],
+    commercialLine: "Exfoliantes y rituales para consentir la piel del rostro y el cuerpo.",
+    benefits: [],
   },
   accesorios: {
     eyebrow: "Accesorios capilares · Four Sensations",

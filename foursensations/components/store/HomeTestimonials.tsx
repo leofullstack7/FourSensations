@@ -1,10 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { STORE_TESTIMONIALS, type StoreTestimonial } from "@/lib/store-testimonials";
-
-const ROTATE_MS = 4000;
-const FADE_MS = 380;
 
 function TestimonialCard({ t }: { t: StoreTestimonial }) {
   return (
@@ -27,24 +23,6 @@ function TestimonialCard({ t }: { t: StoreTestimonial }) {
 }
 
 export function HomeTestimonials() {
-  const total = STORE_TESTIMONIALS.length;
-  const [offset, setOffset] = useState(0);
-  const [visible, setVisible] = useState(true);
-
-  useEffect(() => {
-    if (total < 3) return;
-    const id = window.setInterval(() => {
-      setVisible(false);
-      window.setTimeout(() => {
-        setOffset((o) => (o + 3) % total);
-        setVisible(true);
-      }, FADE_MS);
-    }, ROTATE_MS);
-    return () => window.clearInterval(id);
-  }, [total]);
-
-  const desktopTrio = [0, 1, 2].map((i) => STORE_TESTIMONIALS[(offset + i) % total]!);
-
   return (
     <section className="testimonials-section section-pad" aria-label="Testimonios de clientas">
       <div className="container">
@@ -55,12 +33,9 @@ export function HomeTestimonials() {
           </h2>
         </div>
 
-        <div
-          className={`testimonials-grid testimonials-grid--desktop reveal-stagger${visible ? " is-in" : " is-out"}`}
-          aria-live="polite"
-        >
-          {desktopTrio.map((t) => (
-            <TestimonialCard key={`desk-${t.name}-${t.city}-${offset}`} t={t} />
+        <div className="testimonials-grid testimonials-grid--desktop reveal-stagger is-in" aria-live="polite">
+          {STORE_TESTIMONIALS.map((t) => (
+            <TestimonialCard key={`desk-${t.name}-${t.city}`} t={t} />
           ))}
         </div>
 

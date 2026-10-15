@@ -12,7 +12,7 @@ import { isDisplayableImageUrl } from "@/lib/util/image-url";
 import { productHeroThemeFromSlug } from "@/lib/store/product-hero-theme";
 import { getCategoryLabel } from "@/lib/category-labels";
 import { getCatalogProductCopy } from "@/lib/catalog-product-copy";
-import { getProductDisplayName } from "@/lib/product-display-names";
+import { ProductColorSwatchField } from "@/components/store/ProductColorSwatchField";
 
 function galleryPool(product: StoreProduct): string[] {
   const seen = new Set<string>();
@@ -26,7 +26,13 @@ function galleryPool(product: StoreProduct): string[] {
   return urls;
 }
 
-export function ProductLandingClient({ product }: { product: StoreProduct }) {
+export function ProductLandingClient({
+  product,
+  variants = [],
+}: {
+  product: StoreProduct;
+  variants?: StoreProduct[];
+}) {
   const { addToCart, toggleFavorite, favorites } = useStorefrontUi();
   const theme = productHeroThemeFromSlug(product.slug || product.id);
   const copy = getCatalogProductCopy(product.name);
@@ -103,6 +109,19 @@ export function ProductLandingClient({ product }: { product: StoreProduct }) {
               <div className="product-buy__price">
                 <StoreProductPrice product={product} currentStyle={{ fontSize: 30 }} />
               </div>
+              {variants.length > 1 ? (
+                <div className="product-buy__colors">
+                  <p className="product-buy__colors-label">Elige el color</p>
+                  <ProductColorSwatchField
+                    items={variants}
+                    selectedId={product.id}
+                    onSelect={(id) => {
+                      const next = variants.find((item) => item.id === id);
+                      if (next?.slug) window.location.assign(`/producto/${next.slug}`);
+                    }}
+                  />
+                </div>
+              ) : null}
               <div className="product-buy__actions">
                 <button type="button" className="btn btn-primary" onClick={() => addToCart(product.id, product)}>
                   Añadir al carrito
