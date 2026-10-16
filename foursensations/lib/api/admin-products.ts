@@ -1,4 +1,5 @@
 import type { AdminProduct } from "@/lib/types/admin";
+import { adminFetch } from "@/lib/api/admin-fetch";
 import type { AiCompleteFieldOptions } from "@/lib/product-ai-fields";
 import { BULK_DELETE_ALL_CONFIRM_PHRASE } from "@/lib/validation/admin-product";
 
@@ -33,7 +34,7 @@ function normalizeAdminProduct(p: AdminProduct): AdminProduct {
 }
 
 export async function fetchAdminProducts(): Promise<AdminProduct[]> {
-  const res = await fetch("/api/admin/products", {
+  const res = await adminFetch("/api/admin/products", {
     cache: "no-store",
     ...fetchOpts,
   });
@@ -50,14 +51,14 @@ export async function fetchAdminProducts(): Promise<AdminProduct[]> {
 }
 
 export async function fetchAdminProduct(id: string): Promise<AdminProduct> {
-  const res = await fetch(`/api/admin/products/${id}`, { cache: "no-store", ...fetchOpts });
+  const res = await adminFetch(`/api/admin/products/${id}`, { cache: "no-store", ...fetchOpts });
   if (!res.ok) throw new Error(await parseError(res));
   const data = (await res.json()) as { product: AdminProduct };
   return normalizeAdminProduct(data.product);
 }
 
 export async function createAdminProduct(body: Record<string, unknown>): Promise<AdminProduct> {
-  const res = await fetch("/api/admin/products", {
+  const res = await adminFetch("/api/admin/products", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -72,7 +73,7 @@ export async function updateAdminProduct(
   id: string,
   body: Record<string, unknown>
 ): Promise<AdminProduct> {
-  const res = await fetch(`/api/admin/products/${id}`, {
+  const res = await adminFetch(`/api/admin/products/${id}`, {
     method: "PUT",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -84,7 +85,7 @@ export async function updateAdminProduct(
 }
 
 export async function deleteAdminProduct(id: string): Promise<void> {
-  const res = await fetch(`/api/admin/products/${id}`, { method: "DELETE", credentials: "include" });
+  const res = await adminFetch(`/api/admin/products/${id}`, { method: "DELETE", credentials: "include" });
   if (!res.ok) throw new Error(await parseError(res));
 }
 
@@ -95,7 +96,7 @@ export type AdminBulkDeleteProductsBody =
 export async function postAdminProductsBulkDelete(
   body: AdminBulkDeleteProductsBody
 ): Promise<{ deleted: number }> {
-  const res = await fetch("/api/admin/products/bulk-delete", {
+  const res = await adminFetch("/api/admin/products/bulk-delete", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -114,7 +115,7 @@ export async function postAdminProductsBulkPatch(body: {
   recordVersion?: boolean;
   versionLabel?: string;
 }): Promise<{ updated: number; requested: number }> {
-  const res = await fetch("/api/admin/products/bulk-patch", {
+  const res = await adminFetch("/api/admin/products/bulk-patch", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -133,7 +134,7 @@ export async function postAdminProductsNormalizeNames(body: {
   recordVersion?: boolean;
   reportUpdated?: number;
 }): Promise<{ updated: number; unchanged: number; requested: number; found: number }> {
-  const res = await fetch("/api/admin/products/normalize-names", {
+  const res = await adminFetch("/api/admin/products/normalize-names", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -153,7 +154,7 @@ export async function postAdminProductsMerge(body: {
   absorbedIds: string[];
   name: string;
 }): Promise<{ ok: boolean; mergedCount: number; imageCount: number; product: AdminProduct }> {
-  const res = await fetch("/api/admin/products/merge", {
+  const res = await adminFetch("/api/admin/products/merge", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -180,7 +181,7 @@ export async function postAdminProductsGroupVariants(body: {
   primaryId: string;
   primaryName: string;
 }> {
-  const res = await fetch("/api/admin/products/group-variants", {
+  const res = await adminFetch("/api/admin/products/group-variants", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -199,7 +200,7 @@ export async function postAdminProductsGroupVariants(body: {
 
 /** Asigna a cada producto la etiqueta de menú (`Subcategory.menuTag`) de su subcategoría. */
 export async function postSyncProductTagsFromMenu(): Promise<{ updated: number; total: number }> {
-  const res = await fetch("/api/admin/products/sync-menu-tags", {
+  const res = await adminFetch("/api/admin/products/sync-menu-tags", {
     method: "POST",
     credentials: "include",
     headers: { Accept: "application/json" },
@@ -224,7 +225,7 @@ async function fetchAdminProductsAiCompleteChunk(
   results: AdminAiCompleteResult[];
   summary: { total: number; succeeded: number; failed: number };
 }> {
-  const res = await fetch("/api/admin/products/ai-complete", {
+  const res = await adminFetch("/api/admin/products/ai-complete", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -281,7 +282,7 @@ export async function postAdminProductsAiComplete(ids: string[]): Promise<{
 }
 
 export async function postAdminProductsAiClear(ids: string[]): Promise<{ clearedProducts: number; clearedFields: number }> {
-  const res = await fetch("/api/admin/products/ai-clear", {
+  const res = await adminFetch("/api/admin/products/ai-clear", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },

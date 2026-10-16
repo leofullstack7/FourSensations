@@ -1,3 +1,4 @@
+import { adminFetch } from "@/lib/api/admin-fetch";
 export type AdminCoupon = {
   id: string;
   code: string;
@@ -73,17 +74,17 @@ export async function fetchAdminCoupons(): Promise<{
   coupons: AdminCoupon[];
   stats: { total: number; active: number; redemptions: number; emails: number };
 }> {
-  const res = await fetch("/api/admin/coupons", { credentials: "same-origin", cache: "no-store" });
+  const res = await adminFetch("/api/admin/coupons", { credentials: "same-origin", cache: "no-store" });
   return parseJson(res);
 }
 
 export async function fetchAdminCouponDetail(id: string): Promise<AdminCouponDetail> {
-  const res = await fetch(`/api/admin/coupons/${id}`, { credentials: "same-origin", cache: "no-store" });
+  const res = await adminFetch(`/api/admin/coupons/${id}`, { credentials: "same-origin", cache: "no-store" });
   return parseJson(res);
 }
 
 export async function createAdminCoupon(payload: CouponUpsertPayload): Promise<AdminCoupon> {
-  const res = await fetch("/api/admin/coupons", {
+  const res = await adminFetch("/api/admin/coupons", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -94,7 +95,7 @@ export async function createAdminCoupon(payload: CouponUpsertPayload): Promise<A
 }
 
 export async function updateAdminCoupon(id: string, payload: CouponUpsertPayload | { status: AdminCoupon["status"] }): Promise<AdminCoupon> {
-  const res = await fetch(`/api/admin/coupons/${id}`, {
+  const res = await adminFetch(`/api/admin/coupons/${id}`, {
     method: "PATCH",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -105,7 +106,7 @@ export async function updateAdminCoupon(id: string, payload: CouponUpsertPayload
 }
 
 export async function deleteAdminCoupon(id: string): Promise<void> {
-  const res = await fetch(`/api/admin/coupons/${id}`, { method: "DELETE", credentials: "same-origin" });
+  const res = await adminFetch(`/api/admin/coupons/${id}`, { method: "DELETE", credentials: "same-origin" });
   await parseJson(res);
 }
 
@@ -117,7 +118,7 @@ export async function sendAdminCouponEmails(
     message?: string;
   },
 ): Promise<{ sent: number; failed: number }> {
-  const res = await fetch(`/api/admin/coupons/${id}/send`, {
+  const res = await adminFetch(`/api/admin/coupons/${id}/send`, {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },

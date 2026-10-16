@@ -1,4 +1,5 @@
 import type { AdminCategoryTree, AdminSubcategoryRow } from "@/lib/types/admin-category";
+import { adminFetch } from "@/lib/api/admin-fetch";
 
 async function parseError(res: Response): Promise<string> {
   try {
@@ -16,7 +17,7 @@ const fetchOpts: RequestInit = {
 };
 
 export async function fetchAdminCategories(): Promise<AdminCategoryTree[]> {
-  const res = await fetch("/api/admin/categories", fetchOpts);
+  const res = await adminFetch("/api/admin/categories", fetchOpts);
   if (!res.ok) throw new Error(await parseError(res));
   const data = (await res.json()) as { categories?: unknown };
   if (!Array.isArray(data.categories)) return [];
@@ -24,7 +25,7 @@ export async function fetchAdminCategories(): Promise<AdminCategoryTree[]> {
 }
 
 export async function createAdminCategory(body: Record<string, unknown>): Promise<AdminCategoryTree> {
-  const res = await fetch("/api/admin/categories", {
+  const res = await adminFetch("/api/admin/categories", {
     ...fetchOpts,
     method: "POST",
     headers: { ...fetchOpts.headers, "Content-Type": "application/json" },
@@ -39,7 +40,7 @@ export async function updateAdminCategory(
   id: string,
   body: Record<string, unknown>
 ): Promise<AdminCategoryTree> {
-  const res = await fetch(`/api/admin/categories/${id}`, {
+  const res = await adminFetch(`/api/admin/categories/${id}`, {
     ...fetchOpts,
     method: "PUT",
     headers: { ...fetchOpts.headers, "Content-Type": "application/json" },
@@ -51,7 +52,7 @@ export async function updateAdminCategory(
 }
 
 export async function deleteAdminCategory(id: string): Promise<void> {
-  const res = await fetch(`/api/admin/categories/${id}`, { ...fetchOpts, method: "DELETE" });
+  const res = await adminFetch(`/api/admin/categories/${id}`, { ...fetchOpts, method: "DELETE" });
   if (!res.ok) throw new Error(await parseError(res));
 }
 
@@ -59,7 +60,7 @@ export async function createAdminSubcategory(
   categoryId: string,
   body: Record<string, unknown>
 ): Promise<AdminSubcategoryRow> {
-  const res = await fetch(`/api/admin/categories/${categoryId}/subcategories`, {
+  const res = await adminFetch(`/api/admin/categories/${categoryId}/subcategories`, {
     ...fetchOpts,
     method: "POST",
     headers: { ...fetchOpts.headers, "Content-Type": "application/json" },
@@ -74,7 +75,7 @@ export async function updateAdminSubcategory(
   id: string,
   body: Record<string, unknown>
 ): Promise<AdminSubcategoryRow> {
-  const res = await fetch(`/api/admin/subcategories/${id}`, {
+  const res = await adminFetch(`/api/admin/subcategories/${id}`, {
     ...fetchOpts,
     method: "PUT",
     headers: { ...fetchOpts.headers, "Content-Type": "application/json" },
@@ -86,12 +87,12 @@ export async function updateAdminSubcategory(
 }
 
 export async function deleteAdminSubcategory(id: string): Promise<void> {
-  const res = await fetch(`/api/admin/subcategories/${id}`, { ...fetchOpts, method: "DELETE" });
+  const res = await adminFetch(`/api/admin/subcategories/${id}`, { ...fetchOpts, method: "DELETE" });
   if (!res.ok) throw new Error(await parseError(res));
 }
 
 export async function reorderAdminCategories(orderedIds: string[]): Promise<void> {
-  const res = await fetch("/api/admin/categories/reorder", {
+  const res = await adminFetch("/api/admin/categories/reorder", {
     ...fetchOpts,
     method: "POST",
     headers: { ...fetchOpts.headers, "Content-Type": "application/json" },
@@ -104,7 +105,7 @@ export async function reorderAdminSubcategories(
   categoryId: string,
   orderedIds: string[]
 ): Promise<void> {
-  const res = await fetch(`/api/admin/categories/${categoryId}/subcategories/reorder`, {
+  const res = await adminFetch(`/api/admin/categories/${categoryId}/subcategories/reorder`, {
     ...fetchOpts,
     method: "POST",
     headers: { ...fetchOpts.headers, "Content-Type": "application/json" },
@@ -121,7 +122,7 @@ export type NormalizeTaxonomyTextsResult = {
 };
 
 export async function normalizeAdminCategoryTexts(): Promise<NormalizeTaxonomyTextsResult> {
-  const res = await fetch("/api/admin/categories/normalize-texts", {
+  const res = await adminFetch("/api/admin/categories/normalize-texts", {
     ...fetchOpts,
     method: "POST",
     headers: { ...fetchOpts.headers, "Content-Type": "application/json" },

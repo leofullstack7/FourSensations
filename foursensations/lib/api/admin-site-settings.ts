@@ -1,4 +1,5 @@
 import type { MegaPromoByCategory } from "@/lib/site-settings";
+import { adminFetch } from "@/lib/api/admin-fetch";
 
 async function parseError(res: Response): Promise<string> {
   try {
@@ -10,14 +11,14 @@ async function parseError(res: Response): Promise<string> {
 }
 
 export async function fetchAdminMegaPromo(): Promise<MegaPromoByCategory> {
-  const res = await fetch("/api/admin/site-settings", { credentials: "include", cache: "no-store" });
+  const res = await adminFetch("/api/admin/site-settings", { credentials: "include", cache: "no-store" });
   if (!res.ok) throw new Error(await parseError(res));
   const data = (await res.json()) as { megaPromo?: MegaPromoByCategory };
   return data.megaPromo ?? {};
 }
 
 export async function saveAdminMegaPromo(megaPromo: MegaPromoByCategory): Promise<MegaPromoByCategory> {
-  const res = await fetch("/api/admin/site-settings", {
+  const res = await adminFetch("/api/admin/site-settings", {
     method: "PUT",
     credentials: "include",
     headers: { "Content-Type": "application/json" },

@@ -1,4 +1,5 @@
 import type { AiUsageKindKey } from "@/lib/ai-spend/pricing";
+import { adminFetch } from "@/lib/api/admin-fetch";
 
 export type AiSpendKindSummary = {
   kind: AiUsageKindKey;
@@ -25,7 +26,7 @@ export type AiSpendEventItem = {
 };
 
 export async function fetchAdminAiSpendSummary(): Promise<AiSpendSummary> {
-  const res = await fetch("/api/admin/ai-spend", { cache: "no-store" });
+  const res = await adminFetch("/api/admin/ai-spend", { cache: "no-store" });
   if (!res.ok) {
     const err = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new Error(err?.error || "No se pudo cargar el gasto IA");
@@ -34,7 +35,7 @@ export async function fetchAdminAiSpendSummary(): Promise<AiSpendSummary> {
 }
 
 export async function fetchAdminAiSpendEvents(kind: AiUsageKindKey): Promise<AiSpendEventItem[]> {
-  const res = await fetch(`/api/admin/ai-spend?kind=${encodeURIComponent(kind)}`, {
+  const res = await adminFetch(`/api/admin/ai-spend?kind=${encodeURIComponent(kind)}`, {
     cache: "no-store",
   });
   if (!res.ok) {
@@ -49,7 +50,7 @@ export async function patchAdminAiSpendTotal(opts: {
   password: string;
   targetTotalCop: number;
 }): Promise<AiSpendSummary & { versionNumber: number | null }> {
-  const res = await fetch("/api/admin/ai-spend", {
+  const res = await adminFetch("/api/admin/ai-spend", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(opts),
@@ -66,7 +67,7 @@ export async function postAdminAiSpendRecord(opts: {
   note?: string;
   label?: string;
 }): Promise<void> {
-  const res = await fetch("/api/admin/ai-spend/record", {
+  const res = await adminFetch("/api/admin/ai-spend/record", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(opts),

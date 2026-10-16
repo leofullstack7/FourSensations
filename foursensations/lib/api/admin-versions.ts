@@ -1,3 +1,4 @@
+import { adminFetch } from "@/lib/api/admin-fetch";
 export type CatalogVersionListItem = {
   id: string;
   number: number;
@@ -47,13 +48,13 @@ export async function fetchAdminVersions(): Promise<{
   headVersionNumber: number;
   versions: CatalogVersionListItem[];
 }> {
-  const res = await fetch("/api/admin/versions", { cache: "no-store" });
+  const res = await adminFetch("/api/admin/versions", { cache: "no-store" });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
 
 export async function fetchAdminVersionDetail(number: number): Promise<CatalogVersionDetail> {
-  const res = await fetch(`/api/admin/versions?number=${number}`, { cache: "no-store" });
+  const res = await adminFetch(`/api/admin/versions?number=${number}`, { cache: "no-store" });
   if (!res.ok) throw new Error(await parseError(res));
   const data = (await res.json()) as { version: CatalogVersionDetail };
   return data.version;
@@ -65,7 +66,7 @@ export async function restoreAdminVersion(number: number): Promise<{
   versions: CatalogVersionListItem[];
   changed: boolean;
 }> {
-  const res = await fetch("/api/admin/versions", {
+  const res = await adminFetch("/api/admin/versions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ number }),

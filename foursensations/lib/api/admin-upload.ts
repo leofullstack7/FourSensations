@@ -1,4 +1,5 @@
 import type { AdminProduct } from "@/lib/types/admin";
+import { adminFetch } from "@/lib/api/admin-fetch";
 
 async function parseError(res: Response): Promise<string> {
   try {
@@ -13,10 +14,12 @@ async function parseError(res: Response): Promise<string> {
 export async function uploadAdminProductImage(file: File): Promise<string> {
   const fd = new FormData();
   fd.append("file", file);
-  const res = await fetch("/api/admin/upload", {
+  const res = await adminFetch("/api/admin/upload", {
     method: "POST",
     body: fd,
     credentials: "include",
+    noRetry: true,
+    timeoutMs: 120_000,
   });
   if (!res.ok) throw new Error(await parseError(res));
   const data = (await res.json()) as { url?: string };
@@ -29,7 +32,7 @@ export async function setProductCoverImages(
   primaryUrl: string | null,
   hoverUrl: string | null,
 ): Promise<AdminProduct> {
-  const res = await fetch(`/api/admin/products/${productId}/covers`, {
+  const res = await adminFetch(`/api/admin/products/${productId}/covers`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -41,7 +44,7 @@ export async function setProductCoverImages(
 }
 
 export async function fetchProductSkuPhotos(sku: string): Promise<string[]> {
-  const res = await fetch(`/api/admin/product-photos?sku=${encodeURIComponent(sku)}`, {
+  const res = await adminFetch(`/api/admin/product-photos?sku=${encodeURIComponent(sku)}`, {
     credentials: "include",
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -50,7 +53,7 @@ export async function fetchProductSkuPhotos(sku: string): Promise<string[]> {
 }
 
 export async function addProductGalleryImage(productId: string, url: string): Promise<AdminProduct> {
-  const res = await fetch(`/api/admin/products/${productId}/images`, {
+  const res = await adminFetch(`/api/admin/products/${productId}/images`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -65,7 +68,7 @@ export async function removeProductGalleryImage(
   productId: string,
   imageId: string
 ): Promise<AdminProduct> {
-  const res = await fetch(`/api/admin/products/${productId}/images/${imageId}`, {
+  const res = await adminFetch(`/api/admin/products/${productId}/images/${imageId}`, {
     method: "DELETE",
     credentials: "include",
   });

@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import {
-  CATEGORY_STOREFRONT_FEATURED_COUNT,
+  MAX_CATEGORY_STOREFRONT_ORDER,
+  defaultFeaturedProductIds,
   normalizeFeaturedProductIds,
 } from "@/lib/category-storefront-featured";
 import { prisma } from "@/lib/prisma";
@@ -19,7 +20,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const putSchema = z.object({
-  productIds: z.array(z.string().min(1)).max(CATEGORY_STOREFRONT_FEATURED_COUNT),
+  productIds: z.array(z.string().min(1)).max(MAX_CATEGORY_STOREFRONT_ORDER),
 });
 
 type RouteCtx = { params: { id: string } };
@@ -92,7 +93,7 @@ export async function GET(_req: NextRequest, { params }: RouteCtx) {
     const activeProducts = products.filter((p) => p.active);
     const validIds = new Set(activeProducts.map((p) => p.id));
     const savedIds = normalizeFeaturedProductIds(category.storefrontFeaturedProductIds, validIds);
-    const defaultIds = activeProducts.slice(0, CATEGORY_STOREFRONT_FEATURED_COUNT).map((p) => p.id);
+    const defaultIds = defaultFeaturedProductIds(activeProducts);
     const featuredIds = savedIds.length > 0 ? savedIds : defaultIds;
 
     return noStoreJson({
@@ -103,7 +104,7 @@ export async function GET(_req: NextRequest, { params }: RouteCtx) {
         icon: category.icon,
       },
       featuredIds,
-      slotCount: CATEGORY_STOREFRONT_FEATURED_COUNT,
+      slotCount: Math.max(featuredIds.length, activeProducts.length),
       products: activeProducts.map(mapProduct),
     });
   } catch (e) {
@@ -155,7 +156,7 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
 
     await recordCatalogVersionSafe({
       label: `Vitrina actualizada: ${category.name}`,
-      summary: `Se actualizó el orden destacado de la categoría «${category.name}».`,
+      summary: `Se actualizó el orden de la categoría «${category.name}» (${productIds.length} productos).`,
       changes: [
         {
           entityType: CatalogEntities.CATEGORY,

@@ -1,3 +1,4 @@
+import { adminFetch } from "@/lib/api/admin-fetch";
 export type AdminComboCatalogProduct = {
   id: string;
   name: string;
@@ -70,7 +71,7 @@ export async function fetchAdminCombosCatalog(params: {
   if (params.tag?.trim()) sp.set("tag", params.tag.trim());
   if (params.brand?.trim()) sp.set("brand", params.brand.trim());
   const qs = sp.toString();
-  const res = await fetch(`/api/admin/combos/catalog${qs ? `?${qs}` : ""}`, { headers: noStoreHeaders() });
+  const res = await adminFetch(`/api/admin/combos/catalog${qs ? `?${qs}` : ""}`, { headers: noStoreHeaders() });
   if (!res.ok) {
     const j = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(j.error ?? "Error al cargar catálogo");
@@ -79,7 +80,7 @@ export async function fetchAdminCombosCatalog(params: {
 }
 
 export async function fetchAdminCombos(): Promise<{ combos: AdminComboRow[] }> {
-  const res = await fetch("/api/admin/combos", { headers: noStoreHeaders() });
+  const res = await adminFetch("/api/admin/combos", { headers: noStoreHeaders() });
   if (!res.ok) {
     const j = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(j.error ?? "Error al listar combos");
@@ -92,7 +93,7 @@ export async function postAdminCombo(body: {
   comboPrice: number;
   items: { productId: string; quantity?: number }[];
 }): Promise<{ combo: AdminComboRow }> {
-  const res = await fetch("/api/admin/combos", {
+  const res = await adminFetch("/api/admin/combos", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...noStoreHeaders() },
     body: JSON.stringify(body),

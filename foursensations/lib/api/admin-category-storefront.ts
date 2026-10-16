@@ -1,4 +1,5 @@
 import type { AdminCategoryStorefrontProductCard } from "@/app/api/admin/categories/[id]/storefront-order/route";
+import { adminFetch } from "@/lib/api/admin-fetch";
 
 export type CategoryStorefrontOrderPayload = {
   category: { id: string; slug: string; name: string; icon: string | null };
@@ -23,7 +24,7 @@ const fetchOpts: RequestInit = {
 };
 
 export async function fetchCategoryStorefrontOrder(categoryId: string): Promise<CategoryStorefrontOrderPayload> {
-  const res = await fetch(`/api/admin/categories/${categoryId}/storefront-order`, fetchOpts);
+  const res = await adminFetch(`/api/admin/categories/${categoryId}/storefront-order`, fetchOpts);
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as CategoryStorefrontOrderPayload;
 }
@@ -32,7 +33,7 @@ export async function saveCategoryStorefrontOrder(
   categoryId: string,
   productIds: string[],
 ): Promise<{ featuredIds: string[] }> {
-  const res = await fetch(`/api/admin/categories/${categoryId}/storefront-order`, {
+  const res = await adminFetch(`/api/admin/categories/${categoryId}/storefront-order`, {
     ...fetchOpts,
     method: "PUT",
     headers: { ...fetchOpts.headers, "Content-Type": "application/json" },

@@ -1,7 +1,8 @@
 import type { AdminCustomersResponse } from "@/lib/admin/customer-crm";
+import { adminFetch } from "@/lib/api/admin-fetch";
 
 export async function fetchAdminCustomers(): Promise<AdminCustomersResponse> {
-  const res = await fetch("/api/admin/customers", { credentials: "include", cache: "no-store" });
+  const res = await adminFetch("/api/admin/customers", { credentials: "include", cache: "no-store" });
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(data.error || `Error ${res.status} al cargar clientes`);
@@ -15,7 +16,7 @@ export async function sendAdminCustomerEmail(payload: {
   subject: string;
   body: string;
 }): Promise<void> {
-  const res = await fetch("/api/admin/customers/email", {
+  const res = await adminFetch("/api/admin/customers/email", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },

@@ -1,4 +1,5 @@
 import type { BulkPreviewResult } from "@/lib/bulk-import/build-preview";
+import { adminFetch } from "@/lib/api/admin-fetch";
 import type { AdminProduct } from "@/lib/types/admin";
 
 type ApiErrorBody = { error: string };
@@ -22,7 +23,7 @@ export type BulkPreviewResponse = {
 };
 
 export async function postBulkImportPreview(form: FormData): Promise<BulkPreviewResponse> {
-  const res = await fetch("/api/admin/import/bulk/preview", {
+  const res = await adminFetch("/api/admin/import/bulk/preview", {
     method: "POST",
     body: form,
     credentials: "include",
@@ -52,7 +53,7 @@ export type BulkZipOptimizeResult = {
 export async function postBulkZipOptimize(zip: File): Promise<BulkZipOptimizeResult> {
   const fd = new FormData();
   fd.append("zip", zip);
-  const res = await fetch("/api/admin/import/bulk/zip-optimize", {
+  const res = await adminFetch("/api/admin/import/bulk/zip-optimize", {
     method: "POST",
     body: fd,
     credentials: "include",
@@ -111,7 +112,7 @@ export async function patchBulkImportJob(
     };
   }
 ): Promise<{ preview: BulkPreviewResult }> {
-  const res = await fetch(`/api/admin/import/bulk/${jobId}`, {
+  const res = await adminFetch(`/api/admin/import/bulk/${jobId}`, {
     method: "PATCH",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -124,7 +125,7 @@ export async function patchBulkImportJob(
 export async function postBulkImportZip(jobId: string, zip: File): Promise<{ ok: boolean; zipBytes: number }> {
   const fd = new FormData();
   fd.append("zip", zip);
-  const res = await fetch(`/api/admin/import/bulk/${jobId}/zip`, {
+  const res = await adminFetch(`/api/admin/import/bulk/${jobId}/zip`, {
     method: "POST",
     body: fd,
     credentials: "include",
@@ -142,7 +143,7 @@ export async function postBulkImportZip(jobId: string, zip: File): Promise<{ ok:
 }
 
 export async function deleteBulkImportJob(jobId: string): Promise<void> {
-  const res = await fetch(`/api/admin/import/bulk/${jobId}`, {
+  const res = await adminFetch(`/api/admin/import/bulk/${jobId}`, {
     method: "DELETE",
     credentials: "include",
   });
@@ -174,7 +175,7 @@ export async function postBulkImportCommit(
   existingPolicy: "skip" | "replace" | "omit",
   opts?: { keepJob?: boolean }
 ): Promise<BulkCommitResponse> {
-  const res = await fetch(`/api/admin/import/bulk/${jobId}/commit`, {
+  const res = await adminFetch(`/api/admin/import/bulk/${jobId}/commit`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -196,7 +197,7 @@ export async function postBulkImportRowImage(
   const fd = new FormData();
   fd.append("rowId", rowId);
   fd.append("file", file);
-  const res = await fetch(`/api/admin/import/bulk/${jobId}/row-image`, {
+  const res = await adminFetch(`/api/admin/import/bulk/${jobId}/row-image`, {
     method: "POST",
     body: fd,
     credentials: "include",
@@ -217,7 +218,7 @@ export async function postTintResolveCatalog(body: {
   newFamilies: string[];
   newTypes: string[];
 }): Promise<TintCatalogResolveResponse> {
-  const res = await fetch("/api/admin/tints/resolve-catalog", {
+  const res = await adminFetch("/api/admin/tints/resolve-catalog", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },

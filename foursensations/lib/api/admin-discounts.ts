@@ -1,3 +1,4 @@
+import { adminFetch } from "@/lib/api/admin-fetch";
 type ApiErrorBody = { error: string };
 
 async function parseError(res: Response): Promise<string> {
@@ -10,7 +11,7 @@ async function parseError(res: Response): Promise<string> {
 }
 
 export async function expireAdminProductDiscounts(): Promise<{ expired: number }> {
-  const res = await fetch("/api/admin/products/discounts", {
+  const res = await adminFetch("/api/admin/products/discounts", {
     credentials: "include",
     headers: { Accept: "application/json" },
     cache: "no-store",
@@ -25,7 +26,7 @@ export async function postAdminProductDiscounts(body: {
   percent?: number;
   endsAt?: string | null;
 }): Promise<{ updated: number }> {
-  const res = await fetch("/api/admin/products/discounts", {
+  const res = await adminFetch("/api/admin/products/discounts", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },

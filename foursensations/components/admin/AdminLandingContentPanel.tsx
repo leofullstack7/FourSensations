@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { adminFetch } from "@/lib/api/admin-fetch";
 import { uploadAdminProductImage } from "@/lib/api/admin-upload";
 import { LANDING_COLLAGE_SLUGS, normalizeLandingCollages, type LandingCollageSlug, type LandingCollages } from "@/lib/site-settings";
 
@@ -23,7 +24,7 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
   const [busySlot, setBusySlot] = useState<number | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/admin/site-settings", { cache: "no-store", credentials: "include" });
+    const res = await adminFetch("/api/admin/site-settings", { cache: "no-store", credentials: "include" });
     const data = (await res.json()) as { landingCollages?: unknown; error?: string };
     if (!res.ok) throw new Error(data.error || "No se pudo leer el contenido");
     setCollages(normalizeLandingCollages(data.landingCollages));
@@ -43,7 +44,7 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
         ...collages,
         [section]: collages[section].map((current, i) => (i === index ? url : current)),
       });
-      const res = await fetch("/api/admin/site-settings", {
+      const res = await adminFetch("/api/admin/site-settings", {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

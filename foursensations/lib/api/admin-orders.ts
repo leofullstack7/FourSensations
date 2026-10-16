@@ -1,4 +1,5 @@
 import type { AdminSale } from "@/lib/types/admin";
+import { adminFetch } from "@/lib/api/admin-fetch";
 
 type AdminOrderItemDto = {
   productId: string | null;
@@ -55,7 +56,7 @@ function dtoToAdminSale(o: AdminOrderDto): AdminSale {
 }
 
 export async function fetchAdminPaidOrders(): Promise<AdminSale[]> {
-  const res = await fetch("/api/admin/orders", { credentials: "include", cache: "no-store" });
+  const res = await adminFetch("/api/admin/orders", { credentials: "include", cache: "no-store" });
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(data.error || `Error ${res.status} al cargar pedidos`);

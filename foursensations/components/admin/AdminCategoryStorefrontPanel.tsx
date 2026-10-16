@@ -6,7 +6,6 @@ import {
   fetchCategoryStorefrontOrder,
   saveCategoryStorefrontOrder,
 } from "@/lib/api/admin-category-storefront";
-import { CATEGORY_STOREFRONT_FEATURED_COUNT } from "@/lib/category-storefront-featured";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import { formatPrice } from "@/lib/format";
 import { isHttpImageUrl } from "@/lib/util/image-url";
@@ -35,11 +34,11 @@ function reorderFeatured(ids: string[], from: number, to: number): string[] {
   return next;
 }
 
-function insertFeatured(ids: string[], productId: string, to: number, max: number): string[] {
+function insertFeatured(ids: string[], productId: string, to: number): string[] {
   const without = ids.filter((id) => id !== productId);
   const next = [...without];
-  next.splice(Math.min(to, next.length), 0, productId);
-  return next.slice(0, max);
+  next.splice(Math.min(Math.max(0, to), next.length), 0, productId);
+  return next;
 }
 
 export function AdminCategoryStorefrontPanel({
@@ -59,11 +58,11 @@ export function AdminCategoryStorefrontPanel({
   const [featuredIds, setFeaturedIds] = useState<string[]>([]);
   const [savedFeaturedIds, setSavedFeaturedIds] = useState<string[]>([]);
   const [poolQuery, setPoolQuery] = useState("");
+  const [stageQuery, setStageQuery] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragFromSlot, setDragFromSlot] = useState<number | null>(null);
   const [hoverSlot, setHoverSlot] = useState<number | null>(null);
 
-  const slotCount = CATEGORY_STOREFRONT_FEATURED_COUNT;
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
   const loadCategory = useCallback(async (id: string) => {
@@ -75,6 +74,8 @@ export function AdminCategoryStorefrontPanel({
       setSavedFeaturedIds(data.featuredIds);
       setProducts(data.products);
       setTotalInCategory(data.products.length);
+      setPoolQuery("");
+      setStageQuery("");
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Error al cargar vitrina", "danger", "⚠️");
     } finally {
@@ -92,9 +93,10 @@ export function AdminCategoryStorefrontPanel({
     if (!categoryId && sortedCats[0]) setCategoryId(sortedCats[0].id);
   }, [active, categoryId, sortedCats]);
 
+  /** Slots = productos en orden + 1 hueco vacío al final para soltar. */
   const slots = useMemo(() => {
-    return Array.from({ length: slotCount }, (_, i) => featuredIds[i] ?? null);
-  }, [featuredIds, slotCount]);
+    return [...featuredIds, null] as Array<string | null>;
+  }, [featuredIds]);
 
   const featuredSet = useMemo(() => new Set(featuredIds), [featuredIds]);
 
@@ -106,6 +108,18 @@ export function AdminCategoryStorefrontPanel({
       return [p.name, p.brand, p.subcategory].join(" ").toLowerCase().includes(q);
     });
   }, [products, featuredSet, poolQuery]);
+
+  const stageHighlightIds = useMemo(() => {
+    const q = stageQuery.trim().toLowerCase();
+    if (!q) return null;
+    const hits = new Set<string>();
+    for (const id of featuredIds) {
+      const p = productById.get(id);
+      if (!p) continue;
+      if ([p.name, p.brand, p.subcategory].join(" ").toLowerCase().includes(q)) hits.add(id);
+    }
+    return hits;
+  }, [stageQuery, featuredIds, productById]);
 
   const dirty = useMemo(
     () => featuredIds.join("|") !== savedFeaturedIds.join("|"),
@@ -121,16 +135,22 @@ export function AdminCategoryStorefrontPanel({
   const onSlotDrop = useCallback(
     (toIndex: number, productId: string, fromSlot: number | null) => {
       if (fromSlot !== null) {
-        const fromCompact = featuredIds.indexOf(productId);
-        if (fromCompact === -1) return;
-        if (fromCompact !== toIndex) {
-          setFeaturedIds((prev) => reorderFeatured(prev, fromCompact, toIndex));
-        }
+        setFeaturedIds((prev) => {
+          const fromCompact = prev.indexOf(productId);
+          if (fromCompact === -1) return prev;
+          if (toIndex >= prev.length) {
+            const without = prev.filter((id) => id !== productId);
+            without.push(productId);
+            return without;
+          }
+          if (fromCompact === toIndex) return prev;
+          return reorderFeatured(prev, fromCompact, toIndex);
+        });
       } else {
-        setFeaturedIds((prev) => insertFeatured(prev, productId, toIndex, slotCount));
+        setFeaturedIds((prev) => insertFeatured(prev, productId, toIndex));
       }
     },
-    [featuredIds, slotCount],
+    [],
   );
 
   const startDrag = (productId: string, fromSlot: number | null) => {
@@ -173,11 +193,20 @@ export function AdminCategoryStorefrontPanel({
   }, [draggingId, dragFromSlot, onSlotDrop, endDrag]);
 
   const addToVitrina = (productId: string) => {
-    if (featuredIds.length >= slotCount) {
-      showToast(`La vitrina solo tiene ${slotCount} puestos. Quita uno antes de añadir otro.`, "default", "ℹ️");
-      return;
-    }
-    setFeaturedIds((prev) => insertFeatured(prev, productId, prev.length, slotCount));
+    setFeaturedIds((prev) => insertFeatured(prev, productId, prev.length));
+  };
+
+  const addAllToVitrina = () => {
+    setFeaturedIds((prev) => {
+      const seen = new Set(prev);
+      const next = [...prev];
+      for (const p of products) {
+        if (seen.has(p.id)) continue;
+        seen.add(p.id);
+        next.push(p.id);
+      }
+      return next;
+    });
   };
 
   const moveInVitrina = (index: number, dir: -1 | 1) => {
@@ -213,9 +242,9 @@ export function AdminCategoryStorefrontPanel({
             Gestión de <em>PRODUCTOS</em> en Categorías
           </h2>
           <p style={{ fontSize: 13, color: "var(--text-muted)", maxWidth: 720, margin: 0, lineHeight: 1.55 }}>
-            Aquí defines los <strong>6 productos que la tienda carga primero</strong> al abrir una categoría. El
-            listado inferior muestra <strong>todos los productos activos</strong> de esa categoría para que puedas
-            elegir cuáles subir a la vitrina. El resto del catálogo en la tienda se carga después, en segundo plano.
+            Define el <strong>orden exacto</strong> en que se muestran los productos al abrir una categoría.
+            Puedes incluir <strong>todos</strong> los productos activos, buscarlos por nombre y arrastrarlos a la
+            posición que quieras. Sin límite de puestos.
           </p>
         </div>
       </div>
@@ -248,6 +277,15 @@ export function AdminCategoryStorefrontPanel({
         </button>
         <button
           type="button"
+          className="btn btn-outline btn-sm"
+          disabled={loading || products.length === 0 || poolProducts.length === 0}
+          onClick={addAllToVitrina}
+          title="Pasa todos los productos del catálogo a la vitrina"
+        >
+          Añadir todos
+        </button>
+        <button
+          type="button"
           className={`btn btn-primary btn-sm${saving ? " admin-btn--loading-pulse" : ""}`}
           disabled={!categoryId || saving || loading}
           onClick={() => void handleSave()}
@@ -265,25 +303,36 @@ export function AdminCategoryStorefrontPanel({
           <section className="cat-vitrina-stage" aria-label="Vitrina de categoría">
             <div className="cat-vitrina-stage__head">
               <span className="cat-vitrina-stage__title">
-                {selectedCat?.icon} Vitrina tienda — {selectedCat?.name}
+                {selectedCat?.icon} Orden en tienda — {selectedCat?.name}
               </span>
               <span className="cat-vitrina-stage__hint">
-                {featuredIds.length}/{slotCount} puestos · carga instantánea en la tienda
+                {featuredIds.length} en vitrina · {totalInCategory} activos en la categoría
               </span>
             </div>
             <p className="cat-vitrina-stage__help">
-              Arrastra un producto desde abajo, o usa las flechas ← → en cada tarjeta. También puedes pulsar «Añadir a
-              vitrina» en el catálogo.
+              Arrastra desde el catálogo inferior o reordena con las flechas. El hueco vacío al final sirve para
+              soltar un producto nuevo. Busca arriba para resaltar un producto ya en la vitrina.
             </p>
+            <div className="cat-vitrina-stage__tools">
+              <input
+                type="search"
+                className="form-input cat-vitrina-pool__search"
+                placeholder="Buscar en la vitrina…"
+                value={stageQuery}
+                onChange={(e) => setStageQuery(e.target.value)}
+              />
+            </div>
             <div className="cat-vitrina-slots">
               {slots.map((pid, index) => {
                 const p = pid ? productById.get(pid) : null;
                 const isHover = hoverSlot === index && draggingId;
+                const isHighlight = p && stageHighlightIds ? stageHighlightIds.has(p.id) : false;
+                const isDimmed = p && stageHighlightIds && stageHighlightIds.size > 0 && !isHighlight;
                 return (
                   <div
-                    key={`slot-${index}`}
+                    key={p ? `slot-${p.id}` : `slot-empty-${index}`}
                     data-vitrina-slot={index}
-                    className={`cat-vitrina-slot${isHover ? " cat-vitrina-slot--hover" : ""}${p ? " cat-vitrina-slot--filled" : ""}`}
+                    className={`cat-vitrina-slot${isHover ? " cat-vitrina-slot--hover" : ""}${p ? " cat-vitrina-slot--filled" : ""}${isHighlight ? " cat-vitrina-slot--match" : ""}${isDimmed ? " cat-vitrina-slot--dim" : ""}`}
                   >
                     <span className="cat-vitrina-slot__index">{index + 1}</span>
                     {p ? (
@@ -334,7 +383,7 @@ export function AdminCategoryStorefrontPanel({
                       </div>
                     ) : (
                       <div className="cat-vitrina-slot__empty">
-                        <span>Soltar aquí</span>
+                        <span>Soltar aquí para añadir al final</span>
                       </div>
                     )}
                   </div>
@@ -346,9 +395,9 @@ export function AdminCategoryStorefrontPanel({
           <section className="cat-vitrina-pool" aria-label="Catálogo de la categoría">
             <div className="cat-vitrina-pool__head">
               <div>
-                <span className="cat-vitrina-pool__title">Resto del catálogo ({totalInCategory} activos)</span>
+                <span className="cat-vitrina-pool__title">Catálogo fuera de vitrina</span>
                 <p className="cat-vitrina-pool__subtitle">
-                  Productos de esta categoría que aún no están en la vitrina ({poolProducts.length} visibles)
+                  {poolProducts.length} visibles · busca por nombre y arrastra o pulsa «Añadir»
                 </p>
               </div>
               <input
@@ -364,9 +413,9 @@ export function AdminCategoryStorefrontPanel({
                 <p style={{ color: "var(--text-muted)", fontSize: 13, gridColumn: "1 / -1" }}>
                   {totalInCategory === 0
                     ? "No hay productos activos en esta categoría."
-                    : featuredIds.length >= slotCount
-                      ? "Los 6 puestos de la vitrina están ocupados. Quita uno arriba para añadir otro, o reordena con las flechas."
-                      : "Todos los productos visibles ya están en la vitrina."}
+                    : poolQuery.trim()
+                      ? "Ningún producto coincide con la búsqueda."
+                      : "Todos los productos activos ya están en la vitrina. Reordénalos arriba."}
                 </p>
               ) : (
                 poolProducts.map((p) => (
@@ -389,7 +438,6 @@ export function AdminCategoryStorefrontPanel({
                     <button
                       type="button"
                       className="btn btn-outline btn-sm cat-vitrina-card__add"
-                      disabled={featuredIds.length >= slotCount}
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={() => addToVitrina(p.id)}
                     >

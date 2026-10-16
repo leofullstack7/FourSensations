@@ -6,7 +6,6 @@ import {
   type StoreBrandListItem,
 } from "@/lib/brand-display";
 import {
-  CATEGORY_STOREFRONT_FEATURED_COUNT,
   defaultFeaturedProductIds,
   orderCategoryProductsByFeatured,
 } from "@/lib/category-storefront-featured";
@@ -186,13 +185,14 @@ export async function getStorefrontCategoryProductsPage(
     const exclude = excludeIds.filter(Boolean);
     const where = categoryProductWhere(categorySlug, exclude);
 
-    const [totalCount, rows] = await Promise.all([
-      prisma.product.count({ where }),
+    const [cat, rows] = await Promise.all([
+      prisma.category.findUnique({
+        where: { slug: categorySlug },
+        select: { storefrontFeaturedProductIds: true },
+      }),
       prisma.product.findMany({
         where,
         orderBy: [{ featuredInHome: "desc" }, { name: "asc" }],
-        skip,
-        take,
         include: {
           images: { orderBy: { sortOrder: "asc" }, take: 80 },
         },
@@ -200,11 +200,16 @@ export async function getStorefrontCategoryProductsPage(
     ]);
 
     const products = rows.map((r) => rowToStore(r, r.images));
-    const restTotal = await prisma.product.count({ where });
-    return {
+    const featuredIds = cat?.storefrontFeaturedProductIds ?? [];
+    const ordered = orderCategoryProductsByFeatured(
       products,
-      totalCount,
-      hasMore: skip + products.length < restTotal,
+      featuredIds.length > 0 ? featuredIds : defaultFeaturedProductIds(products),
+    );
+    const page = ordered.slice(skip, skip + take);
+    return {
+      products: page,
+      totalCount: ordered.length,
+      hasMore: skip + page.length < ordered.length,
     };
   } catch {
     const all = mockProducts.filter((p) => p.category === categorySlug);
@@ -254,73 +259,11 @@ export type CategoryFeaturedBundle = {
   totalCount: number;
 };
 
-/** Solo la vitrina inicial (6 productos) para carga rápida de la landing. */
+/** Productos de la categoría en el orden de vitrina (sin tope artificial). */
 export async function getStorefrontCategoryFeaturedProducts(categorySlug: string): Promise<CategoryFeaturedBundle> {
-  if (!process.env.DATABASE_URL) {
-    const all = mockProducts.filter((p) => p.category === categorySlug);
-    const featuredIds = defaultFeaturedProductIds(all);
-    const byId = new Map(all.map((p) => [p.id, p]));
-    const products = featuredIds
-      .map((id) => byId.get(id))
-      .filter((p): p is StoreProduct => Boolean(p));
-    return { products, featuredIds, totalCount: all.length };
-  }
-
-  try {
-    return await unstable_cache(
-      async () => {
-        const cat = await prisma.category.findUnique({
-          where: { slug: categorySlug },
-          select: { storefrontFeaturedProductIds: true },
-        });
-
-        const totalCount = await prisma.product.count({
-          where: { active: true, category: categorySlug },
-        });
-
-        const allIds =
-          cat?.storefrontFeaturedProductIds?.length
-            ? cat.storefrontFeaturedProductIds.slice(0, CATEGORY_STOREFRONT_FEATURED_COUNT)
-            : [];
-
-        let featuredIds = allIds;
-        if (featuredIds.length === 0) {
-          const seed = await prisma.product.findMany({
-            where: { active: true, category: categorySlug },
-            orderBy: [{ featuredInHome: "desc" }, { name: "asc" }],
-            take: CATEGORY_STOREFRONT_FEATURED_COUNT,
-            select: { id: true },
-          });
-          featuredIds = seed.map((r) => r.id);
-        }
-
-        if (featuredIds.length === 0) {
-          return { products: [], featuredIds: [], totalCount };
-        }
-
-        const rows = await prisma.product.findMany({
-          where: { active: true, id: { in: featuredIds }, category: categorySlug },
-          include: productStoreInclude,
-        });
-        const byId = new Map(rows.map((r) => [r.id, rowToStore(r, r.images)]));
-        const products = featuredIds
-          .map((id) => byId.get(id))
-          .filter((p): p is StoreProduct => Boolean(p));
-
-        return { products, featuredIds, totalCount };
-      },
-      ["storefront-category-featured", categorySlug],
-      { revalidate: 300, tags: [categoryProductsCacheTag(categorySlug)] },
-    )();
-  } catch {
-    const all = mockProducts.filter((p) => p.category === categorySlug);
-    const featuredIds = defaultFeaturedProductIds(all);
-    const byId = new Map(all.map((p) => [p.id, p]));
-    const products = featuredIds
-      .map((id) => byId.get(id))
-      .filter((p): p is StoreProduct => Boolean(p));
-    return { products, featuredIds, totalCount: all.length };
-  }
+  const products = await getStorefrontProductsByCategory(categorySlug);
+  const featuredIds = defaultFeaturedProductIds(products);
+  return { products, featuredIds, totalCount: products.length };
 }
 
 export async function listStorefrontBrands(): Promise<StoreBrandListItem[]> {
