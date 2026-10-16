@@ -21,6 +21,7 @@ export function prismaProductToAdmin(p: ProductWithImages): AdminProduct {
     tags: Array.isArray(p.tags) ? p.tags : [],
     price: p.price,
     originalPrice: p.originalPrice,
+    wholesalePrice: p.wholesalePrice ?? null,
     discountPercent: p.discountPercent ?? null,
     discountEndsAt: p.discountEndsAt ? p.discountEndsAt.toISOString() : null,
     discountBasePrice: p.discountBasePrice ?? null,

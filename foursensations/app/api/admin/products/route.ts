@@ -143,6 +143,7 @@ export async function POST(req: NextRequest) {
         description: data.description,
         price: data.price,
         originalPrice: data.originalPrice ?? null,
+        wholesalePrice: data.wholesalePrice ?? null,
         stock: data.stock,
         rating: data.rating,
         reviews: data.reviews,

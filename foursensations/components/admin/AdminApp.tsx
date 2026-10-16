@@ -153,6 +153,7 @@ import { isDisplayableImageUrl, isHttpImageUrl } from "@/lib/util/image-url";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import type { AdminProduct, AdminSale } from "@/lib/types/admin";
 import { formatPrice } from "@/lib/format";
+import { getWholesaleUnitPrice } from "@/lib/wholesale-pricing";
 import { AdminCombosPanel } from "@/components/admin/AdminCombosPanel";
 import { AdminDiscountsPanel } from "@/components/admin/AdminDiscountsPanel";
 import { AdminCouponsPanel } from "@/components/admin/AdminCouponsPanel";
@@ -339,6 +340,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
   const [addSaleOpen, setAddSaleOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailProductId, setDetailProductId] = useState<string | null>(null);
+  const [detailStartEditing, setDetailStartEditing] = useState(false);
   const [featuredHomeSavingId, setFeaturedHomeSavingId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<
     { id: number; msg: string; type: string; icon: string }[]
@@ -1926,6 +1928,12 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
                     }
                   }}
                   onView={(p) => {
+                    setDetailStartEditing(false);
+                    setDetailProductId(p.id);
+                    setDetailOpen(true);
+                  }}
+                  onEdit={(p) => {
+                    setDetailStartEditing(true);
                     setDetailProductId(p.id);
                     setDetailOpen(true);
                   }}
@@ -2137,6 +2145,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
       <AdminProductDetailModal
         open={detailOpen}
         product={products.find((p) => p.id === detailProductId) ?? null}
+        startInEditMode={detailStartEditing}
         saving={productMutation === "edit"}
         categoryTree={categoriesTree}
         brandOptions={productFilterBrandOptions}
@@ -2146,6 +2155,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
         onClose={() => {
           setDetailOpen(false);
           setDetailProductId(null);
+          setDetailStartEditing(false);
         }}
         onSave={async (patch) => {
           if (!detailProductId) return;
@@ -2511,6 +2521,7 @@ function AdminProductListTab({
   featuredHomeSavingId,
   onToggleFeaturedInHome,
   onView,
+  onEdit,
   onDelete,
   onDeleteVariant,
   onProductsRefresh,
@@ -2549,6 +2560,7 @@ function AdminProductListTab({
   featuredHomeSavingId: string | null;
   onToggleFeaturedInHome: (id: string, value: boolean) => void | Promise<void>;
   onView: (p: AdminProduct) => void;
+  onEdit: (p: AdminProduct) => void;
   onDelete: (id: string) => void | Promise<void>;
   onDeleteVariant: (id: string) => void | Promise<void>;
   onProductsRefresh: () => void | Promise<void>;
@@ -2751,6 +2763,7 @@ function AdminProductListTab({
               <th>Categoría</th>
               <th title="Orden en la sección Productos Destacados del home (sin etiqueta pública)">Prioridad home</th>
               <th>Precio</th>
+              <th title="Precio que ven las cuentas mayorista">Precio mayorista</th>
               <th>Stock</th>
               <th style={{ textAlign: "center" }}>Variantes</th>
               <th style={{ textAlign: "center" }}>Color</th>
@@ -2761,13 +2774,13 @@ function AdminProductListTab({
           <tbody>
             {listLoading && filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={11} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                <td colSpan={12} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   Cargando…
                 </td>
               </tr>
             ) : filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={11} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                <td colSpan={12} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
                   {totalProductCount === 0
                     ? "Sin productos"
                     : showHiddenProducts
@@ -2821,6 +2834,12 @@ function AdminProductListTab({
                       />
                     </td>
                     <td>{formatPrice(p.price)}</td>
+                    <td>
+                      {formatPrice(getWholesaleUnitPrice(p.name, p.price, p.wholesalePrice))}
+                      {p.wholesalePrice == null ? (
+                        <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>auto</div>
+                      ) : null}
+                    </td>
                     <td>{p.stock}</td>
                     <td style={{ textAlign: "center", verticalAlign: "middle" }}>
                       {isGroupRow ? (
@@ -2905,8 +2924,15 @@ function AdminProductListTab({
                     </td>
                     <td>
                       <div className="action-group">
-                        <button type="button" className="btn-table" onClick={() => onView(p)}>👁 Ver</button>
-                        <button type="button" className="btn-table danger" onClick={() => onDelete(p.id)}>🗑️</button>
+                        <button type="button" className="btn-table" onClick={() => onEdit(p)}>
+                          ✏️ Editar
+                        </button>
+                        <button type="button" className="btn-table" onClick={() => onView(p)}>
+                          👁 Ver
+                        </button>
+                        <button type="button" className="btn-table danger" onClick={() => onDelete(p.id)}>
+                          🗑️
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -9453,6 +9479,7 @@ function AdminAddSaleModal({
 function AdminProductDetailModal({
   open,
   product,
+  startInEditMode = false,
   saving,
   categoryTree,
   brandOptions,
@@ -9467,6 +9494,7 @@ function AdminProductDetailModal({
 }: {
   open: boolean;
   product: AdminProduct | null;
+  startInEditMode?: boolean;
   saving: boolean;
   categoryTree: AdminCategoryTree[];
   brandOptions: string[];
@@ -9494,6 +9522,7 @@ function AdminProductDetailModal({
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editPrice, setEditPrice] = useState("");
   const [editOriginalPrice, setEditOriginalPrice] = useState("");
+  const [editWholesalePrice, setEditWholesalePrice] = useState("");
   const [editStock, setEditStock] = useState("");
   const [editEmoji, setEditEmoji] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -9512,6 +9541,7 @@ function AdminProductDetailModal({
     setEditTags(productOwnTags(p));
     setEditPrice(String(p.price));
     setEditOriginalPrice(p.originalPrice != null ? String(p.originalPrice) : "");
+    setEditWholesalePrice(p.wholesalePrice != null ? String(p.wholesalePrice) : "");
     setEditStock(String(p.stock));
     setEditEmoji(p.emoji || "");
     setEditDescription(seeded.description);
@@ -9523,13 +9553,13 @@ function AdminProductDetailModal({
 
   useEffect(() => {
     if (!open || !product) return;
-    setEditingMode(false);
+    setEditingMode(startInEditMode);
     setEditorView("fields");
     setMainImagePickerOpen(false);
     setDescriptionGenerating(false);
     applyProductToForm(product);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset al cambiar de producto
-  }, [open, product?.id]);
+  }, [open, product?.id, startInEditMode]);
 
   useEffect(() => {
     if (!editingMode) setMainImagePickerOpen(false);
@@ -9761,7 +9791,8 @@ function AdminProductDetailModal({
         <div className="admin-product-detail-title" style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "var(--dark)", marginBottom: 18 }}>
           Detalle del producto
         </div>
-        <div className="admin-product-detail-grid" style={{ display: "grid", gridTemplateColumns: "minmax(300px, 1fr) minmax(380px, 1.2fr)", gap: 20 }}>
+        <div className="admin-product-detail-scroll">
+        <div className="admin-product-detail-grid">
           <div className="admin-product-detail-media">
             <div className="admin-product-detail-image" style={{ border: "1px solid var(--line)", borderRadius: 12, overflow: "hidden", background: "var(--ivory)", aspectRatio: "1 / 1" }}>
               {isDisplayableImageUrl(product.imageUrl) ? (
@@ -9946,6 +9977,13 @@ function AdminProductDetailModal({
                   </div>
                   <div className="admin-card" style={{ padding: 12 }}>
                     <strong>Precio:</strong> {formatPrice(product.price)}
+                  </div>
+                  <div className="admin-card" style={{ padding: 12 }}>
+                    <strong>Precio mayorista:</strong>{" "}
+                    {formatPrice(getWholesaleUnitPrice(product.name, product.price, product.wholesalePrice))}
+                    {product.wholesalePrice == null ? (
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Calculado automáticamente</div>
+                    ) : null}
                   </div>
                   <div className="admin-card" style={{ padding: 12 }}>
                     <strong>Stock:</strong> {product.stock}
@@ -10144,6 +10182,28 @@ function AdminProductDetailModal({
                   />
                 </div>
                 <div className="form-group">
+                  <label className="form-label">Precio mayorista</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editWholesalePrice}
+                    disabled={editBusy}
+                    onChange={(e) => setEditWholesalePrice(e.target.value)}
+                    placeholder="Vacío = automático"
+                  />
+                  <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
+                    Si lo dejas vacío se usa el precio automático (
+                    {formatPrice(
+                      getWholesaleUnitPrice(
+                        editName || product.name,
+                        Number(String(editPrice).replace(",", ".")) || product.price,
+                        null,
+                      ),
+                    )}
+                    ).
+                  </p>
+                </div>
+                <div className="form-group">
                   <label className="form-label">Stock</label>
                   <input
                     type="number"
@@ -10324,6 +10384,7 @@ function AdminProductDetailModal({
             )}
           </div>
         </div>
+        </div>
         <div className="admin-product-detail-actions" style={{
             display: "flex",
             justifyContent: "space-between",
@@ -10374,6 +10435,10 @@ function AdminProductDetailModal({
                     const originalNum = originalRaw
                       ? Number(originalRaw.replace(",", "."))
                       : null;
+                    const wholesaleRaw = editWholesalePrice.trim();
+                    const wholesaleNum = wholesaleRaw
+                      ? Number(wholesaleRaw.replace(",", "."))
+                      : null;
 
                     if (!editName.trim()) {
                       showToast("Escribe un nombre para el producto.", "danger", "⚠️");
@@ -10399,6 +10464,17 @@ function AdminProductDetailModal({
                       );
                       return;
                     }
+                    if (
+                      wholesaleNum != null &&
+                      (!Number.isFinite(wholesaleNum) || wholesaleNum < 0 || !Number.isInteger(wholesaleNum))
+                    ) {
+                      showToast(
+                        "El precio mayorista debe ser un número entero en pesos, o déjalo vacío para el automático.",
+                        "danger",
+                        "⚠️",
+                      );
+                      return;
+                    }
                     if (!Number.isFinite(stockNum) || stockNum < 0 || !Number.isInteger(stockNum)) {
                       showToast("El stock debe ser un número entero (0 o más).", "danger", "⚠️");
                       return;
@@ -10413,6 +10489,7 @@ function AdminProductDetailModal({
                         tags: editTags,
                         price: priceNum,
                         originalPrice: originalNum,
+                        wholesalePrice: wholesaleNum,
                         stock: stockNum,
                         emoji: editEmoji.trim() || null,
                         description: editDescription.trim(),

@@ -74,6 +74,8 @@ model Product {
   description   String         @db.Text
   price         Int
   originalPrice Int?
+  /// Precio mayorista en COP. Null = usar tabla/fórmula por nombre.
+  wholesalePrice Int?
   /// % de descuento comercial (1–90). Null = sin descuento de admin.
   discountPercent    Int?
   /// Fin del descuento. Null + discountPercent = hasta que el admin lo quite.

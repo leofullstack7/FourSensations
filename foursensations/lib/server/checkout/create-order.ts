@@ -189,7 +189,9 @@ export async function createPendingOrderFromCheckout(
         }
         stockNeed.set(productId, (stockNeed.get(productId) ?? 0) + line.quantity);
         const publicPrice = resolveProductPrice(p).price;
-        const unitPrice = wholesaleCheckout ? getWholesaleUnitPrice(p.name, publicPrice) : publicPrice;
+        const unitPrice = wholesaleCheckout
+          ? getWholesaleUnitPrice(p.name, publicPrice, p.wholesalePrice)
+          : publicPrice;
         const lineTotal = unitPrice * line.quantity;
         subtotal += lineTotal;
         lines.push({

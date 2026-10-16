@@ -28,6 +28,7 @@ function normalizeAdminProduct(p: AdminProduct): AdminProduct {
     discountPercent: p.discountPercent ?? null,
     discountEndsAt: p.discountEndsAt ?? null,
     discountBasePrice: p.discountBasePrice ?? null,
+    wholesalePrice: p.wholesalePrice ?? null,
   };
 }
 

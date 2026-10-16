@@ -33,6 +33,8 @@ export type AdminProduct = {
   tags: string[];
   price: number;
   originalPrice: number | null;
+  /** Precio mayorista en COP; null = fórmula/tabla por nombre. */
+  wholesalePrice: number | null;
   /** % de descuento de admin (1–90). */
   discountPercent?: number | null;
   /** ISO; null = hasta que se quite. */

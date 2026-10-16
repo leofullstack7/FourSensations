@@ -30,6 +30,9 @@ export const adminProductCreateSchema = z.object({
   description: z.string().trim().min(1, "La descripción es obligatoria").max(20_000),
   price: z.coerce.number({ invalid_type_error: "El precio debe ser un número" }).int("El precio debe ser un número entero (sin decimales)").nonnegative("El precio no puede ser negativo"),
   originalPrice: z.coerce.number().int().nonnegative().nullable().optional(),
+  wholesalePrice: z
+    .union([z.coerce.number().int().nonnegative(), z.null()])
+    .optional(),
   stock: z.coerce.number().int().min(0, "El stock no puede ser negativo").default(0),
   rating: z.coerce.number().min(0).max(5).default(5),
   reviews: z.coerce.number().int().min(0).default(0),
@@ -71,6 +74,9 @@ export const adminProductUpdateSchema = z
       .nonnegative("El precio no puede ser negativo")
       .optional(),
     originalPrice: z.coerce.number().int().nonnegative().nullable().optional(),
+    wholesalePrice: z
+      .union([z.coerce.number().int().nonnegative(), z.null()])
+      .optional(),
     stock: z.coerce.number().int().min(0, "El stock no puede ser negativo").optional(),
     rating: z.coerce.number().min(0).max(5).optional(),
     reviews: z.coerce.number().int().min(0).optional(),
@@ -116,6 +122,7 @@ export function formatZodError(err: z.ZodError): { message: string; issues: z.Zo
     description: "Descripción",
     price: "Precio",
     originalPrice: "Precio original",
+    wholesalePrice: "Precio mayorista",
     stock: "Stock",
     tags: "Etiquetas",
     imageUrl: "Imagen",

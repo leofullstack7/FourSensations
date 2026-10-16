@@ -154,6 +154,7 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
         ...(d.description !== undefined && { description: d.description }),
         ...(d.price !== undefined && { price: d.price }),
         ...(d.originalPrice !== undefined && { originalPrice: d.originalPrice }),
+        ...(d.wholesalePrice !== undefined && { wholesalePrice: d.wholesalePrice }),
         ...(d.stock !== undefined && { stock: d.stock }),
         ...(d.rating !== undefined && { rating: d.rating }),
         ...(d.reviews !== undefined && { reviews: d.reviews }),
@@ -188,9 +189,16 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
     }
 
     const ficha = d.storefrontCopy !== undefined ? await saveProductFicha(id, d.storefrontCopy) : await getProductFicha(id);
-    if (d.storefrontCopy !== undefined || d.name !== undefined || d.description !== undefined || d.price !== undefined) {
+    if (
+      d.storefrontCopy !== undefined ||
+      d.name !== undefined ||
+      d.description !== undefined ||
+      d.price !== undefined ||
+      d.wholesalePrice !== undefined
+    ) {
       revalidateStorefrontProducts();
       revalidatePath(`/producto/${row.slug}`);
+      revalidatePath("/mayorista");
     }
 
     await recordCatalogVersionSafe({

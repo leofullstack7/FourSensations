@@ -35,6 +35,7 @@ type ProductRow = {
   tags: string[];
   price: number;
   originalPrice: number | null;
+  wholesalePrice?: number | null;
   discountPercent?: number | null;
   discountEndsAt?: Date | null;
   discountBasePrice?: number | null;
@@ -89,6 +90,7 @@ function rowToStore(p: ProductRow, galleryRows: { url: string }[] = []): StorePr
     tags: Array.isArray(p.tags) ? p.tags : [],
     price: resolved.price,
     originalPrice: resolved.originalPrice,
+    wholesalePrice: p.wholesalePrice ?? null,
     discountPercent: resolved.discountPercent,
     rating: p.rating,
     reviews: p.reviews,

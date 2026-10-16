@@ -13,6 +13,8 @@ export type StoreProduct = {
   tags: string[];
   price: number;
   originalPrice: number | null;
+  /** Override de precio mayorista desde admin; null = fórmula/tabla. */
+  wholesalePrice?: number | null;
   /** Entero 1–90 para badge «15% desc»; null si no hay oferta real. */
   discountPercent?: number | null;
   rating: number;

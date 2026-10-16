@@ -48,7 +48,15 @@ function lookupKey(name: string): string {
   return normalizeMenuLookup(name);
 }
 
-export function getWholesaleUnitPrice(productName: string, publicPrice: number): number {
+export function getWholesaleUnitPrice(
+  productName: string,
+  publicPrice: number,
+  override?: number | null,
+): number {
+  if (typeof override === "number" && Number.isFinite(override) && override > 0) {
+    return Math.round(override);
+  }
+
   const key = lookupKey(productName);
   const exact = WHOLESALE_PRICE_BY_NAME[key];
   if (exact && exact > 0 && exact < publicPrice) return exact;
@@ -64,7 +72,7 @@ export function getWholesaleUnitPrice(productName: string, publicPrice: number):
 
 export function applyWholesalePricing<T extends StoreProduct>(product: T): T {
   const publicPrice = product.originalPrice && product.originalPrice > product.price ? product.originalPrice : product.price;
-  const wholesale = getWholesaleUnitPrice(product.name, publicPrice);
+  const wholesale = getWholesaleUnitPrice(product.name, publicPrice, product.wholesalePrice);
   const sale = Math.min(wholesale, publicPrice);
   return {
     ...product,
