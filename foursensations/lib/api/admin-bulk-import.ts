@@ -28,6 +28,8 @@ export async function postBulkImportPreview(form: FormData): Promise<BulkPreview
     body: form,
     credentials: "include",
     headers: { Accept: "application/json" },
+    noRetry: true,
+    timeoutMs: 180_000,
   });
   if (!res.ok) {
     if (res.status === 502 || res.status === 504 || res.status === 413) {
@@ -57,6 +59,8 @@ export async function postBulkZipOptimize(zip: File): Promise<BulkZipOptimizeRes
     method: "POST",
     body: fd,
     credentials: "include",
+    noRetry: true,
+    timeoutMs: 180_000,
   });
   if (!res.ok) {
     if (res.status === 502 || res.status === 504 || res.status === 413) {
@@ -130,6 +134,8 @@ export async function postBulkImportZip(jobId: string, zip: File): Promise<{ ok:
     body: fd,
     credentials: "include",
     headers: { Accept: "application/json" },
+    noRetry: true,
+    timeoutMs: 180_000,
   });
   if (!res.ok) {
     if (res.status === 502 || res.status === 504 || res.status === 413) {
@@ -184,6 +190,7 @@ export async function postBulkImportCommit(
       existingPolicy,
       ...(opts?.keepJob ? { keepJob: true } : {}),
     }),
+    timeoutMs: 180_000,
   });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as BulkCommitResponse;
@@ -202,6 +209,8 @@ export async function postBulkImportRowImage(
     body: fd,
     credentials: "include",
     headers: { Accept: "application/json" },
+    noRetry: true,
+    timeoutMs: 120_000,
   });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as { preview: BulkPreviewResult; imageFilename: string; rowId: string };
