@@ -1,7 +1,13 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { normalizeProductFicha, normalizeProductFichaMap, type ProductFichaCopy } from "@/lib/product-ficha";
-import { normalizeLandingCollages, normalizeMegaPromo, type SiteSettingsData } from "@/lib/site-settings";
+import {
+  homeContentFromSettings,
+  normalizeHomeContent,
+  normalizeLandingCollages,
+  normalizeMegaPromo,
+  type SiteSettingsData,
+} from "@/lib/site-settings";
 
 const SETTINGS_ID = 1;
 
@@ -16,6 +22,11 @@ export async function getMegaPromoMap() {
   return normalizeMegaPromo(data.megaPromo);
 }
 
+export async function getHomeContentSettings() {
+  const data = await getSiteSettingsData();
+  return homeContentFromSettings(data);
+}
+
 export async function mergeSiteSettingsData(patch: Partial<SiteSettingsData>): Promise<SiteSettingsData> {
   const current = await getSiteSettingsData();
   const next: SiteSettingsData = { ...current, ...patch };
@@ -24,6 +35,9 @@ export async function mergeSiteSettingsData(patch: Partial<SiteSettingsData>): P
   }
   if (patch.landingCollages !== undefined) {
     next.landingCollages = normalizeLandingCollages(patch.landingCollages);
+  }
+  if (patch.homeContent !== undefined) {
+    next.homeContent = normalizeHomeContent(patch.homeContent);
   }
   if (patch.productFichas !== undefined) {
     next.productFichas = normalizeProductFichaMap(patch.productFichas);

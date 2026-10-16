@@ -38,6 +38,12 @@ import { useEffect, useMemo, useState } from "react";
 import type { StaticImageData } from "next/image";
 import dulceRenacerCover from "@/assets/productos/FS002 Dulce Renacer/FS002-1.webp";
 import accesoriosCover from "@/assets/productos/FS027 Accesorios/FS027-1.webp";
+import {
+  resolveShowcaseItems,
+  type HomeContentSettings,
+} from "@/lib/home-content";
+import { useStoreNavigation } from "@/components/store/StoreNavigationProvider";
+import { resolveStoreMenuGroupHref } from "@/lib/store/menu-item-href";
 
 const HERO_SLIDES: readonly {
   desktop: StaticImageData;
@@ -80,12 +86,14 @@ type StoreHomeClientProps = {
   tintItems?: TintBubbleItem[];
   initialProducts?: StoreProduct[];
   initialCombos?: StoreCombo[];
+  homeContent?: HomeContentSettings | null;
 };
 
 export function StoreHomeClient({
   tintItems = [],
   initialProducts = [],
   initialCombos = [],
+  homeContent = null,
 }: StoreHomeClientProps) {
   const {
     catalogProducts,
@@ -96,6 +104,7 @@ export function StoreHomeClient({
     toggleFavorite,
     favorites,
   } = useStorefrontUi();
+  const { navigateTo } = useStoreNavigation();
 
   const products = catalogProducts.length > 0 ? catalogProducts : initialProducts;
 
@@ -208,9 +217,10 @@ export function StoreHomeClient({
       </div>
 
       <CategoryShowcaseStrip
+        items={resolveShowcaseItems(homeContent?.showcaseImages)}
         onSelectSubcategory={(sub) => {
           setManualSub(sub);
-          document.getElementById("featured")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          navigateTo(resolveStoreMenuGroupHref("cuidado-capilar", sub));
         }}
         activeSubcategory={manualSub}
       />
@@ -237,7 +247,7 @@ export function StoreHomeClient({
             <div
               className="promo-card"
               style={{
-                backgroundImage: `linear-gradient(135deg, rgba(240, 228, 240, 0.62) 0%, rgba(197, 187, 218, 0.55) 100%), url(${dulceRenacerCover.src})`,
+                backgroundImage: `linear-gradient(135deg, rgba(240, 228, 240, 0.62) 0%, rgba(197, 187, 218, 0.55) 100%), url(${homeContent?.promoWidgets.capilar || dulceRenacerCover.src})`,
                 backgroundSize: "cover",
                 backgroundPosition: "center",
               }}
@@ -258,7 +268,7 @@ export function StoreHomeClient({
             <div
               className="promo-card"
               style={{
-                backgroundImage: `linear-gradient(135deg, rgba(255, 228, 220, 0.7) 0%, rgba(232, 180, 184, 0.55) 100%), url(${dulceRenacerCover.src})`,
+                backgroundImage: `linear-gradient(135deg, rgba(255, 228, 220, 0.7) 0%, rgba(232, 180, 184, 0.55) 100%), url(${homeContent?.promoWidgets.corporal || dulceRenacerCover.src})`,
                 backgroundSize: "cover",
                 backgroundPosition: "center",
               }}
@@ -279,7 +289,7 @@ export function StoreHomeClient({
             <div
               className="promo-card"
               style={{
-                backgroundImage: `linear-gradient(135deg, rgba(212, 232, 228, 0.58) 0%, rgba(168, 191, 187, 0.5) 100%), url(${accesoriosCover.src})`,
+                backgroundImage: `linear-gradient(135deg, rgba(212, 232, 228, 0.58) 0%, rgba(168, 191, 187, 0.5) 100%), url(${homeContent?.promoWidgets.accesorios || accesoriosCover.src})`,
                 backgroundSize: "cover",
                 backgroundPosition: "center",
               }}
@@ -297,7 +307,7 @@ export function StoreHomeClient({
               </Link>
               <div className="promo-deco">✨</div>
             </div>
-            <PromoDiagonalTrio />
+            <PromoDiagonalTrio images={homeContent?.promoWidgets} />
             <div className="promo-card wide" style={{ background: "linear-gradient(135deg, var(--dark) 0%, var(--dark-mid) 100%)", color: "white" }}>
               <div>
                 <div className="promo-label" style={{ color: "rgba(255,255,255,0.6)" }}>

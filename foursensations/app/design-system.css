@@ -2534,8 +2534,10 @@ input, select, textarea { font-family: inherit; }
   margin: 0 auto;
 }
 .newsletter-form input {
-  flex: 1;
-  padding: 14px 20px;
+  flex: 1 1 auto;
+  min-height: 48px;
+  height: 48px;
+  padding: 12px 20px;
   border-radius: var(--radius-full);
   border: 1.5px solid rgba(255,255,255,0.15);
   background: rgba(255,255,255,0.08);
@@ -2543,6 +2545,7 @@ input, select, textarea { font-family: inherit; }
   outline: none;
   font-size: 14px;
   transition: border-color var(--transition);
+  box-sizing: border-box;
 }
 .newsletter-form input::placeholder { color: rgba(255,255,255,0.45); }
 .newsletter-form input:focus { border-color: var(--blush); }
@@ -3253,6 +3256,28 @@ footer {
   }
   .mobile-mega-ver-todo:active {
     opacity: 0.88;
+  }
+  .mobile-mega-sublinks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  .mobile-mega-sublink {
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    border-radius: 999px;
+    padding: 7px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .mobile-mega-sublink:active {
+    opacity: 0.85;
   }
   .products-grid { grid-template-columns: repeat(2, 1fr); }
   .testimonials-grid--desktop { display: none; }

@@ -134,6 +134,7 @@ export function CategoryLandingClient({
   const [hasMore, setHasMore] = useState(true);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE);
+  const [pulseActive, setPulseActive] = useState(false);
   const loadingRef = useRef(false);
 
   const copy = useMemo(() => getCategoryLandingCopy(categoryLabel, categorySlug), [categoryLabel, categorySlug]);
@@ -312,7 +313,9 @@ export function CategoryLandingClient({
     } else if (categoryNavFilters.sub && grupoLabels.some((g) => fold(g) === fold(categoryNavFilters.sub))) {
       setSelectedGrupo(categoryNavFilters.sub);
     }
-    if (categoryNavFilters.sub && hairMode) {
+    if (categoryNavFilters.linea) {
+      setSelectedLine(categoryNavFilters.linea);
+    } else if (categoryNavFilters.sub && hairMode) {
       const asLine = subcategoriesFromDb.some((s) => fold(s.name) === fold(categoryNavFilters.sub));
       if (asLine) setSelectedLine(categoryNavFilters.sub);
     }
@@ -322,21 +325,52 @@ export function CategoryLandingClient({
     setVisibleLimit(INITIAL_VISIBLE);
   }, [selectedGrupo, selectedLine]);
 
-  const filtered = useMemo(
-    () => products.filter((p) => productMatchesCategoryFilters(p, filterOpts)),
-    [products, filterOpts],
-  );
+  const hasActiveFilters = Boolean(selectedGrupo || selectedLine);
+
+  useEffect(() => {
+    if (!hasActiveFilters) {
+      setPulseActive(false);
+      return;
+    }
+    setPulseActive(true);
+    const t = window.setTimeout(() => setPulseActive(false), 5200);
+    return () => window.clearTimeout(t);
+  }, [hasActiveFilters, selectedGrupo, selectedLine, categorySlug]);
+
+  const matchedProducts = useMemo(() => {
+    if (!hasActiveFilters) return [] as StoreProduct[];
+    const filtered = products.filter((p) => productMatchesCategoryFilters(p, filterOpts));
+    return enrichStorefrontDisplayProducts(
+      resolveStorefrontDisplayAfterFilter(filtered, products),
+      products,
+    );
+  }, [hasActiveFilters, products, filterOpts]);
+
+  const restProducts = useMemo(() => {
+    if (!hasActiveFilters) {
+      return enrichStorefrontDisplayProducts(
+        resolveStorefrontDisplayAfterFilter(products, products),
+        products,
+      );
+    }
+    const matchedIds = new Set(matchedProducts.map((p) => p.id));
+    const rest = products.filter((p) => !matchedIds.has(p.id));
+    return enrichStorefrontDisplayProducts(
+      resolveStorefrontDisplayAfterFilter(rest, products),
+      products,
+    );
+  }, [hasActiveFilters, products, matchedProducts]);
 
   const displayProducts = useMemo(
-    () => enrichStorefrontDisplayProducts(resolveStorefrontDisplayAfterFilter(filtered, products), products),
-    [filtered, products],
+    () => (hasActiveFilters ? [...matchedProducts, ...restProducts] : restProducts),
+    [hasActiveFilters, matchedProducts, restProducts],
   );
 
-  const hasActiveFilters = Boolean(selectedGrupo || selectedLine);
   const shouldCapVisible = false;
   const shownProducts = shouldCapVisible ? displayProducts.slice(0, visibleLimit) : displayProducts;
   const hasHiddenLoaded = shownProducts.length < displayProducts.length;
   const showMoreButton = hasHiddenLoaded || (hasMore && shouldCapVisible);
+  const filtered = matchedProducts;
 
   const onVerMas = () => {
     if (hasHiddenLoaded) {
@@ -391,7 +425,38 @@ export function CategoryLandingClient({
     syncUrl(selectedGrupo, line);
   };
 
-  const groupedShown = useMemo(() => [{ title: null, items: shownProducts }], [shownProducts]);
+  const groupedShown = useMemo(() => {
+    if (!hasActiveFilters) {
+      return [{ title: null as string | null, items: shownProducts, pulse: false }];
+    }
+    const matchedIds = new Set(matchedProducts.map((p) => p.id));
+    const matchedShown = shownProducts.filter((p) => matchedIds.has(p.id));
+    const restShown = shownProducts.filter((p) => !matchedIds.has(p.id));
+    const groups: { title: string | null; items: StoreProduct[]; pulse: boolean }[] = [];
+    if (matchedShown.length > 0) {
+      groups.push({
+        title: selectedLine || selectedGrupo ? `Selección: ${selectedLine || selectedGrupo}` : "Selección del menú",
+        items: matchedShown,
+        pulse: pulseActive,
+      });
+    }
+    if (restShown.length > 0) {
+      groups.push({
+        title: matchedShown.length > 0 ? `Más de ${categoryLabel}` : null,
+        items: restShown,
+        pulse: false,
+      });
+    }
+    return groups.length > 0 ? groups : [{ title: null, items: shownProducts, pulse: false }];
+  }, [
+    hasActiveFilters,
+    shownProducts,
+    matchedProducts,
+    selectedLine,
+    selectedGrupo,
+    pulseActive,
+    categoryLabel,
+  ]);
 
   useReveal();
 
@@ -516,23 +581,19 @@ export function CategoryLandingClient({
             {showInitialSkeleton
               ? "Cargando productos…"
               : hasActiveFilters
-                ? `${displayProducts.length} producto(s) · mostrando ${shownProducts.length}`
+                ? `${matchedProducts.length} destacados · ${restProducts.length} más en ${categoryLabel}`
                 : `Mostrando ${shownProducts.length} de ${totalProductCount} en ${categoryLabel}`}
             {catalogLoading && products.length > 0 ? " · cargando más…" : ""}
           </p>
 
           {showInitialSkeleton ? (
             <CategoryProductSkeleton />
-          ) : filtered.length === 0 ? (
+          ) : shownProducts.length === 0 ? (
             <div className="admin-card" style={{ padding: 22, textAlign: "center", color: "var(--text-muted)" }}>
               {catalogLoading || (hasActiveFilters && hasMore) ? (
-                <>Buscando productos con estos filtros…</>
-              ) : hasActiveFilters ? (
-                <>No hay productos para estos filtros.</>
+                <>Buscando productos…</>
               ) : (
-                <>
-                  Aún no hay productos publicados en esta categoría.
-                </>
+                <>Aún no hay productos publicados en esta categoría.</>
               )}
             </div>
           ) : (
@@ -542,7 +603,10 @@ export function CategoryLandingClient({
                   {group.title ? <h2 className="fs-cat-group__title">{group.title}</h2> : null}
                   <div className={`cat-mosaic${accessoryMode ? " cat-mosaic--accessories" : ""}`}>
                     {group.items.map((p, i) => (
-                      <div key={`${categorySlug}-${p.id}`} className="cat-mosaic__cell">
+                      <div
+                        key={`${categorySlug}-${p.id}`}
+                        className={`cat-mosaic__cell${group.pulse ? " cat-mosaic__cell--pulse" : ""}`}
+                      >
                         <StoreProductCard
                           product={p}
                           isFav={favorites.includes(p.id)}

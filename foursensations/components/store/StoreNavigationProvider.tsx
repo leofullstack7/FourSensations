@@ -18,6 +18,7 @@ export type CategoryNavFilters = {
   grupo: string;
   sub: string;
   tag: string;
+  linea: string;
 };
 
 type StoreNavigationContextValue = {
@@ -63,6 +64,7 @@ function filtersFromSearch(search: string): CategoryNavFilters {
     grupo: qs.get("grupo")?.trim() ?? "",
     sub: qs.get("sub")?.trim() ?? "",
     tag: qs.get("tag")?.trim() ?? "",
+    linea: qs.get("linea")?.trim() ?? "",
   };
 }
 

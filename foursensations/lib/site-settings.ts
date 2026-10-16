@@ -1,4 +1,12 @@
 import type { ProductFichaCopy } from "@/lib/product-ficha";
+import {
+  normalizeHomeContent,
+  normalizeHomePromoWidgets,
+  normalizeHomeShowcaseImages,
+  type HomeContentSettings,
+  type HomePromoWidgets,
+  type HomeShowcaseImageMap,
+} from "@/lib/home-content";
 
 /** Formas públicas / admin del JSON `SiteSettings.data`. */
 
@@ -17,9 +25,27 @@ export type LandingCollages = Record<LandingCollageSlug, [string, string, string
 export type SiteSettingsData = {
   megaPromo?: MegaPromoByCategory;
   landingCollages?: LandingCollages;
+  homeContent?: HomeContentSettings;
+  /** Atajos planos (también se leen vía homeContent). */
+  homeShowcaseImages?: HomeShowcaseImageMap;
+  homePromoWidgets?: HomePromoWidgets;
   productFichas?: Record<string, ProductFichaCopy>;
   [key: string]: unknown;
 };
+
+export {
+  HOME_CONTENT_IMAGE_SPECS,
+  HOME_PROMO_WIDGET_KEYS,
+  HOME_PROMO_WIDGET_LABELS,
+  normalizeHomeContent,
+  normalizeHomePromoWidgets,
+  normalizeHomeShowcaseImages,
+  resolveShowcaseItems,
+  type HomeContentSettings,
+  type HomePromoWidgetKey,
+  type HomePromoWidgets,
+  type HomeShowcaseImageMap,
+} from "@/lib/home-content";
 
 export function normalizeLandingCollages(raw: unknown): LandingCollages {
   const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
@@ -64,4 +90,12 @@ export function megaPromoForCategory(data: SiteSettingsData | null | undefined, 
   if (exact?.length) return exact;
   const key = Object.keys(map).find((k) => k.toLowerCase() === categoryName.toLowerCase());
   return key ? map[key]! : [];
+}
+
+export function homeContentFromSettings(data: SiteSettingsData | null | undefined): HomeContentSettings {
+  if (data?.homeContent) return normalizeHomeContent(data.homeContent);
+  return {
+    showcaseImages: normalizeHomeShowcaseImages(data?.homeShowcaseImages),
+    promoWidgets: normalizeHomePromoWidgets(data?.homePromoWidgets),
+  };
 }

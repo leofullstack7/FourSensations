@@ -7,11 +7,13 @@ import {
   CATEGORY_SHOWCASE_AUTO_MS,
   CATEGORY_SHOWCASE_ITEMS,
   CATEGORY_SHOWCASE_MOBILE_PAGE_SIZE,
+  type CategoryShowcaseItem,
 } from "@/lib/category-showcase";
 
 type CategoryShowcaseStripProps = {
   onSelectSubcategory: (subcategory: string) => void;
   activeSubcategory?: string | null;
+  items?: CategoryShowcaseItem[];
 };
 
 function useIsMobileCarousel(maxWidth = 767) {
@@ -28,9 +30,13 @@ function useIsMobileCarousel(maxWidth = 767) {
   return isMobile;
 }
 
-export function CategoryShowcaseStrip({ onSelectSubcategory, activeSubcategory }: CategoryShowcaseStripProps) {
+export function CategoryShowcaseStrip({
+  onSelectSubcategory,
+  activeSubcategory,
+  items = CATEGORY_SHOWCASE_ITEMS,
+}: CategoryShowcaseStripProps) {
   const isMobile = useIsMobileCarousel();
-  const pageCount = Math.ceil(CATEGORY_SHOWCASE_ITEMS.length / CATEGORY_SHOWCASE_MOBILE_PAGE_SIZE);
+  const pageCount = Math.ceil(items.length / CATEGORY_SHOWCASE_MOBILE_PAGE_SIZE);
   const [page, setPage] = useState(0);
   const [paused, setPaused] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -104,7 +110,7 @@ export function CategoryShowcaseStrip({ onSelectSubcategory, activeSubcategory }
             className={`cat-showcase-track${isMobile ? " cat-showcase-track--mobile" : " cat-showcase-track--desktop"}`}
             aria-live={isMobile ? "polite" : undefined}
           >
-            {CATEGORY_SHOWCASE_ITEMS.map((item, index) => (
+            {items.map((item, index) => (
               <button
                 key={item.label}
                 type="button"
@@ -124,7 +130,7 @@ export function CategoryShowcaseStrip({ onSelectSubcategory, activeSubcategory }
                     className="cat-showcase-card__img"
                     sizes="(max-width: 767px) 33vw, 12vw"
                     priority={index < 3}
-                    unoptimized={item.image.startsWith("/api/")}
+                    unoptimized={item.image.startsWith("/api/") || item.image.startsWith("http")}
                   />
                   <span className="cat-showcase-card__shade" aria-hidden />
                   <span className="cat-showcase-card__label">{item.displayName.toUpperCase()}</span>

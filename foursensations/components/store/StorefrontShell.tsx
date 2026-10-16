@@ -1025,6 +1025,21 @@ export function StorefrontShell({
                   >
                     Ver todo
                   </button>
+                  <div className="mobile-mega-sublinks">
+                    {Object.keys(data.subs).map((group) => (
+                      <button
+                        key={`${cat}-${group}`}
+                        type="button"
+                        className="mobile-mega-sublink"
+                        onClick={() => {
+                          navigateTo(resolveStoreMenuGroupHref(categoryPath(cat), group));
+                          closeMobileMenu();
+                        }}
+                      >
+                        {group}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
