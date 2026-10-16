@@ -67,7 +67,7 @@ export function CustomerEmailAuthForm({
       }
 
       const signInResult = await signIn("customer-credentials", {
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         password,
         redirect: false,
       });
@@ -75,7 +75,7 @@ export function CustomerEmailAuthForm({
         setError(
           tab === "register"
             ? "Cuenta creada, pero no se pudo iniciar sesión. Prueba «Iniciar sesión»."
-            : "Correo o contraseña incorrectos",
+            : "Correo o contraseña incorrectos. Si te registraste con Google, usa «Continuar con Google».",
         );
         return;
       }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { formatCustomerAuthZodError, wholesaleRegisterSchema } from "@/lib/validation/customer-auth";
 
@@ -18,8 +19,46 @@ export async function POST(req: NextRequest) {
 
   const { name, email, password, city, address } = parsed.data;
   const emailNorm = email.trim().toLowerCase();
+  const session = await auth();
+  const sessionId = session?.user?.id;
+  const sessionIsCustomer = session?.user?.role === "CUSTOMER" && Boolean(sessionId);
 
   try {
+    if (sessionIsCustomer && sessionId) {
+      const current = await prisma.user.findUnique({
+        where: { id: sessionId },
+        select: { id: true, role: true, email: true, passwordHash: true },
+      });
+      if (!current || current.role !== "CUSTOMER") {
+        return NextResponse.json({ error: "Sesión no válida para registro mayorista" }, { status: 403 });
+      }
+      const sessionEmail = (current.email ?? "").trim().toLowerCase();
+      if (sessionEmail && sessionEmail !== emailNorm) {
+        return NextResponse.json(
+          { error: "Usa el correo de tu cuenta actual para activar mayorista." },
+          { status: 409 },
+        );
+      }
+      await prisma.user.update({
+        where: { id: current.id },
+        data: {
+          name: name.trim() || undefined,
+          isWholesale: true,
+          city: city.trim(),
+          address: address.trim(),
+          ...(emailNorm && !current.email ? { email: emailNorm } : {}),
+        },
+      });
+      return NextResponse.json({ ok: true, upgraded: true, usedSession: true }, { status: 200 });
+    }
+
+    if (!password) {
+      return NextResponse.json(
+        { error: "Inicia sesión o indica una contraseña para crear la cuenta mayorista." },
+        { status: 400 },
+      );
+    }
+
     const existing = await prisma.user.findFirst({
       where: { email: { equals: emailNorm, mode: "insensitive" } },
     });
@@ -30,7 +69,7 @@ export async function POST(req: NextRequest) {
       }
       if (!existing.passwordHash) {
         return NextResponse.json(
-          { error: "Esta cuenta entra con Google. Inicia sesión y completa el registro mayorista desde tu perfil." },
+          { error: "Esta cuenta entra con Google. Inicia sesión y completa el registro mayorista." },
           { status: 409 },
         );
       }

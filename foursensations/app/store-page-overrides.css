@@ -2915,10 +2915,19 @@
 }
 .cart-wholesale-hint,
 .gb-co-wholesale-hint {
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   font-size: 13px;
   line-height: 1.5;
   color: var(--rose);
+}
+.cart-wholesale-pay {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.cart-wholesale-total {
+  font-size: clamp(1.35rem, 3.6vw, 1.85rem);
 }
 
 /* —— Widget temporal credenciales admin (quitar cuando ya no haga falta) —— */

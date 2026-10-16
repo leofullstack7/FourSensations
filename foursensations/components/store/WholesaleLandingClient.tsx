@@ -66,6 +66,9 @@ type WholesaleMe = {
   accumulatedSpend?: number;
   minimumOrder?: number;
   name?: string | null;
+  email?: string | null;
+  city?: string | null;
+  address?: string | null;
 };
 
 export function WholesaleLandingClient({ products }: { products: StoreProduct[] }) {
@@ -86,6 +89,10 @@ export function WholesaleLandingClient({ products }: { products: StoreProduct[] 
   const [loading, setLoading] = useState(false);
 
   const isWholesale = Boolean(me?.isWholesale) || Boolean(session?.user?.isWholesale);
+  const loggedInCustomer =
+    sessionStatus === "authenticated" &&
+    session?.user?.role === "CUSTOMER" &&
+    Boolean(session.user.id);
 
   useEffect(() => {
     void (async () => {
@@ -97,15 +104,33 @@ export function WholesaleLandingClient({ products }: { products: StoreProduct[] 
         if (!res.ok) return;
         const data = (await res.json()) as WholesaleMe;
         setMe(data);
+        if (data.authenticated && !data.isWholesale) {
+          if (data.name) setName(data.name);
+          if (data.email) setEmail(data.email);
+          if (data.city) setCity(data.city);
+          if (data.address) setAddress(data.address);
+          setPassword("••••••••");
+        }
       } catch {
         /* ignore */
       }
     })();
   }, [sessionStatus, session?.user?.id]);
 
+  useEffect(() => {
+    if (!loggedInCustomer) return;
+    if (!name && session?.user?.name) setName(session.user.name);
+    if (!email && session?.user?.email) setEmail(session.user.email);
+    if (!password) setPassword("••••••••");
+  }, [loggedInCustomer, session?.user?.name, session?.user?.email, name, email, password]);
+
   const submitRegister = async () => {
     setError(null);
-    if (!name.trim() || !email.trim() || !password || !city.trim() || !address.trim()) {
+    if (!name.trim() || !email.trim() || !city.trim() || !address.trim()) {
+      setError("Completa nombre, correo, ciudad y dirección.");
+      return;
+    }
+    if (!loggedInCustomer && !password) {
       setError("Completa correo, contraseña, nombre, ciudad y dirección.");
       return;
     }
@@ -114,27 +139,30 @@ export function WholesaleLandingClient({ products }: { products: StoreProduct[] 
       const res = await fetch("/api/auth/customer/register-wholesale", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           name: name.trim(),
-          email: email.trim(),
-          password,
+          email: email.trim().toLowerCase(),
+          ...(loggedInCustomer ? {} : { password }),
           city: city.trim(),
           address: address.trim(),
         }),
       });
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json()) as { error?: string; usedSession?: boolean; upgraded?: boolean };
       if (!res.ok) {
         setError(data.error || "No se pudo completar el registro");
         return;
       }
-      const signInResult = await signIn("customer-credentials", {
-        email: email.trim(),
-        password,
-        redirect: false,
-      });
-      if (!signInResult?.ok) {
-        setError("Cuenta creada, pero no se pudo iniciar sesión. Entra desde tu perfil.");
-        return;
+      if (!loggedInCustomer) {
+        const signInResult = await signIn("customer-credentials", {
+          email: email.trim().toLowerCase(),
+          password,
+          redirect: false,
+        });
+        if (!signInResult?.ok) {
+          setError("Cuenta creada, pero no se pudo iniciar sesión. Entra desde tu perfil.");
+          return;
+        }
       }
       await update();
       router.push("/cuenta/perfil");
@@ -209,17 +237,24 @@ export function WholesaleLandingClient({ products }: { products: StoreProduct[] 
               }}
             >
               <div>
-                <h2>Regístrate como mayorista</h2>
+                <h2>{loggedInCustomer ? "Activa tu cuenta mayorista" : "Regístrate como mayorista"}</h2>
                 <p>
-                  Al crear tu cuenta inicias sesión de inmediato, abres tu perfil Four Sensations y ves precios de
-                  volumen en el catálogo.
+                  {loggedInCustomer
+                    ? "Ya tienes cuenta en la tienda. Completa ciudad y dirección para activar precios de volumen."
+                    : "Al crear tu cuenta inicias sesión de inmediato, abres tu perfil Four Sensations y ves precios de volumen en el catálogo."}
                 </p>
               </div>
               {error ? <p className="wholesale-register-error">{error}</p> : null}
               <div className="wholesale-register-grid">
                 <label>
                   Nombre
-                  <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required />
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    autoComplete="name"
+                    required
+                    readOnly={loggedInCustomer}
+                  />
                 </label>
                 <label>
                   Correo
@@ -229,17 +264,23 @@ export function WholesaleLandingClient({ products }: { products: StoreProduct[] 
                     onChange={(e) => setEmail(e.target.value)}
                     autoComplete="email"
                     required
+                    readOnly={loggedInCustomer}
                   />
                 </label>
                 <label>
                   Contraseña
                   <input
                     type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="new-password"
-                    required
-                    minLength={8}
+                    value={loggedInCustomer ? "••••••••" : password}
+                    onChange={(e) => {
+                      if (!loggedInCustomer) setPassword(e.target.value);
+                    }}
+                    autoComplete={loggedInCustomer ? "current-password" : "new-password"}
+                    required={!loggedInCustomer}
+                    minLength={loggedInCustomer ? undefined : 8}
+                    readOnly={loggedInCustomer}
+                    disabled={loggedInCustomer}
+                    tabIndex={loggedInCustomer ? -1 : undefined}
                   />
                 </label>
                 <label>
@@ -262,7 +303,13 @@ export function WholesaleLandingClient({ products }: { products: StoreProduct[] 
                 </label>
               </div>
               <button type="submit" className="btn btn-primary" disabled={loading}>
-                {loading ? "Creando tu cuenta…" : "Crear cuenta mayorista"}
+                {loading
+                  ? loggedInCustomer
+                    ? "Activando mayorista…"
+                    : "Creando tu cuenta…"
+                  : loggedInCustomer
+                    ? "Activar cuenta mayorista"
+                    : "Crear cuenta mayorista"}
               </button>
             </form>
           )}

@@ -237,7 +237,9 @@ export async function createPendingOrderFromCheckout(
       const region = addr.region?.trim();
       const zoneId = guessShippingZoneFromCity(city) || input.shippingZoneId;
       const carrier = resolveShippingCarrier(city, region);
-      const shippingBase = checkoutShippingCop(zoneId, { city, region, carrier });
+      const shippingBase = wholesaleCheckout
+        ? 0
+        : checkoutShippingCop(zoneId, { city, region, carrier });
 
       let discount = 0;
       let shipping = shippingBase;

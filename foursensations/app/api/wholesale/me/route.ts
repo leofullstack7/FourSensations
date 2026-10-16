@@ -31,6 +31,8 @@ export async function GET() {
         minimumOrder: 700_000,
         name: user?.name ?? session.user.name,
         email: user?.email ?? session.user.email,
+        city: user?.city ?? null,
+        address: user?.address ?? null,
       });
     }
 

@@ -61,7 +61,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        const email = ((credentials?.email as string) ?? "").trim();
+        const email = ((credentials?.email as string) ?? "").trim().toLowerCase();
         const password = ((credentials?.password as string) ?? "") || "";
         if (!email || !password) return null;
 
@@ -77,12 +77,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               isWholesale: true,
             },
           });
-          if (!user?.passwordHash || user.role !== "CUSTOMER") return null;
+          if (!user || user.role !== "CUSTOMER") return null;
+          if (!user.passwordHash) {
+            console.log("[auth] customer credentials: cuenta sin contraseña (probablemente Google)", {
+              email,
+            });
+            return null;
+          }
           const ok = await bcrypt.compare(password, user.passwordHash);
           if (!ok) return null;
           return {
             id: user.id,
-            email: user.email ?? undefined,
+            email: user.email ?? email,
             name: user.name ?? undefined,
             role: user.role,
             isWholesale: Boolean(user.isWholesale),
@@ -231,7 +237,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       return true;
     },
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger }) {
       if (user?.id) {
         token.sub = user.id;
       }
@@ -239,28 +245,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (account?.provider === "google" && user?.id) {
         const u = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { role: true, name: true, isWholesale: true },
+          select: { role: true, name: true, isWholesale: true, email: true },
         });
         if (u) {
           token.role = u.role;
           token.isWholesale = u.isWholesale;
           if (u.name) token.name = u.name;
+          if (u.email) token.email = u.email;
         }
       } else if (user) {
         const r = (user as { role?: string }).role;
         if (r) token.role = r;
         token.isWholesale = Boolean((user as { isWholesale?: boolean }).isWholesale);
         if (user.name) token.name = user.name;
+        if (user.email) token.email = user.email;
       }
-      if (token.sub && (!token.role || !token.name || token.isWholesale === undefined)) {
+      // Tras upgrade mayorista / update() o token incompleto: releer rol y flags desde DB.
+      if (
+        token.sub &&
+        (trigger === "update" || !token.role || !token.name || token.isWholesale === undefined)
+      ) {
         const u = await prisma.user.findUnique({
           where: { id: token.sub as string },
-          select: { role: true, name: true, isWholesale: true },
+          select: { role: true, name: true, isWholesale: true, email: true },
         });
         if (u) {
           if (u.role) token.role = u.role;
-          token.isWholesale = u.isWholesale;
+          token.isWholesale = Boolean(u.isWholesale);
           if (u.name) token.name = u.name;
+          if (u.email) token.email = u.email;
         }
       }
       return token;

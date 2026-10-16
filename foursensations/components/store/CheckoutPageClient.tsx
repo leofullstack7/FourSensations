@@ -253,14 +253,19 @@ export function CheckoutPageClient() {
   const citySuggestions = useMemo(() => (city.trim().length < 1 ? [] : searchColombiaCities(city, 8)), [city]);
   const enviaExclusion = useMemo(() => findEnviaExclusion(city, region), [city, region]);
   const enviaBlocked = Boolean(enviaExclusion);
-  const shippingAmount = useMemo(
-    () => checkoutShippingCop(shippingZoneId, { city, region, carrier: shippingCarrier }),
-    [city, region, shippingCarrier, shippingZoneId],
-  );
-  const shippingPaid = couponApplied ? couponApplied.shippingAfter : shippingAmount;
-  const couponDiscount = couponApplied?.discount ?? 0;
-  const total =
-    couponApplied && couponApplied.shippingAfter < shippingAmount
+  const shippingAmount = useMemo(() => {
+    if (buyingAsWholesale) return 0;
+    return checkoutShippingCop(shippingZoneId, { city, region, carrier: shippingCarrier });
+  }, [buyingAsWholesale, city, region, shippingCarrier, shippingZoneId]);
+  const shippingPaid = buyingAsWholesale
+    ? 0
+    : couponApplied
+      ? couponApplied.shippingAfter
+      : shippingAmount;
+  const couponDiscount = buyingAsWholesale ? 0 : couponApplied?.discount ?? 0;
+  const total = buyingAsWholesale
+    ? Math.max(0, subtotal)
+    : couponApplied && couponApplied.shippingAfter < shippingAmount
       ? Math.max(0, subtotal + shippingPaid)
       : Math.max(0, subtotal + shippingPaid - couponDiscount);
   const zoneHint = shippingZoneContextMessage(shippingZoneId, shippingCarrier, city, region);
@@ -1032,8 +1037,14 @@ export function CheckoutPageClient() {
                 <span>✦</span>
                 Elige tu Entrega
               </div>
+              {buyingAsWholesale ? (
+                <p className="gb-co-hint">
+                  Pedidos mayorista: pago contraentrega del pedido. No se cobra envío en el resumen (pedidos de volumen).
+                </p>
+              ) : (
+              <>
               <p className="gb-co-hint">
-                Envía según zona · Interrapidísimo contraentrega. Despacho desde Manizales (máx. 2 días hábiles).
+                Envía según zona · Interrapidísimo contraentrega del flete. Los productos se pagan con Mercado Pago o Addi.
               </p>
               <div className="gb-co-carrier-grid" role="radiogroup" aria-label="Transportadora">
                 <button
@@ -1115,6 +1126,8 @@ export function CheckoutPageClient() {
                 </motion.div>
               )}
               <p className="gb-co-bulk-notice">{CHECKOUT_BULK_SHIPPING_NOTICE}</p>
+              </>
+              )}
             </motion.section>
           </motion.div>
         </div>
@@ -1135,6 +1148,7 @@ export function CheckoutPageClient() {
               <span>Subtotal</span>
               <strong>{formatPrice(subtotal)}</strong>
             </div>
+            {buyingAsWholesale ? null : (
             <div className="gb-co-total-row">
               <span>
                 Envío{" "}
@@ -1152,6 +1166,7 @@ export function CheckoutPageClient() {
                 )}
               </strong>
             </div>
+            )}
             {isWholesaleCustomer ? (
               <div className="cart-channel-switch" role="group" aria-label="Tipo de compra" style={{ marginTop: 8 }}>
                 <button

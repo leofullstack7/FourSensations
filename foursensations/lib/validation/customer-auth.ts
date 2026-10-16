@@ -11,7 +11,11 @@ export const customerLoginSchema = z.object({
   password: z.string().min(1, "Contraseña requerida").max(128),
 });
 
-export const wholesaleRegisterSchema = customerRegisterSchema.extend({
+export const wholesaleRegisterSchema = z.object({
+  name: z.string().trim().min(1, "Nombre requerido").max(120),
+  email: z.string().trim().email("Correo no válido").max(254),
+  /** Opcional si la clienta ya tiene sesión con contraseña. */
+  password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres").max(128).optional(),
   city: z.string().trim().min(2, "Ciudad requerida").max(80),
   address: z.string().trim().min(5, "Dirección requerida").max(200),
 });

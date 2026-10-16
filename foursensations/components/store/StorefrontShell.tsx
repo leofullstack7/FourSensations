@@ -662,8 +662,12 @@ export function StorefrontShell({
   );
 
   const scheduleCloseDesktopMega = useCallback(() => {
-    setDesktopMegaCat(null);
-    setMegaAlignLeft(null);
+    if (megaCloseTimer.current) clearTimeout(megaCloseTimer.current);
+    megaCloseTimer.current = setTimeout(() => {
+      megaCloseTimer.current = null;
+      setDesktopMegaCat(null);
+      setMegaAlignLeft(null);
+    }, 180);
   }, []);
 
   useEffect(() => {
@@ -672,16 +676,21 @@ export function StorefrontShell({
       const target = event.target as Node | null;
       if (!target) return;
       const header = document.getElementById("main-header");
-      const overItem = header?.querySelector(".nav-item.is-mega-open")?.contains(target);
-      const overPanel = header?.querySelector(".mega-dock__inner")?.contains(target);
-      if (!overItem && !overPanel) {
-        setDesktopMegaCat(null);
-        setMegaAlignLeft(null);
+      if (!header) return;
+      const overNav = header.querySelector(".main-nav")?.contains(target);
+      const overDock = header.querySelector(".mega-dock")?.contains(target);
+      if (overNav || overDock) {
+        if (megaCloseTimer.current) {
+          clearTimeout(megaCloseTimer.current);
+          megaCloseTimer.current = null;
+        }
+        return;
       }
+      scheduleCloseDesktopMega();
     };
     document.addEventListener("mousemove", onMove);
     return () => document.removeEventListener("mousemove", onMove);
-  }, [desktopMegaCat]);
+  }, [desktopMegaCat, scheduleCloseDesktopMega]);
 
   useEffect(() => {
     return () => {
@@ -699,7 +708,8 @@ export function StorefrontShell({
   const desktopMega = desktopMegaCat ? menuConfig[desktopMegaCat] : null;
 
   const subtotal = getCartTotal();
-  const shipping = computeShippingCop(subtotal);
+  const shipping = buyingAsWholesale ? 0 : computeShippingCop(subtotal);
+  const cartTotal = buyingAsWholesale ? subtotal : subtotal + shipping;
 
   return (
     <StorefrontUiContext.Provider
@@ -758,6 +768,12 @@ export function StorefrontShell({
         className="header"
         id="main-header"
         onMouseLeave={scheduleCloseDesktopMega}
+        onMouseEnter={() => {
+          if (megaCloseTimer.current) {
+            clearTimeout(megaCloseTimer.current);
+            megaCloseTimer.current = null;
+          }
+        }}
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
             scheduleCloseDesktopMega();
@@ -1015,7 +1031,11 @@ export function StorefrontShell({
           </div>
         </div>
         {desktopMegaCat && desktopMega ? (
-          <div className="mega-dock" onMouseEnter={() => openDesktopMega(desktopMegaCat)}>
+          <div
+            className="mega-dock"
+            onMouseEnter={() => openDesktopMega(desktopMegaCat)}
+            onMouseLeave={scheduleCloseDesktopMega}
+          >
             <div
               className="mega-dock__inner mega-dock__inner--vertical"
               style={
@@ -1140,21 +1160,7 @@ export function StorefrontShell({
             ))
           )}
         </div>
-        <div className="cart-footer">
-          <div className="cart-summary">
-            <div className="cart-summary-row">
-              <span>Subtotal</span>
-              <span id="cart-subtotal">{formatPrice(subtotal)}</span>
-            </div>
-            <div className="cart-summary-row">
-              <span>Envío</span>
-              <span id="cart-shipping">{shipping === 0 ? "Gratis 🎉" : formatPrice(shipping)}</span>
-            </div>
-            <div className="cart-summary-row total">
-              <span>Total</span>
-              <span id="cart-total">{formatPrice(subtotal + shipping)}</span>
-            </div>
-          </div>
+        <div className={`cart-footer${buyingAsWholesale ? " cart-footer--wholesale" : ""}`}>
           {isWholesaleCustomer ? (
             <div className="cart-channel-switch" role="group" aria-label="Tipo de compra">
               <button
@@ -1175,11 +1181,28 @@ export function StorefrontShell({
               </button>
             </div>
           ) : null}
+          <div className="cart-summary">
+            <div className="cart-summary-row">
+              <span>Subtotal</span>
+              <span id="cart-subtotal">{formatPrice(subtotal)}</span>
+            </div>
+            {buyingAsWholesale ? null : (
+              <div className="cart-summary-row">
+                <span>Envío</span>
+                <span id="cart-shipping">{shipping === 0 ? "Gratis 🎉" : formatPrice(shipping)}</span>
+              </div>
+            )}
+            <div className="cart-summary-row total">
+              <span>Total</span>
+              <span id="cart-total">{formatPrice(cartTotal)}</span>
+            </div>
+          </div>
           {buyingAsWholesale ? (
             <div className="cart-wholesale-block">
               <p className="cart-wholesale-kicker">Acumulado de este pedido</p>
               <strong className="cart-wholesale-total">{formatPrice(subtotal)}</strong>
               <p className="cart-wholesale-hint">{wholesaleMinimumReminder(wholesaleMin, subtotal)}</p>
+              <p className="cart-wholesale-pay">Pago contraentrega · sin cargo de envío en el resumen</p>
             </div>
           ) : null}
           {buyingAsWholesale && subtotal < wholesaleMin ? (
