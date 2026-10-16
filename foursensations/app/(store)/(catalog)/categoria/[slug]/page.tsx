@@ -105,10 +105,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
   const settings = await getSiteSettingsData();
   const customCollage = landingCollageUrls(settings, slug);
-  const collageUrls =
-    customCollage.length >= 3
-      ? customCollage.slice(0, 3)
-      : [...customCollage, ...(await pickRandomCollageImages([slug], 3))].slice(0, 3);
+  const filler = customCollage.length >= 3 ? [] : await pickRandomCollageImages([slug], 8);
+  const collageUrls = [...customCollage, ...filler.filter((url) => !customCollage.includes(url))].slice(0, 3);
 
   return (
     <CategoryLandingClient

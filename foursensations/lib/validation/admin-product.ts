@@ -90,6 +90,19 @@ export const adminProductUpdateSchema = z
       .optional()
       .refine((v) => v == null || v === "" || /^#[0-9A-Fa-f]{6}$/.test(v), "colorHex inválido"),
     colorName: z.string().trim().max(80).nullable().optional(),
+    storefrontCopy: z
+      .object({
+        title: z.string().trim().max(200),
+        subtitle: z.string().trim().max(200),
+        tagline: z.string().trim().max(160),
+        hook: z.string().trim().max(400),
+        description: z.string().trim().max(20_000),
+        idealFor: z.string().trim().max(400),
+        benefits: z.array(z.string().trim().max(200)).max(8),
+        howTo: z.string().trim().max(2000),
+        content: z.string().trim().max(200),
+      })
+      .optional(),
   });
 
 export type AdminProductUpdateInput = z.infer<typeof adminProductUpdateSchema>;

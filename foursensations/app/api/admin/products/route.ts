@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { prismaProductToAdmin } from "@/lib/mappers/admin-product";
+import { getProductFichaMap } from "@/lib/server/site-settings";
 import { allocateUniqueProductSlug } from "@/lib/server/product-slug";
 import { slugify } from "@/lib/slugify";
 import { isTrustedCdnImageUrl } from "@/lib/server/bunny-config";
@@ -38,12 +39,18 @@ export async function GET() {
   if (denied) return denied;
   try {
     // Una sola query con imágenes incluidas (evita N+1 por producto).
-    const rows = await prisma.product.findMany({
-      orderBy: { updatedAt: "desc" },
-      include: { images: true },
-    });
+    const [rows, fichas] = await Promise.all([
+      prisma.product.findMany({
+        orderBy: { updatedAt: "desc" },
+        include: { images: true },
+      }),
+      getProductFichaMap(),
+    ]);
     return noStoreJson({
-      products: rows.map(prismaProductToAdmin),
+      products: rows.map((row) => ({
+        ...prismaProductToAdmin(row),
+        storefrontCopy: fichas[row.id] ?? null,
+      })),
     });
   } catch (e) {
     console.error("[GET /api/admin/products]", e);

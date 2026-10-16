@@ -13,6 +13,7 @@ import { productHeroThemeFromSlug } from "@/lib/store/product-hero-theme";
 import { getCategoryLabel } from "@/lib/category-labels";
 import { getCatalogProductCopy } from "@/lib/catalog-product-copy";
 import { getProductDisplayName } from "@/lib/product-display-names";
+import type { ProductFichaCopy } from "@/lib/product-ficha";
 import { ProductColorSwatchField } from "@/components/store/ProductColorSwatchField";
 
 function galleryPool(product: StoreProduct): string[] {
@@ -30,14 +31,16 @@ function galleryPool(product: StoreProduct): string[] {
 export function ProductLandingClient({
   product,
   variants = [],
+  ficha = null,
 }: {
   product: StoreProduct;
   variants?: StoreProduct[];
+  ficha?: ProductFichaCopy | null;
 }) {
   const { addToCart, toggleFavorite, favorites } = useStorefrontUi();
   const theme = productHeroThemeFromSlug(product.slug || product.id);
   const copy = getCatalogProductCopy(product.name);
-  const displayName = getProductDisplayName(product.name);
+  const displayName = getProductDisplayName(ficha?.title || product.name);
   const images = useMemo(() => galleryPool(product), [product]);
   const [activeSrc, setActiveSrc] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -47,12 +50,18 @@ export function ProductLandingClient({
   }`;
 
   const featured = activeSrc || images[0] || "";
-  const kicker = copy?.tagline || product.subcategory || getCategoryLabel(product.category);
-  const lead = copy?.hook || "";
-  const blurb =
-    copy?.description ||
-    product.description?.trim() ||
-    "Ficha Four Sensations extraída del catálogo oficial.";
+  const title = ficha?.title?.trim() || displayName.title;
+  const subtitle = ficha ? ficha.subtitle : displayName.subtitle;
+  const kicker = ficha?.tagline?.trim() || copy?.tagline || product.subcategory || getCategoryLabel(product.category);
+  const lead = ficha ? ficha.hook : copy?.hook || "";
+  const blurb = ficha?.description?.trim()
+    || copy?.description
+    || product.description?.trim()
+    || "Ficha Four Sensations extraída del catálogo oficial.";
+  const idealFor = ficha ? ficha.idealFor : copy?.idealFor || "";
+  const benefits = ficha ? ficha.benefits : copy?.benefits ?? [];
+  const howTo = ficha ? ficha.howTo : copy?.howTo || "";
+  const content = ficha ? ficha.content : copy?.content || "";
 
   useEffect(() => {
     if (!lightboxSrc) return;
@@ -76,11 +85,11 @@ export function ProductLandingClient({
           <div className="product-hero__fade" aria-hidden />
           <div className="product-hero__copy">
             <p className="product-hero__kicker">{kicker}</p>
-            <h1 className="product-hero__title">{displayName.title}</h1>
-            {displayName.subtitle ? <p className="product-hero__subtitle">{displayName.subtitle}</p> : null}
+            <h1 className="product-hero__title">{title}</h1>
+            {subtitle ? <p className="product-hero__subtitle">{subtitle}</p> : null}
             {lead ? <p className="product-hero__hook">{lead}</p> : null}
             <div className="product-hero__pills">
-              {copy?.content ? <span>{copy.content}</span> : null}
+              {content ? <span>{content}</span> : null}
               {product.subcategory ? <span>{product.subcategory}</span> : null}
             </div>
             <Link href={categoryHref} className="product-hero__back">
@@ -105,8 +114,8 @@ export function ProductLandingClient({
                 </div>
               ) : null}
               <p className="product-buy__brand">{product.brand}</p>
-              <h2 className="product-buy__name">{displayName.title}</h2>
-              {displayName.subtitle ? <p className="product-buy__subtitle">{displayName.subtitle}</p> : null}
+              <h2 className="product-buy__name">{title}</h2>
+              {subtitle ? <p className="product-buy__subtitle">{subtitle}</p> : null}
               <div className="product-buy__price">
                 <StoreProductPrice product={product} currentStyle={{ fontSize: 30 }} />
               </div>
@@ -136,9 +145,9 @@ export function ProductLandingClient({
                   {isFav ? "En favoritos" : "Guardar"}
                 </button>
               </div>
-              {copy?.idealFor ? (
+              {idealFor ? (
                 <p className="product-buy__ideal">
-                  <strong>Ideal para:</strong> {copy.idealFor}
+                  <strong>Ideal para:</strong> {idealFor}
                 </p>
               ) : null}
             </aside>
@@ -146,17 +155,17 @@ export function ProductLandingClient({
 
           <div className="product-dossier">
             <p className="product-dossier__lead">{blurb}</p>
-            {copy?.benefits && copy.benefits.length > 0 ? (
+            {benefits.length > 0 ? (
               <ul className="product-dossier__benefits">
-                {copy.benefits.slice(0, 6).map((item) => (
+                {benefits.slice(0, 6).map((item) => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
             ) : null}
-            {copy?.howTo ? (
+            {howTo ? (
               <div className="product-dossier__how">
                 <h3>Modo de uso</h3>
-                <p>{copy.howTo}</p>
+                <p>{howTo}</p>
               </div>
             ) : null}
 

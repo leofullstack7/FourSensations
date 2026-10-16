@@ -10,9 +10,15 @@ export function isLocalProductMediaUrl(s: string | null | undefined): boolean {
   return /^\/api\/media\/productos\/FS\d{3}\/FS\d{3}-\d+\.webp$/i.test(s.trim());
 }
 
-/** URL que la tienda/admin pueden mostrar (CDN o archivo local del SKU). */
+/** Foto guardada en la base cuando Bunny no acepta la subida. */
+export function isStoredMediaUrl(s: string | null | undefined): boolean {
+  if (!s || typeof s !== "string") return false;
+  return /^\/api\/media\/stored\/[a-z0-9]+$/i.test(s.trim());
+}
+
+/** URL que la tienda/admin pueden mostrar (CDN, archivo local del SKU o foto guardada). */
 export function isDisplayableImageUrl(s: string | null | undefined): boolean {
-  return isHttpImageUrl(s) || isLocalProductMediaUrl(s);
+  return isHttpImageUrl(s) || isLocalProductMediaUrl(s) || isStoredMediaUrl(s);
 }
 
 export function productMediaPublicUrl(sku: string, fileName: string): string {

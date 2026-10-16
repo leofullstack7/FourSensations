@@ -205,6 +205,14 @@ model BulkImportJob {
   @@index([status])
 }
 
+/// Foto subida desde el admin cuando Bunny Storage rechaza la contraseña.
+model StoredImage {
+  id          String   @id @default(cuid())
+  contentType String
+  bytes       Bytes
+  createdAt   DateTime @default(now())
+}
+
 /// Imágenes adicionales (galería). La principal sigue en `Product.imageUrl`.
 model ProductImage {
   id        String   @id @default(cuid())

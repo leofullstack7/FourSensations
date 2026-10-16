@@ -1,3 +1,5 @@
+import type { ProductFichaCopy } from "@/lib/product-ficha";
+
 /** Formas públicas / admin del JSON `SiteSettings.data`. */
 
 export type MegaPromoImageSlot = {
@@ -15,6 +17,7 @@ export type LandingCollages = Record<LandingCollageSlug, [string, string, string
 export type SiteSettingsData = {
   megaPromo?: MegaPromoByCategory;
   landingCollages?: LandingCollages;
+  productFichas?: Record<string, ProductFichaCopy>;
   [key: string]: unknown;
 };
 

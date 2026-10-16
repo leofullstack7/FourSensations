@@ -3482,3 +3482,120 @@
     padding: 22px 18px;
   }
 }
+
+.admin-editor-switch {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.admin-editor-switch button {
+  border: 1px solid rgba(201, 166, 232, 0.55);
+  background: #fff;
+  color: var(--dark);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-editor-switch button.is-active {
+  background: linear-gradient(135deg, #8a5fb0, #b583d6);
+  color: #fff;
+  border-color: transparent;
+}
+
+.admin-ficha__hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.admin-ficha__hero {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 22px;
+  background: linear-gradient(145deg, #f7f1fb, #f4e8f0);
+  margin-bottom: 14px;
+}
+
+.admin-ficha__photo {
+  height: 180px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #efe6f6;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.admin-ficha__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-ficha__hero-copy,
+.admin-ficha__buy,
+.admin-ficha__dossier {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-ficha__kicker,
+.admin-ficha__title,
+.admin-ficha__subtitle,
+.admin-ficha__hook,
+.admin-ficha__pill,
+.admin-ficha input,
+.admin-ficha textarea {
+  width: 100%;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 12px;
+  padding: 8px 10px;
+  color: var(--dark);
+}
+
+.admin-ficha__kicker {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.admin-ficha__title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.admin-ficha__grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) 1.2fr;
+  gap: 14px;
+}
+
+.admin-ficha label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.admin-ficha label small {
+  font-weight: 600;
+  color: var(--dark);
+}
+
+@media (max-width: 800px) {
+  .admin-ficha__hero,
+  .admin-ficha__grid {
+    grid-template-columns: 1fr;
+  }
+}

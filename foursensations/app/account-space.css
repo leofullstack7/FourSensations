@@ -66,6 +66,29 @@
   height: 100%;
 }
 
+.fs-cat-hero .fs-account-collage {
+  min-height: 320px;
+  height: 340px;
+}
+
+.fs-cat-hero .fs-account-collage__shot--a {
+  width: 34%;
+  left: 4%;
+  bottom: 10%;
+}
+
+.fs-cat-hero .fs-account-collage__shot--b {
+  width: 40%;
+  left: 30%;
+  top: 4%;
+}
+
+.fs-cat-hero .fs-account-collage__shot--c {
+  width: 32%;
+  right: 4%;
+  bottom: 8%;
+}
+
 .fs-account-collage__orb {
   position: absolute;
   border-radius: 50%;

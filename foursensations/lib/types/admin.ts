@@ -1,3 +1,5 @@
+import type { ProductFichaCopy } from "@/lib/product-ficha";
+
 /** Fila de galería en admin (Bunny u otro CDN de confianza). */
 export type AdminProductImage = {
   id: string;
@@ -50,6 +52,8 @@ export type AdminProduct = {
   images: AdminProductImage[];
   /** Campos marcados como generados por IA (description, tags, emoji, badge). */
   aiGeneratedFields?: AiGeneratedFieldsMap | null;
+  /** Textos de la ficha pública. Nombre, precio, marca y descripción se editan en los campos comunes. */
+  storefrontCopy?: ProductFichaCopy | null;
 };
 
 export type AdminSale = {

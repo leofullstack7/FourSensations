@@ -989,9 +989,10 @@
 }
 
 .gb-co-method-badge {
-  position: absolute;
-  top: 10px;
-  right: 10px;
+  position: static;
+  align-self: flex-start;
+  order: 2;
+  margin-top: 2px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1008,21 +1009,26 @@
 .gb-co-method-logo {
   display: inline-flex;
   align-items: center;
+  order: 1;
   min-height: 36px;
+  max-width: 100%;
 }
 .gb-co-method-logo img {
   width: auto !important;
+  max-width: 148px;
   height: 32px !important;
   object-fit: contain;
 }
 
 .gb-co-method-name {
+  order: 3;
   font-size: 16px;
   font-weight: 700;
   color: var(--dark);
 }
 
 .gb-co-method-desc {
+  order: 4;
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;

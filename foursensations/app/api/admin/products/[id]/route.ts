@@ -7,7 +7,9 @@ import { slugify } from "@/lib/slugify";
 import { isTrustedCdnImageUrl } from "@/lib/server/bunny-config";
 import { stripAiFlagsForManualEdit } from "@/lib/product-ai-fields";
 import { requireAdminApi } from "@/lib/server/require-admin-api";
+import { revalidatePath } from "next/cache";
 import { revalidateStorefrontProducts } from "@/lib/server/revalidate-storefront-products";
+import { getProductFicha, saveProductFicha } from "@/lib/server/site-settings";
 import {
   CatalogActions,
   CatalogEntities,
@@ -36,7 +38,8 @@ export async function GET(_req: NextRequest, { params }: RouteCtx) {
     if (!row) {
       return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
     }
-    return NextResponse.json({ product: prismaProductToAdmin(row) });
+    const ficha = await getProductFicha(id);
+    return NextResponse.json({ product: { ...prismaProductToAdmin(row), storefrontCopy: ficha } });
   } catch (e) {
     console.error("[GET /api/admin/products/[id]]", e);
     return NextResponse.json({ error: "Error al obtener producto" }, { status: 500 });
@@ -184,6 +187,12 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
       revalidateStorefrontProducts();
     }
 
+    const ficha = d.storefrontCopy !== undefined ? await saveProductFicha(id, d.storefrontCopy) : await getProductFicha(id);
+    if (d.storefrontCopy !== undefined || d.name !== undefined || d.description !== undefined || d.price !== undefined) {
+      revalidateStorefrontProducts();
+      revalidatePath(`/producto/${row.slug}`);
+    }
+
     await recordCatalogVersionSafe({
       label: `Producto actualizado: ${row.name}`,
       summary: describeProductSnapshotDiff(beforeSnap, snapshotProduct(row)),
@@ -199,7 +208,7 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
       ],
     });
 
-    return NextResponse.json({ product: prismaProductToAdmin(row) });
+    return NextResponse.json({ product: { ...prismaProductToAdmin(row), storefrontCopy: ficha } });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error desconocido";
     console.error("[PUT /api/admin/products/[id]]", e);

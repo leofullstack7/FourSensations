@@ -21,6 +21,8 @@ import {
 } from "@/lib/api/admin-families";
 import { AdminFamiliesPanel } from "@/components/admin/AdminFamiliesPanel";
 import { AdminLandingContentPanel } from "@/components/admin/AdminLandingContentPanel";
+import { AdminProductFichaEditor } from "@/components/admin/AdminProductFichaEditor";
+import { seedProductFicha, type ProductFichaCopy } from "@/lib/product-ficha";
 import {
   BULK_DELETE_ALL_CONFIRM_PHRASE,
   createAdminProduct,
@@ -2175,7 +2177,9 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
           }
         }}
         onProductRefresh={(p) => {
-          setProducts((prev) => prev.map((x) => (x.id === p.id ? p : x)));
+          setProducts((prev) =>
+            prev.map((x) => (x.id === p.id ? { ...x, ...p, storefrontCopy: p.storefrontCopy ?? x.storefrontCopy ?? null } : x)),
+          );
         }}
         showToast={showToast}
       />
@@ -9476,6 +9480,7 @@ function AdminProductDetailModal({
   showToast: (msg: string, type?: string, icon?: string) => void;
 }) {
   const [editingMode, setEditingMode] = useState(false);
+  const [editorView, setEditorView] = useState<"fields" | "ficha">("fields");
   const [uploadingMain, setUploadingMain] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const [mainImagePickerOpen, setMainImagePickerOpen] = useState(false);
@@ -9492,12 +9497,14 @@ function AdminProductDetailModal({
   const [editStock, setEditStock] = useState("");
   const [editEmoji, setEditEmoji] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editFicha, setEditFicha] = useState<ProductFichaCopy>(() => seedProductFicha("", "", ""));
   const [editBadge, setEditBadge] = useState("");
   const [editActive, setEditActive] = useState(true);
   const [editFeatured, setEditFeatured] = useState(false);
   const [descriptionGenerating, setDescriptionGenerating] = useState(false);
 
   const applyProductToForm = useCallback((p: AdminProduct) => {
+    const seeded = seedProductFicha(p.name, p.description || "", p.subcategory || "", p.storefrontCopy);
     setEditName(p.name);
     setEditBrand(p.brand || "");
     setEditCategory(p.category);
@@ -9507,7 +9514,8 @@ function AdminProductDetailModal({
     setEditOriginalPrice(p.originalPrice != null ? String(p.originalPrice) : "");
     setEditStock(String(p.stock));
     setEditEmoji(p.emoji || "");
-    setEditDescription(p.description || "");
+    setEditDescription(seeded.description);
+    setEditFicha(seeded);
     setEditBadge(p.badge || "");
     setEditActive(p.active);
     setEditFeatured(p.featuredInHome === true);
@@ -9516,6 +9524,7 @@ function AdminProductDetailModal({
   useEffect(() => {
     if (!open || !product) return;
     setEditingMode(false);
+    setEditorView("fields");
     setMainImagePickerOpen(false);
     setDescriptionGenerating(false);
     applyProductToForm(product);
@@ -9881,6 +9890,16 @@ function AdminProductDetailModal({
           </div>
 
           <div className="admin-product-detail-body">
+            {editingMode ? (
+              <div className="admin-editor-switch" role="tablist" aria-label="Modo de edición">
+                <button type="button" className={editorView === "fields" ? "is-active" : ""} onClick={() => setEditorView("fields")}>
+                  Campos
+                </button>
+                <button type="button" className={editorView === "ficha" ? "is-active" : ""} onClick={() => setEditorView("ficha")}>
+                  Ficha de producto
+                </button>
+              </div>
+            ) : null}
             {!editingMode ? (
               <>
                 <div className="admin-product-detail-meta" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
@@ -9988,6 +10007,29 @@ function AdminProductDetailModal({
                   </div>
                 </div>
               </>
+            ) : editorView === "ficha" ? (
+              <AdminProductFichaEditor
+                title={editFicha.title}
+                onTitle={(value) => {
+                  setEditName(value);
+                  setEditFicha((prev) => ({ ...prev, title: value }));
+                }}
+                brand={editBrand}
+                onBrand={setEditBrand}
+                price={editPrice}
+                onPrice={setEditPrice}
+                subcategory={editSubcategory}
+                onSubcategory={setEditSubcategory}
+                description={editDescription}
+                onDescription={(value) => {
+                  setEditDescription(value);
+                  setEditFicha((prev) => ({ ...prev, description: value }));
+                }}
+                imageUrl={product.imageUrl}
+                ficha={editFicha}
+                onFicha={setEditFicha}
+                disabled={editBusy}
+              />
             ) : (
               <div className="form-grid" style={{ marginBottom: 12 }}>
                 <AdminCreatableSelect
@@ -10073,7 +10115,11 @@ function AdminProductDetailModal({
                     className="form-input"
                     value={editName}
                     disabled={editBusy}
-                    onChange={(e) => setEditName(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setEditName(value);
+                      setEditFicha((prev) => ({ ...prev, title: value }));
+                    }}
                   />
                 </div>
                 <div className="form-group">
@@ -10147,7 +10193,11 @@ function AdminProductDetailModal({
                     className="form-textarea"
                     value={editDescription}
                     disabled={editBusy}
-                    onChange={(e) => setEditDescription(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setEditDescription(value);
+                      setEditFicha((prev) => ({ ...prev, description: value }));
+                    }}
                     rows={4}
                   />
                   <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -10369,6 +10419,12 @@ function AdminProductDetailModal({
                         badge: editBadge || null,
                         active: editActive,
                         featuredInHome: editFeatured,
+                        storefrontCopy: {
+                          ...editFicha,
+                          title: editFicha.title.trim(),
+                          description: editDescription.trim(),
+                          benefits: editFicha.benefits.map((line) => line.trim()).filter(Boolean).slice(0, 8),
+                        },
                       });
                       setEditingMode(false);
                     } catch {

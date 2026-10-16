@@ -1,4 +1,4 @@
-import { isLocalProductMediaUrl } from "@/lib/util/image-url";
+import { isLocalProductMediaUrl, isStoredMediaUrl } from "@/lib/util/image-url";
 
 /**
  * Bunny Storage + Pull Zone (CDN). Ver `docs/BUNNY_IMAGES.md`.
@@ -39,8 +39,19 @@ function resolveStorageApiHostname(region: string, override?: string): string {
   return REGION_TO_STORAGE_HOST[r] ?? `${r}.storage.bunnycdn.com`;
 }
 
+function cleanSecret(raw: string): string {
+  let value = raw.trim().replace(/^\uFEFF/, "");
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1).trim();
+  }
+  return value.replace(/^accesskey\s*[:=]\s*/i, "").trim();
+}
+
 export function getBunnyStorageConfig(): BunnyStorageConfig | null {
-  const apiKey = process.env.BUNNY_STORAGE_API_KEY?.trim();
+  const apiKey = cleanSecret(process.env.BUNNY_STORAGE_API_KEY ?? "");
   const storageZoneName =
     process.env.BUNNY_STORAGE_ZONE_NAME?.trim() || process.env.BUNNY_STORAGE_ZONE?.trim();
   const region = (process.env.BUNNY_STORAGE_REGION?.trim() || "de").toLowerCase();
@@ -64,5 +75,5 @@ export function isTrustedCdnImageUrl(url: string): boolean {
       /* sigue con local */
     }
   }
-  return isLocalProductMediaUrl(url);
+  return isLocalProductMediaUrl(url) || isStoredMediaUrl(url);
 }

@@ -41,9 +41,7 @@ export async function uploadImageToBunny(
   }
 
   const path = `products/${randomUUID()}.${ext}`;
-  const putUrl = storagePutUrl(cfg, path);
-
-  const res = await fetch(putUrl, {
+  const res = await fetch(storagePutUrl(cfg, path), {
     method: "PUT",
     headers: {
       AccessKey: cfg.apiKey,
@@ -56,9 +54,7 @@ export async function uploadImageToBunny(
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     if (res.status === 401) {
-      throw new Error(
-        "Bunny Storage 401: la contraseña de la zona no autoriza la subida. En Bunny abre Storage → la zona foursensations → FTP & API Access, copia Password y actualiza BUNNY_STORAGE_API_KEY.",
-      );
+      throw new Error("BUNNY_UNAUTHORIZED");
     }
     throw new Error(`Bunny Storage ${res.status}: ${text || res.statusText}`);
   }
