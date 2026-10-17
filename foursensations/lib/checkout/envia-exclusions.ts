@@ -718,14 +718,11 @@ export function foldPlaceName(value: string): string {
     .toLowerCase();
 }
 
-function placeMatches(input: string, target: string): boolean {
+/** Solo igualdad exacta tras normalizar. Evita falsos positivos (Medellín ≠ Medellín Del Ariari). */
+function placeEquals(input: string, target: string): boolean {
   const a = foldPlaceName(input);
   const b = foldPlaceName(target);
-  if (!a || !b) return false;
-  if (a === b) return true;
-  if (a.length >= 5 && b.includes(a)) return true;
-  if (b.length >= 6 && a.includes(b)) return true;
-  return false;
+  return Boolean(a && b && a === b);
 }
 
 export function findEnviaExclusion(city: string, department?: string): EnviaExclusion | null {
@@ -733,12 +730,16 @@ export function findEnviaExclusion(city: string, department?: string): EnviaExcl
   if (!cityNorm) return null;
   const deptNorm = department ? foldPlaceName(department) : "";
 
-  const cityHits = ENVIA_REEXPEDITION_DESTINATIONS.filter((row) => placeMatches(city, row.city));
+  const cityHits = ENVIA_REEXPEDITION_DESTINATIONS.filter((row) => placeEquals(city, row.city));
   if (cityHits.length === 0) return null;
+
   if (deptNorm) {
-    return cityHits.find((row) => placeMatches(department!, row.department)) ?? cityHits[0] ?? null;
+    // Si hay departamento, exigir coincidencia. Nunca caer al primer homónimo de otro depto.
+    return cityHits.find((row) => placeEquals(department!, row.department)) ?? null;
   }
-  return cityHits[0] ?? null;
+
+  // Sin departamento: solo si el nombre de ciudad es único en la lista RX.
+  return cityHits.length === 1 ? cityHits[0]! : null;
 }
 
 export function isEnviaReexpedition(city: string, department?: string): boolean {

@@ -344,7 +344,8 @@ export function CheckoutPageClient() {
         ),
         customerEmail: email.trim(),
         customerName: name.trim(),
-        customerPhone: phone.trim().length >= 7 ? phone.trim() : undefined,
+        customerPhone: phone.trim(),
+        customerDocument: documentNumber.replace(/\D/g, ""),
         shippingAddress: {
           line1: t,
           country: "CO" as const,
@@ -364,9 +365,6 @@ export function CheckoutPageClient() {
                 ? ("ADDI" as const)
                 : ("BOLD" as const),
         pricingMode: buyingAsWholesale ? ("wholesale" as const) : ("retail" as const),
-        ...(provider === "addi" && documentNumber.trim()
-          ? { customerDocument: documentNumber.replace(/\D/g, "") }
-          : {}),
         ...(!buyingAsWholesale && couponApplied?.code ? { couponCode: couponApplied.code } : {}),
       };
     },
@@ -393,13 +391,11 @@ export function CheckoutPageClient() {
       return "Completa un correo válido.";
     }
     if (name.trim().length < 2) return "Escribe tu nombre completo.";
+    if (phone.replace(/\D/g, "").length < 10) return "Indica un celular válido (mínimo 10 dígitos).";
+    if (documentNumber.replace(/\D/g, "").length < 5) return "Indica tu número de cédula.";
     if (line1.trim().length < 3) return "Escribe una dirección completa (mínimo 3 caracteres).";
     if (city.trim().length < 2) return "Indica la ciudad.";
     if (!paymentMethod) return "Elige un método de pago.";
-    if (paymentMethod === "addi") {
-      if (documentNumber.replace(/\D/g, "").length < 5) return "Addi requiere tu número de cédula.";
-      if (phone.replace(/\D/g, "").length < 7) return "Addi requiere un teléfono / WhatsApp válido.";
-    }
     if (buyingAsWholesale && subtotal < wholesaleMin) {
       return wholesaleMinimumReminder(wholesaleMin, subtotal);
     }
@@ -417,7 +413,8 @@ export function CheckoutPageClient() {
     wholesaleMin,
   ]);
 
-  const formComplete = useMemo(() => validateForm() === null && cart.length > 0, [cart.length, validateForm]);
+  const formError = useMemo(() => validateForm(), [validateForm]);
+  const formComplete = useMemo(() => formError === null && cart.length > 0, [cart.length, formError]);
 
   useEffect(() => {
     if (!infoModal) return;
@@ -430,8 +427,9 @@ export function CheckoutPageClient() {
       const body = buildOrderPayload(provider);
       const parsed = createCheckoutOrderSchema.safeParse(body);
       if (!parsed.success) {
+        const issue = parsed.error.issues[0]?.message;
         setInfoModal("Completa la información");
-        setErrorMsg("Revisa correo, nombre, dirección, zona de envío y datos del pago.");
+        setErrorMsg(issue || "Revisa correo, nombre, celular, cédula, dirección y zona de envío.");
         setPhase("idle");
         return null;
       }
@@ -462,7 +460,10 @@ export function CheckoutPageClient() {
     let reference: string;
     try {
       const ref = await createPendingOrder("mercadopago");
-      if (!ref) return;
+      if (!ref) {
+        setPhase("idle");
+        return;
+      }
       reference = ref;
     } catch (e) {
       setPhase("error");
@@ -503,7 +504,10 @@ export function CheckoutPageClient() {
     let reference: string;
     try {
       const ref = await createPendingOrder("addi");
-      if (!ref) return;
+      if (!ref) {
+        setPhase("idle");
+        return;
+      }
       reference = ref;
     } catch (e) {
       setPhase("error");
@@ -645,7 +649,10 @@ export function CheckoutPageClient() {
     setPhase("order");
     try {
       const ref = await createPendingOrder("contraentrega");
-      if (!ref) return;
+      if (!ref) {
+        setPhase("idle");
+        return;
+      }
       saveCart([]);
       router.push(`/checkout/resultado?ref=${encodeURIComponent(ref)}`);
     } catch (e) {
@@ -674,7 +681,10 @@ export function CheckoutPageClient() {
     if (phase === "session" && paymentMethod === "mercadopago") return "Conectando con Mercado Pago…";
     if (phase === "session" && paymentMethod === "addi") return "Conectando con Addi…";
     if (phase === "widget" && paymentMethod === "bold") return "Completa el pago arriba ↑";
-    if (!formComplete) return "Completa tus datos para pagar";
+    if (!formComplete) {
+      if (formError && formError.length <= 56) return formError;
+      return "Completa tus datos para pagar";
+    }
     if (phase === "error") return "Reintentar";
     if (paymentMethod === "contraentrega") return "Confirmar pedido contraentrega";
     if (paymentMethod === "bold") return "Preparar pago con Bold";
@@ -879,7 +889,7 @@ export function CheckoutPageClient() {
               <div className="gb-co-grid2 gb-co-field--tight">
                 <div className="gb-co-field">
                   <label className="gb-co-label" htmlFor="gb-phone">
-                    Teléfono / WhatsApp{paymentMethod === "addi" ? " *" : ""}
+                    Celular / WhatsApp *
                   </label>
                   <input
                     id="gb-phone"
@@ -889,11 +899,12 @@ export function CheckoutPageClient() {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="+57 300 000 0000"
+                    required
                   />
                 </div>
                 <div className="gb-co-field">
                   <label className="gb-co-label" htmlFor="gb-doc">
-                    Cédula{paymentMethod === "addi" ? " *" : " (Addi)"}
+                    Cédula *
                   </label>
                   <input
                     id="gb-doc"
@@ -904,6 +915,7 @@ export function CheckoutPageClient() {
                     value={documentNumber}
                     onChange={(e) => setDocumentNumber(e.target.value.replace(/[^\d]/g, ""))}
                     placeholder="Solo números"
+                    required
                   />
                 </div>
               </div>
@@ -1321,14 +1333,17 @@ export function CheckoutPageClient() {
               type="button"
               className={`gb-co-pay${!formComplete && !payBusy ? " gb-co-pay--incomplete" : ""}`}
               onClick={handlePay}
-              disabled={payBusy || !paymentMethod}
+              disabled={payBusy || !formComplete || !paymentMethod}
             >
               {payBusy && <span className="gb-co-spinner" aria-hidden />}
               {payLabel}
             </button>
 
             {!formComplete ? (
-              <p className="gb-co-pay-hint">Correo, nombre, dirección y ciudad son obligatorios.</p>
+              <p className="gb-co-pay-hint">
+                {formError ||
+                  "Correo, nombre, celular, cédula, dirección y ciudad son obligatorios."}
+              </p>
             ) : null}
 
             {errorMsg && (

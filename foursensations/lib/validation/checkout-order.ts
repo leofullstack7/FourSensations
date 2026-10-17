@@ -32,7 +32,7 @@ export const createCheckoutOrderSchema = z
     items: z.array(checkoutLineSchema).min(1).max(50),
     customerEmail: z.string().email().max(320),
     customerName: z.string().min(2).max(200),
-    customerPhone: z.string().min(7).max(40).optional(),
+    customerPhone: z.string().min(7).max(40),
     shippingAddress: shippingAddressSchema,
     customerNote: z.string().max(2000).optional(),
     shippingZoneId: z.enum(SHIPPING_ZONE_IDS),
@@ -40,8 +40,8 @@ export const createCheckoutOrderSchema = z
     paymentProvider: z.enum(["EPAYCO", "BOLD", "MERCADOPAGO", "ADDI", "CONTRAENTREGA"]).optional(),
     /** Mayorista: precios de volumen. Detal: precios públicos, sin mínimo. */
     pricingMode: z.enum(["wholesale", "retail"]).optional(),
-    /** Cédula (requerida para Addi). */
-    customerDocument: z.string().min(5).max(20).optional(),
+    /** Cédula obligatoria en checkout. */
+    customerDocument: z.string().min(5).max(20),
     /** Código de cupón opcional. */
     couponCode: z.string().min(1).max(40).optional(),
   })
@@ -62,23 +62,21 @@ export const createCheckoutOrderSchema = z
         path: ["shippingAddress", "city"],
       });
     }
-    if (data.paymentProvider === "ADDI") {
-      const doc = (data.customerDocument ?? "").replace(/\D/g, "");
-      if (doc.length < 5) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Addi requiere tu número de cédula.",
-          path: ["customerDocument"],
-        });
-      }
-      const phone = (data.customerPhone ?? "").replace(/\D/g, "");
-      if (phone.length < 7) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Addi requiere un teléfono / WhatsApp válido.",
-          path: ["customerPhone"],
-        });
-      }
+    const phone = (data.customerPhone ?? "").replace(/\D/g, "");
+    if (phone.length < 10) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Indica un celular válido (mínimo 10 dígitos).",
+        path: ["customerPhone"],
+      });
+    }
+    const doc = (data.customerDocument ?? "").replace(/\D/g, "");
+    if (doc.length < 5) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Indica tu número de cédula.",
+        path: ["customerDocument"],
+      });
     }
   });
 
