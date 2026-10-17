@@ -61,6 +61,12 @@ export async function POST(req: Request) {
 
   const title =
     order.items[0]?.name?.slice(0, 100) || `Pedido Four Sensations ${order.reference}`;
+  const addr =
+    order.shippingAddress && typeof order.shippingAddress === "object"
+      ? (order.shippingAddress as Record<string, unknown>)
+      : {};
+  const documentNumber =
+    typeof addr.documentNumber === "string" ? addr.documentNumber.replace(/\D/g, "") : "";
 
   try {
     const pref = await createMercadoPagoPreference({
@@ -71,6 +77,8 @@ export async function POST(req: Request) {
       orderId: order.id,
       email: order.customerEmail,
       name: order.customerName,
+      phone: order.customerPhone,
+      documentNumber,
       backUrl,
       notificationUrl,
     });

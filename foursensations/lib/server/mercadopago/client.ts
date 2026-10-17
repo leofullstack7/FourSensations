@@ -47,6 +47,21 @@ async function mpFetch<T>(
   return json as T;
 }
 
+function splitPayerName(fullName: string): { name: string; surname: string } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { name: "Cliente", surname: "Four" };
+  if (parts.length === 1) return { name: parts[0]!, surname: "Four" };
+  return { name: parts[0]!, surname: parts.slice(1).join(" ") };
+}
+
+function normalizePhone(phone?: string | null): { area_code: string; number: string } | undefined {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  if (digits.length < 10) return undefined;
+  // Celular CO: 10 dígitos (3XX…) o 12 con 57.
+  const local = digits.startsWith("57") && digits.length >= 12 ? digits.slice(-10) : digits.slice(-10);
+  return { area_code: "57", number: local };
+}
+
 export async function createMercadoPagoPreference(opts: {
   accessToken: string;
   title: string;
@@ -55,22 +70,42 @@ export async function createMercadoPagoPreference(opts: {
   orderId: string;
   email: string;
   name: string;
+  phone?: string | null;
+  documentNumber?: string | null;
   backUrl: string;
   notificationUrl: string;
 }): Promise<MercadoPagoPreferenceResult> {
-  const body = {
+  const amount = Math.round(Number(opts.amount));
+  if (!Number.isFinite(amount) || amount < 1) {
+    throw new Error("Monto inválido para Mercado Pago");
+  }
+
+  const { name, surname } = splitPayerName(opts.name);
+  const phone = normalizePhone(opts.phone);
+  const documentNumber = (opts.documentNumber ?? "").replace(/\D/g, "");
+  // Máx. 13 caracteres en el extracto de tarjeta.
+  const statementDescriptor = "FOURSENSATION";
+
+  const body: Record<string, unknown> = {
     items: [
       {
-        id: opts.reference,
+        id: opts.reference.slice(0, 60),
         title: opts.title.slice(0, 120),
+        description: `Pedido ${opts.reference}`.slice(0, 200),
+        category_id: "others",
         quantity: 1,
-        unit_price: opts.amount,
+        unit_price: amount,
         currency_id: "COP",
       },
     ],
     payer: {
-      email: opts.email,
-      name: opts.name,
+      email: opts.email.trim().toLowerCase(),
+      name,
+      surname,
+      ...(phone ? { phone } : {}),
+      ...(documentNumber.length >= 5
+        ? { identification: { type: "CC", number: documentNumber } }
+        : {}),
     },
     external_reference: opts.reference,
     metadata: {
@@ -84,7 +119,11 @@ export async function createMercadoPagoPreference(opts: {
     },
     auto_return: "approved",
     notification_url: opts.notificationUrl,
-    statement_descriptor: "FOURSENSATIONS",
+    statement_descriptor: statementDescriptor,
+    binary_mode: false,
+    payment_methods: {
+      installments: 12,
+    },
   };
 
   const json = await mpFetch<{
@@ -96,7 +135,11 @@ export async function createMercadoPagoPreference(opts: {
     body: JSON.stringify(body),
   });
 
-  const initPoint = json.init_point || json.sandbox_init_point;
+  const token = opts.accessToken.trim();
+  const preferSandbox = /^TEST-/i.test(token);
+  const initPoint = preferSandbox
+    ? json.sandbox_init_point || json.init_point
+    : json.init_point || json.sandbox_init_point;
   if (!json.id || !initPoint) {
     throw new Error("Mercado Pago no devolvió init_point");
   }

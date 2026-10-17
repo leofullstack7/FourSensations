@@ -1333,7 +1333,8 @@ export function CheckoutPageClient() {
               type="button"
               className={`gb-co-pay${!formComplete && !payBusy ? " gb-co-pay--incomplete" : ""}`}
               onClick={handlePay}
-              disabled={payBusy || !formComplete || !paymentMethod}
+              disabled={payBusy || !paymentMethod}
+              aria-disabled={!formComplete || payBusy}
             >
               {payBusy && <span className="gb-co-spinner" aria-hidden />}
               {payLabel}
