@@ -661,36 +661,44 @@ export function StorefrontShell({
     [alignCompactMega],
   );
 
+  const cancelCloseDesktopMega = useCallback(() => {
+    if (megaCloseTimer.current) {
+      clearTimeout(megaCloseTimer.current);
+      megaCloseTimer.current = null;
+    }
+  }, []);
+
   const scheduleCloseDesktopMega = useCallback(() => {
     if (megaCloseTimer.current) clearTimeout(megaCloseTimer.current);
     megaCloseTimer.current = setTimeout(() => {
       megaCloseTimer.current = null;
       setDesktopMegaCat(null);
       setMegaAlignLeft(null);
-    }, 180);
+    }, 360);
   }, []);
 
   useEffect(() => {
     if (!desktopMegaCat) return;
-    const onMove = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
+    const isOverMegaZone = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return false;
       const header = document.getElementById("main-header");
-      if (!header) return;
-      const overNav = header.querySelector(".main-nav")?.contains(target);
-      const overDock = header.querySelector(".mega-dock")?.contains(target);
-      if (overNav || overDock) {
-        if (megaCloseTimer.current) {
-          clearTimeout(megaCloseTimer.current);
-          megaCloseTimer.current = null;
-        }
+      if (!header) return false;
+      return Boolean(
+        header.querySelector(".main-nav")?.contains(target) ||
+          header.querySelector(".mega-dock")?.contains(target) ||
+          target.closest?.("[data-mega-cat]"),
+      );
+    };
+    const onMove = (event: MouseEvent) => {
+      if (isOverMegaZone(event.target)) {
+        cancelCloseDesktopMega();
         return;
       }
       scheduleCloseDesktopMega();
     };
-    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mousemove", onMove, { passive: true });
     return () => document.removeEventListener("mousemove", onMove);
-  }, [desktopMegaCat, scheduleCloseDesktopMega]);
+  }, [desktopMegaCat, scheduleCloseDesktopMega, cancelCloseDesktopMega]);
 
   useEffect(() => {
     return () => {
@@ -767,13 +775,12 @@ export function StorefrontShell({
       <header
         className="header"
         id="main-header"
-        onMouseLeave={scheduleCloseDesktopMega}
-        onMouseEnter={() => {
-          if (megaCloseTimer.current) {
-            clearTimeout(megaCloseTimer.current);
-            megaCloseTimer.current = null;
-          }
+        onMouseLeave={(event) => {
+          const related = event.relatedTarget as Node | null;
+          if (related && event.currentTarget.contains(related)) return;
+          scheduleCloseDesktopMega();
         }}
+        onMouseEnter={cancelCloseDesktopMega}
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
             scheduleCloseDesktopMega();
@@ -797,29 +804,38 @@ export function StorefrontShell({
 
           <nav className="main-nav header-nav-rail" aria-label="Categorías">
             <ul className="nav-list">
-              {Object.entries(menuConfig).map(([cat, data]) => (
+              {Object.entries(menuConfig).map(([cat, data]) => {
+                const isMayorista = /mayorista/i.test(cat);
+                return (
                 <li
                   key={cat}
                   data-mega-cat={cat}
-                  className={`nav-item${desktopMegaCat === cat ? " is-mega-open" : ""}`}
-                  onMouseEnter={() => openDesktopMega(cat)}
+                  className={`nav-item${desktopMegaCat === cat ? " is-mega-open" : ""}${isMayorista ? " nav-item--mayorista" : ""}`}
+                  onMouseEnter={() => {
+                    cancelCloseDesktopMega();
+                    openDesktopMega(cat);
+                  }}
                 >
                   <StoreNavLink
                     href={resolveStoreCategoryHref(cat)}
                     className="nav-link"
                     prefetch
-                    onFocus={() => openDesktopMega(cat)}
+                    onFocus={() => {
+                      cancelCloseDesktopMega();
+                      openDesktopMega(cat);
+                    }}
                   >
                     <span className="nav-link-icon" aria-hidden>
                       {data.icon}
                     </span>
                     <span className="nav-link-label">{cat}</span>
-                    <svg width="10" height="10" viewBox="0 0 10 10">
+                    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
                       <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
                     </svg>
                   </StoreNavLink>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </nav>
 
@@ -1048,7 +1064,10 @@ export function StorefrontShell({
         {desktopMegaCat && desktopMega ? (
           <div
             className="mega-dock"
-            onMouseEnter={() => openDesktopMega(desktopMegaCat)}
+            onMouseEnter={() => {
+              cancelCloseDesktopMega();
+              openDesktopMega(desktopMegaCat);
+            }}
             onMouseLeave={scheduleCloseDesktopMega}
           >
             <div

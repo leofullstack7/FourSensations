@@ -4,8 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ComponentProps, MouseEvent } from "react";
 
-type StoreNavLinkProps = Omit<ComponentProps<typeof Link>, "onClick"> & {
+type StoreNavLinkProps = Omit<ComponentProps<typeof Link>, "onClick" | "onMouseEnter"> & {
   onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
+  onMouseEnter?: (event: MouseEvent<HTMLAnchorElement>) => void;
 };
 
 function hrefToString(href: ComponentProps<typeof Link>["href"]): string {
@@ -24,7 +25,7 @@ function hrefToString(href: ComponentProps<typeof Link>["href"]): string {
 }
 
 /** Prefetch al hover; el splash de navegación lo captura StoreNavigationProvider. */
-export function StoreNavLink({ href, onClick, prefetch = true, ...rest }: StoreNavLinkProps) {
+export function StoreNavLink({ href, onClick, onMouseEnter, prefetch = true, ...rest }: StoreNavLinkProps) {
   const pathname = usePathname();
   const router = useRouter();
   const hrefStr = hrefToString(href);
@@ -35,8 +36,9 @@ export function StoreNavLink({ href, onClick, prefetch = true, ...rest }: StoreN
       {...rest}
       href={href}
       prefetch={prefetch}
-      onMouseEnter={() => {
+      onMouseEnter={(event) => {
         if (targetPath !== pathname) router.prefetch(hrefStr);
+        onMouseEnter?.(event);
       }}
       onClick={onClick}
     />

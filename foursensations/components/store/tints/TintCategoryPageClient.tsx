@@ -9,6 +9,7 @@ import { TechAmbient } from "@/components/ui/TechAmbient";
 import { getCategoryLandingCopy } from "@/lib/category-landing-theme";
 import { TINTES_CATEGORY_SLUG } from "@/lib/bulk-import/tintes";
 import type { TintBubbleItem } from "@/lib/tints";
+import { StoreFooter } from "@/components/store/StoreFooter";
 import { TintFilterBar, type TintFilterOption } from "./TintFilterBar";
 import { TintBubbleField } from "./TintBubbleField";
 import { TintShowcasePanel } from "./TintShowcasePanel";
@@ -225,6 +226,7 @@ export function TintCategoryPageClient({
           </div>
         </div>
       </section>
+      <StoreFooter />
     </main>
   );
 }

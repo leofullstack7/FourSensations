@@ -8,6 +8,7 @@ import { useStoreNavigation } from "@/components/store/StoreNavigationProvider";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreProductCard } from "@/components/store/store-product-card";
 import { ProductCollage } from "@/components/store/ProductCollage";
+import { StoreFooter } from "@/components/store/StoreFooter";
 import type { StoreProduct } from "@/lib/types/product";
 import { getCategoryLandingCopy, HAIR_FILTER_GROUPS } from "@/lib/category-landing-theme";
 import {
@@ -632,6 +633,7 @@ export function CategoryLandingClient({
           )}
         </div>
       </section>
+      <StoreFooter />
     </main>
   );
 }
