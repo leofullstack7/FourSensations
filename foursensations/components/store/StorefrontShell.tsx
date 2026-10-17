@@ -649,6 +649,15 @@ export function StorefrontShell({
     setMegaAlignLeft(Math.min(left, maxLeft));
   }, []);
 
+  const closeDesktopMega = useCallback(() => {
+    if (megaCloseTimer.current) {
+      clearTimeout(megaCloseTimer.current);
+      megaCloseTimer.current = null;
+    }
+    setDesktopMegaCat(null);
+    setMegaAlignLeft(null);
+  }, []);
+
   const openDesktopMega = useCallback(
     (cat: string) => {
       if (megaCloseTimer.current) {
@@ -674,31 +683,46 @@ export function StorefrontShell({
       megaCloseTimer.current = null;
       setDesktopMegaCat(null);
       setMegaAlignLeft(null);
-    }, 360);
+    }, 70);
   }, []);
 
   useEffect(() => {
     if (!desktopMegaCat) return;
-    const isOverMegaZone = (target: EventTarget | null) => {
-      if (!(target instanceof Element)) return false;
-      const header = document.getElementById("main-header");
-      if (!header) return false;
-      return Boolean(
-        header.querySelector(".main-nav")?.contains(target) ||
-          header.querySelector(".mega-dock")?.contains(target) ||
-          target.closest?.("[data-mega-cat]"),
+
+    const pointInRect = (x: number, y: number, rect: DOMRect, pad = 0) =>
+      x >= rect.left - pad && x <= rect.right + pad && y >= rect.top - pad && y <= rect.bottom + pad;
+
+    const isOverMegaZone = (x: number, y: number) => {
+      const item = document.querySelector<HTMLElement>(
+        `[data-mega-cat="${CSS.escape(desktopMegaCat)}"]`,
       );
+      const panel = document.querySelector<HTMLElement>(".mega-dock__inner");
+      if (item && pointInRect(x, y, item.getBoundingClientRect(), 2)) return true;
+      if (panel && pointInRect(x, y, panel.getBoundingClientRect(), 2)) return true;
+      // Puente estrecho solo entre el ítem activo y el panel (no todo el header/nav).
+      if (item && panel) {
+        const ir = item.getBoundingClientRect();
+        const pr = panel.getBoundingClientRect();
+        const top = Math.min(ir.bottom, pr.top);
+        const bottom = Math.max(ir.bottom, pr.top);
+        const left = Math.min(ir.left, pr.left);
+        const right = Math.max(ir.right, pr.right);
+        if (y >= top - 1 && y <= bottom + 1 && x >= left && x <= right) return true;
+      }
+      return false;
     };
+
     const onMove = (event: MouseEvent) => {
-      if (isOverMegaZone(event.target)) {
+      if (isOverMegaZone(event.clientX, event.clientY)) {
         cancelCloseDesktopMega();
         return;
       }
-      scheduleCloseDesktopMega();
+      closeDesktopMega();
     };
-    document.addEventListener("mousemove", onMove, { passive: true });
-    return () => document.removeEventListener("mousemove", onMove);
-  }, [desktopMegaCat, scheduleCloseDesktopMega, cancelCloseDesktopMega]);
+
+    document.addEventListener("pointermove", onMove, { passive: true });
+    return () => document.removeEventListener("pointermove", onMove);
+  }, [desktopMegaCat, cancelCloseDesktopMega, closeDesktopMega]);
 
   useEffect(() => {
     return () => {
@@ -778,12 +802,11 @@ export function StorefrontShell({
         onMouseLeave={(event) => {
           const related = event.relatedTarget as Node | null;
           if (related && event.currentTarget.contains(related)) return;
-          scheduleCloseDesktopMega();
+          closeDesktopMega();
         }}
-        onMouseEnter={cancelCloseDesktopMega}
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-            scheduleCloseDesktopMega();
+            closeDesktopMega();
           }
         }}
       >
@@ -814,6 +837,12 @@ export function StorefrontShell({
                   onMouseEnter={() => {
                     cancelCloseDesktopMega();
                     openDesktopMega(cat);
+                  }}
+                  onMouseLeave={(event) => {
+                    const related = event.relatedTarget as Node | null;
+                    const panel = document.querySelector(".mega-dock__inner");
+                    if (related && panel?.contains(related)) return;
+                    scheduleCloseDesktopMega();
                   }}
                 >
                   <StoreNavLink
@@ -1062,14 +1091,7 @@ export function StorefrontShell({
           </div>
         </div>
         {desktopMegaCat && desktopMega ? (
-          <div
-            className="mega-dock"
-            onMouseEnter={() => {
-              cancelCloseDesktopMega();
-              openDesktopMega(desktopMegaCat);
-            }}
-            onMouseLeave={scheduleCloseDesktopMega}
-          >
+          <div className="mega-dock" aria-hidden={false}>
             <div
               className="mega-dock__inner mega-dock__inner--vertical"
               style={
@@ -1077,6 +1099,18 @@ export function StorefrontShell({
                   ? ({ marginLeft: megaAlignLeft, marginRight: "auto" } as CSSProperties)
                   : undefined
               }
+              onMouseEnter={() => {
+                cancelCloseDesktopMega();
+                openDesktopMega(desktopMegaCat);
+              }}
+              onMouseLeave={(event) => {
+                const related = event.relatedTarget as Node | null;
+                const item = document.querySelector(
+                  `[data-mega-cat="${CSS.escape(desktopMegaCat)}"]`,
+                );
+                if (related && item?.contains(related)) return;
+                closeDesktopMega();
+              }}
             >
               <div className="mega-dock__head">
                 <div>

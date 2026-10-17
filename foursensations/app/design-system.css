@@ -529,13 +529,13 @@ input, select, textarea { font-family: inherit; }
   position: relative;
   flex: 0 0 auto;
 }
-.nav-item::after {
+.nav-item.is-mega-open::after {
   content: "";
   position: absolute;
   left: 0;
   right: 0;
   top: 100%;
-  height: 28px;
+  height: 14px;
   z-index: 1;
 }
 .nav-link {
@@ -593,10 +593,14 @@ input, select, textarea { font-family: inherit; }
     position: absolute;
     left: 0;
     right: 0;
-    top: calc(100% - 6px);
+    top: calc(100% - 4px);
     z-index: 960;
-    padding: 6px 24px 0;
+    padding: 4px 24px 0;
     background: transparent;
+    /* El wrapper a ancho completo no captura hover; solo el panel. */
+    pointer-events: none;
+  }
+  .mega-dock__inner {
     pointer-events: auto;
   }
 }
