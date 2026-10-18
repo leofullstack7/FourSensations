@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import { sendTransactionalEmail } from "@/lib/server/email/send";
 
 function escapeHtml(s: string): string {
   return s
@@ -25,13 +25,9 @@ export type CrmCustomerEmailInput = {
 };
 
 export async function sendCrmCustomerEmail(input: CrmCustomerEmailInput): Promise<{ ok: true } | { ok: false; error: string }> {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
   const to = input.to.trim();
-  if (!apiKey) return { ok: false, error: "RESEND_API_KEY no configurada" };
   if (!to) return { ok: false, error: "Correo del cliente vacío" };
 
-  const from = process.env.RESEND_FROM_EMAIL?.trim() || "onboarding@resend.dev";
-  const resend = new Resend(apiKey);
   const firstName = input.customerName.trim().split(/\s+/)[0] || "Cliente";
   const subject = input.subject.trim() || "Novedades de Four Sensations para ti";
   const bodyHtml = textToHtmlParagraphs(input.body.trim() || "Tenemos novedades especiales para ti en Four Sensations.");
@@ -51,19 +47,14 @@ export async function sendCrmCustomerEmail(input: CrmCustomerEmailInput): Promis
           <p style="margin: 20px 0 0; font-size: 14px; color: #888;">Con cariño,<br/>Equipo Four Sensations</p>
         </div>
         <div style="background: #f9eef4; padding: 18px; text-align: center;">
-          <p style="margin: 0; color: #c4547a; font-size: 12px;">atencionalcliente.befs@gmail.com · Manizales, Caldas, Colombia</p>
+          <p style="margin: 0; color: #c4547a; font-size: 12px;">pedidosfoursensations@gmail.com · Manizales, Caldas, Colombia</p>
         </div>
       </div>
     </body>
     </html>
   `;
 
-  try {
-    await resend.emails.send({ from, to, subject, html });
-    return { ok: true };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "No se pudo enviar el correo";
-    console.error("[crm-email]", e);
-    return { ok: false, error: msg };
-  }
+  const result = await sendTransactionalEmail({ to, subject, html });
+  if (!result.ok) return { ok: false, error: result.error };
+  return { ok: true };
 }

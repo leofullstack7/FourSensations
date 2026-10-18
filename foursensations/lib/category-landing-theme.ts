@@ -75,8 +75,8 @@ const bySlug: Record<string, Partial<CategoryLandingCopy>> = {
     headline: "TU VITRINA ESTÁ PIDIENDO FOUR SENSATIONS 👀💗",
     subtitle:
       "Una marca que tus clientes van a querer descubrir, probar y volver a comprar. Productos con identidad, fórmulas increíbles y una comunidad que ya ama Four Sensations.",
-    ctaExplore: "Escribir por WhatsApp",
-    commercialLine: "Pedidos desde $700.000 acceden a tarifa mayorista y a un agente del equipo.",
+    ctaExplore: "Quiero registrarme",
+    commercialLine: "Desde $700.000 por pedido entras a tarifa mayorista.",
     benefits: [],
   },
   tintes: {

@@ -5,7 +5,7 @@ import { getStorefrontProducts } from "@/lib/products";
 export const metadata = {
   title: "Programa Mayorista | Four Sensations",
   description:
-    "Conviértete en mayorista Four Sensations: precios de volumen desde $700.000, despacho desde Manizales y acompañamiento del equipo.",
+    "TU VITRINA ESTÁ PIDIENDO FOUR SENSATIONS. Precios de volumen desde $700.000 y una marca que tus clientes van a querer volver a comprar.",
 };
 
 export const revalidate = 60;

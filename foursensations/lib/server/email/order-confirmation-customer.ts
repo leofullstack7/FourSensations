@@ -1,15 +1,17 @@
-import { Resend } from "resend";
 import type { Prisma } from "@prisma/client";
 import { orderPayloadForEmail } from "@/lib/server/email/order-notification";
+import { sendTransactionalEmail } from "@/lib/server/email/send";
 import { getWhatsAppDisplayNumber } from "@/lib/storefront-contact";
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+import {
+  emailShell,
+  escapeHtml,
+  goldDivider,
+  itemsTable,
+  sectionTitle,
+  softCard,
+  statusPill,
+  totalsBlock,
+} from "@/lib/server/email/templates";
 
 function extractShippingZoneId(shippingAddress: Prisma.JsonValue): string {
   try {
@@ -23,10 +25,6 @@ function extractShippingZoneId(shippingAddress: Prisma.JsonValue): string {
   }
 }
 
-function whatsappDisplayNumber(): string {
-  return getWhatsAppDisplayNumber();
-}
-
 export type CustomerOrderConfirmationInput = {
   reference: string;
   customerName: string;
@@ -37,6 +35,7 @@ export type CustomerOrderConfirmationInput = {
   shipping: number;
   shippingZoneLabel: string;
   shippingZoneId: string;
+  shippingCarrierLabel?: string;
   paymentProvider: string;
   items: Array<{
     productName: string;
@@ -66,154 +65,109 @@ export function buildCustomerOrderConfirmationPayload(order: {
   };
 }
 
-function deliveryBlockHtml(_zoneId: string, _customerPhoneEsc: string, whatsappEsc: string): string {
-  return `
-          <div style="background: #fdf6f9; border-radius: 12px; padding: 20px; margin-bottom: 24px; border: 1px solid #f0e6f0;">
-            <h2 style="color: #8a5fb0; font-size: 16px; margin: 0 0 12px;">📦 Tu envío</h2>
-            <p style="margin: 0 0 10px; color: #444; line-height: 1.65; font-size: 14px;">
-              Despachamos desde <strong>Manizales, Caldas</strong>. Preparamos y enviamos tu pedido en máximo
-              <strong>2 días hábiles</strong> desde la confirmación (este plazo no incluye el tránsito de la transportadora).
-            </p>
-            <p style="margin: 0 0 10px; color: #444; line-height: 1.65; font-size: 14px;">
-              Transportadora principal: <strong>Envía</strong>. En municipios con reexpedición: <strong>Interrapidísimo</strong>.
-              No comprometemos una fecha exacta de entrega porque depende de la transportadora.
-            </p>
-            <p style="margin: 0; color: #8a5fb0; font-size: 14px; font-weight: 600;">WhatsApp de atención: ${whatsappEsc}</p>
-          </div>`;
-}
-
 export async function sendOrderConfirmationToCustomer(order: CustomerOrderConfirmationInput): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
   const to = order.customerEmail?.trim();
-  if (!apiKey || !to) {
-    console.warn("[email] RESEND_API_KEY o correo del cliente vacío, omitiendo confirmación al cliente");
+  if (!to) {
+    console.warn("[email] correo del cliente vacío, omitiendo confirmación");
     return;
   }
 
-  const from = process.env.RESEND_FROM_EMAIL?.trim() || "onboarding@resend.dev";
-  const resend = new Resend(apiKey);
-  const whatsapp = whatsappDisplayNumber();
+  const whatsapp = getWhatsAppDisplayNumber();
   const whatsappEsc = escapeHtml(whatsapp);
-
-  const firstName =
-    order.customerName
-      .trim()
-      .split(/\s+/)[0] || "Cliente";
+  const firstName = order.customerName.trim().split(/\s+/)[0] || "belleza";
   const firstEsc = escapeHtml(firstName);
   const refEsc = escapeHtml(order.reference);
   const zoneEsc = escapeHtml(order.shippingZoneLabel);
+  const carrierEsc = escapeHtml(order.shippingCarrierLabel || "Envía");
   const addrEsc = escapeHtml(order.shippingAddress);
-  const phoneEsc = escapeHtml(order.customerPhone);
-
-  const itemsHtml = order.items
-    .map(
-      (item) => `
-    <tr>
-      <td style="padding: 8px 12px; border-bottom: 1px solid #f0e6f0;">${escapeHtml(item.productName)}</td>
-      <td style="padding: 8px 12px; border-bottom: 1px solid #f0e6f0; text-align:center;">${item.quantity}</td>
-      <td style="padding: 8px 12px; border-bottom: 1px solid #f0e6f0; text-align:right;">$${item.unitPrice.toLocaleString("es-CO")} COP</td>
-    </tr>
-  `,
-    )
-    .join("");
-
-  const deliveryHtml = deliveryBlockHtml(order.shippingZoneId, phoneEsc, whatsappEsc);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "") || "";
+  const policiesHref = siteUrl ? `${siteUrl}/politicas-envio` : "#";
+  const termsHref = siteUrl ? `${siteUrl}/terminos-condiciones` : "#";
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head><meta charset="utf-8"></head>
-    <body style="font-family: Georgia, 'Times New Roman', serif; background: #fdf6f9; margin: 0; padding: 20px;">
-      <div style="max-width: 600px; margin: 0 auto; background: #fffef9; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(180,80,120,0.12);">
-        <div style="background: linear-gradient(135deg, #c4547a, #e8a0b4); padding: 36px 28px; text-align: center;">
-          <h1 style="color: white; margin: 0; font-size: 30px; letter-spacing: 2px; font-weight: 600;">✨ Four Sensations</h1>
-          <p style="color: rgba(255,255,255,0.95); margin: 12px 0 0; font-size: 15px; letter-spacing: 0.5px;">Tu pedido está confirmado</p>
-        </div>
+  const shipNote =
+    order.shipping === 0
+      ? `Tu destino va por <strong style="color:#fff8f2;">${carrierEsc}</strong>. El flete se paga <strong style="color:#fff8f2;">contraentrega</strong>.`
+      : `Transportadora: <strong style="color:#fff8f2;">${carrierEsc}</strong> · Zona: <strong style="color:#fff8f2;">${zoneEsc}</strong>.`;
 
-        <div style="padding: 28px 24px;">
-          <p style="margin: 0 0 16px; font-size: 17px; color: #3d2c2a; line-height: 1.6;">
-            ¡Hola, <strong>${firstEsc}</strong>! 💕
-          </p>
-          <p style="margin: 0 0 14px; color: #5c4f4d; line-height: 1.75; font-size: 15px;">
-            Queremos que sepas que tu pedido significa mucho para nosotras.<br/>
-            Cada producto que elegiste fue preparado con amor y cuidado especial para ti.<br/>
-            Estamos emocionadas de que pronto tengas tus productos favoritos en tus manos.
-          </p>
-          <p style="margin: 0 0 24px; color: #c4547a; font-size: 15px; font-weight: 600;">
-            ¡Gracias por confiar en Four Sensations! 🌸
-          </p>
+  const bodyHtml = `
+    <p style="margin:0 0 14px;font-size:18px;line-height:1.5;color:#fff8f2;">
+      Hola, <em style="color:#f0c9d4;">${firstEsc}</em> —
+    </p>
+    <p style="margin:0 0 18px;font-size:15px;line-height:1.75;color:#e8d0da;">
+      Tu pedido ya es parte de nuestra ritualística. Cada fórmula que elegiste se preparará con intención
+      desde Manizales, para que tu cabello reciba exactamente lo que pediste.
+    </p>
+    <div style="text-align:center;margin:0 0 22px;">
+      ${statusPill("Pago confirmado")}
+      <p style="margin:12px 0 0;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:#d4af7a;">
+        Referencia ${refEsc}
+      </p>
+    </div>
 
-          <div style="background: #f0fdf4; border-left: 4px solid #22c55e; padding: 16px 20px; border-radius: 0 8px 8px 0; margin-bottom: 24px;">
-            <p style="margin: 0; color: #15803d; font-weight: bold; font-size: 15px;">✅ Pago aprobado</p>
-            <p style="margin: 6px 0 0; color: #166534; font-size: 14px;">Referencia: <strong>${refEsc}</strong></p>
-          </div>
+    ${sectionTitle("Tu ritual pedido")}
+    <p style="margin:0 0 10px;font-size:13px;color:#c9a8b4;">Lo enviamos a: ${addrEsc}</p>
+    ${itemsTable(order.items)}
+    ${goldDivider()}
+    ${totalsBlock({
+      subtotal: order.subtotal,
+      shipping: order.shipping,
+      shippingLabel: `${order.shippingZoneLabel} · ${order.shippingCarrierLabel || "Envía"}`,
+      total: order.total,
+    })}
 
-          <h2 style="color: #c4547a; font-size: 16px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 1px;">📦 Resumen del pedido</h2>
-          <p style="margin: 0 0 8px; font-size: 13px; color: #666;">Enviaremos a: ${addrEsc}</p>
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-            <thead>
-              <tr style="background: #c4547a; color: white;">
-                <th style="padding: 10px 12px; text-align: left; font-weight: normal;">Producto</th>
-                <th style="padding: 10px 12px; text-align: center; font-weight: normal;">Cant.</th>
-                <th style="padding: 10px 12px; text-align: right; font-weight: normal;">Precio</th>
-              </tr>
-            </thead>
-            <tbody>${itemsHtml}</tbody>
-          </table>
-          <div style="background: #fdf6f9; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #666; font-size: 14px;">
-              <span>Subtotal</span><span>$${order.subtotal.toLocaleString("es-CO")} COP</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 12px; color: #666; font-size: 14px;">
-              <span>Envío (${zoneEsc})</span>
-              <span>${order.shipping === 0 ? "$0 COP" : `$${order.shipping.toLocaleString("es-CO")} COP`}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; font-size: 22px; font-weight: bold; color: #c4547a; border-top: 2px solid #e8a0b4; padding-top: 12px;">
-              <span>TOTAL</span><span>$${order.total.toLocaleString("es-CO")} COP</span>
-            </div>
-          </div>
+    ${sectionTitle("Cómo llega")}
+    ${softCard(`
+      <p style="margin:0 0 10px;font-size:14px;line-height:1.7;color:#e8d0da;">
+        Despachamos desde <strong style="color:#fff8f2;">Manizales, Caldas</strong>.
+        Preparamos tu pedido en máximo <strong style="color:#fff8f2;">2 días hábiles</strong>
+        (ese plazo no incluye el tránsito de la transportadora).
+      </p>
+      <p style="margin:0 0 10px;font-size:14px;line-height:1.7;color:#e8d0da;">
+        ${shipNote}
+      </p>
+      <p style="margin:0;font-size:14px;color:#d4af7a;">
+        WhatsApp de atención: ${whatsappEsc}
+      </p>
+    `)}
 
-          <h2 style="color: #c4547a; font-size: 16px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 1px;">🚚 Entrega</h2>
-          ${deliveryHtml}
+    ${sectionTitle("Detalles que importan")}
+    ${softCard(
+      `
+      <ul style="margin:0;padding-left:18px;color:#e8d0da;font-size:13px;line-height:1.75;">
+        <li>Al recibir el paquete, revísalo y documenta cualquier novedad.</li>
+        <li>Novedades de transporte (faltante, daño, guía “entregado” sin recepción): reporta en las <strong style="color:#fff8f2;">primeras 24 horas</strong> al WhatsApp ${whatsappEsc}, con fotos o video.</li>
+        <li>No hay cambios comerciales por gusto. Sí aplica la garantía legal.</li>
+        <li>Escríbenos a <a href="mailto:atencionalcliente.befs@gmail.com" style="color:#f0c9d4;">atencionalcliente.befs@gmail.com</a>.</li>
+      </ul>
+    `,
+      "rgba(196,84,122,0.35)",
+    )}
 
-          <div style="background: #fce8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-            <h2 style="color: #9d3d5c; font-size: 15px; margin: 0 0 14px;">📋 Información importante sobre tu pedido</h2>
-            <ul style="margin: 0; padding-left: 18px; color: #4a3f3d; font-size: 13px; line-height: 1.7;">
-              <li>Al recibir tu paquete, revísalo y documenta cualquier novedad.</li>
-              <li>Reporta novedades de transporte (faltante, daño, guía “entregado” sin recepción) <strong>dentro de las primeras 24 horas</strong> al WhatsApp ${whatsappEsc}, con fotos o video.</li>
-              <li>No aplican cambios comerciales por gusto o resultado cosmético distinto al esperado. Sí aplica la garantía legal.</li>
-              <li>Para cualquier inquietud escríbenos a <a href="mailto:atencionalcliente.befs@gmail.com" style="color: #c4547a;">atencionalcliente.befs@gmail.com</a> o al WhatsApp ${whatsappEsc}.</li>
-            </ul>
-          </div>
-
-          <p style="margin: 0 0 10px; font-size: 14px;">
-            <a href="${siteUrl}/politicas-envio" style="color: #c4547a; font-weight: 600;">Ver políticas de envío completas →</a>
-          </p>
-          <p style="margin: 0; font-size: 14px;">
-            <a href="${siteUrl}/terminos-condiciones" style="color: #c4547a; font-weight: 600;">Términos y condiciones →</a>
-          </p>
-        </div>
-
-        <div style="background: #f9eef4; padding: 22px; text-align: center;">
-          <p style="margin: 0; color: #c4547a; font-size: 13px;">Four Sensations — atencionalcliente.befs@gmail.com</p>
-          <p style="margin: 6px 0 0; color: #888; font-size: 12px;">Manizales, Caldas, Colombia</p>
-          <p style="margin: 8px 0 0; color: #aaa; font-size: 11px;">Este correo fue generado automáticamente como confirmación de tu compra.</p>
-        </div>
-      </div>
-    </body>
-    </html>
+    <p style="margin:8px 0 0;text-align:center;">
+      <a href="${policiesHref}" style="color:#d4af7a;font-size:13px;text-decoration:none;letter-spacing:0.08em;">Políticas de envío →</a>
+      &nbsp;&nbsp;·&nbsp;&nbsp;
+      <a href="${termsHref}" style="color:#d4af7a;font-size:13px;text-decoration:none;letter-spacing:0.08em;">Términos →</a>
+    </p>
+    <p style="margin:22px 0 0;text-align:center;font-size:15px;font-style:italic;color:#f0c9d4;">
+      Gracias por confiar en Four Sensations. Be you, be Four Sensations.
+    </p>
   `;
 
-  try {
-    await resend.emails.send({
-      from,
-      to,
-      subject: `💕 Tu compra en Four Sensations está confirmada — ${order.reference}`,
-      html,
-    });
-    console.log("[email] confirmación enviada al cliente:", to, order.reference);
-  } catch (error) {
-    console.error("[email] error confirmación cliente:", error);
+  const html = emailShell({
+    preheader: `Tu compra ${order.reference} está confirmada. Gracias por elegirnos.`,
+    heroTitle: "Tu compra ya brilla con nosotras",
+    heroSubtitle: "Confirmación de pedido",
+    bodyHtml,
+  });
+
+  const result = await sendTransactionalEmail({
+    to,
+    subject: `✦ Tu compra en Four Sensations está confirmada — ${order.reference}`,
+    html,
+  });
+  if (!result.ok) {
+    console.error("[email] confirmación cliente falló:", result.error);
+    return;
   }
+  console.log("[email] confirmación enviada al cliente vía", result.provider, to, order.reference);
 }

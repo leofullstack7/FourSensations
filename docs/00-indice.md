@@ -36,6 +36,7 @@ FourSensations/
 | **07** | [07-cuentas-de-servicio.md](./07-cuentas-de-servicio.md) | **En curso** — cuentas propias, sin usar las de GinnaBeauty |
 | **08** | [08-estado-propuesta.md](./08-estado-propuesta.md) | **Activo** — qué está hecho y qué falta (guía + sesiones) |
 | **09** | [09-cambios-juliana-home.md](./09-cambios-juliana-home.md) | **Hecho (revisar en prod)** — 21 ítems Juliana + mapa de URLs |
+| **10** | [10-pedidos-comerciales.md](./10-pedidos-comerciales.md) | **Activo** — envío Envía/Interrapidísimo, Mercado Pago, mayorista, topbar, pestaña VUELVE |
 
 ---
 

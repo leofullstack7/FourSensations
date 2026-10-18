@@ -846,7 +846,7 @@ export function StorefrontShell({
                   }}
                 >
                   <StoreNavLink
-                    href={resolveStoreCategoryHref(cat)}
+                    href={resolveStoreCategoryHref(categoryPath(cat))}
                     className="nav-link"
                     prefetch
                     onFocus={() => {
@@ -1117,7 +1117,7 @@ export function StorefrontShell({
                   <p className="mega-kicker">Colección</p>
                   <h3 className="mega-header">{desktopMegaCat}</h3>
                 </div>
-                <StoreNavLink href={resolveStoreCategoryHref(desktopMegaCat)} className="mega-promo-btn">
+                <StoreNavLink href={resolveStoreCategoryHref(categoryPath(desktopMegaCat))} className="mega-promo-btn">
                   Ver todo
                 </StoreNavLink>
               </div>
