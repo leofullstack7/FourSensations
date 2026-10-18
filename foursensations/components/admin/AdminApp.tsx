@@ -961,7 +961,7 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
         clearProductListSelection();
         await loadProducts();
         showToast(
-          `${res.grouped} variantes en un solo producto. Cara principal: «${res.primaryName}».`,
+          `${res.grouped} variantes en un solo producto. Cara principal: «${res.primaryName}». Las nuevas heredan descripción, precio y datos del principal.`,
           "success",
           "📦"
         );
@@ -2568,6 +2568,7 @@ function AdminProductListTab({
 }) {
   const [variantsModalProduct, setVariantsModalProduct] = useState<AdminProduct | null>(null);
   const [variantDeletingId, setVariantDeletingId] = useState<string | null>(null);
+  const [variantSavingId, setVariantSavingId] = useState<string | null>(null);
   const [colorModalProduct, setColorModalProduct] = useState<AdminProduct | null>(null);
   const [colorSaving, setColorSaving] = useState(false);
 
@@ -2948,6 +2949,7 @@ function AdminProductListTab({
         allProducts={allProducts}
         categoryTree={categoryTree}
         deletingId={variantDeletingId}
+        savingId={variantSavingId}
         onClose={() => setVariantsModalProduct(null)}
         categoryDisplayName={categoryDisplayName}
         onDeleteVariant={async (id) => {
@@ -2962,7 +2964,22 @@ function AdminProductListTab({
             setVariantDeletingId(null);
           }
         }}
-        onEditVariantColor={(variant) => setColorModalProduct(variant)}
+        onSaveVariant={async (id, payload) => {
+          setVariantSavingId(id);
+          try {
+            const updated = await updateAdminProduct(id, payload);
+            await onProductsRefresh();
+            if (variantsModalProduct?.id === id) {
+              setVariantsModalProduct(updated);
+            }
+            showToast("Variante guardada", "success", "✓");
+          } catch (e) {
+            showToast(e instanceof Error ? e.message : "No se pudo guardar la variante", "danger", "⚠️");
+            throw e;
+          } finally {
+            setVariantSavingId(null);
+          }
+        }}
         onMergeVariants={async ({ survivorId, absorbedIds, name }) => {
           try {
             const res = await postAdminProductsMerge({ survivorId, absorbedIds, name });

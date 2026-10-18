@@ -215,6 +215,11 @@ export async function POST(req: NextRequest) {
       ...others.map((r, i) => ({ id: r.id, order: i + 1 })),
     ];
 
+    /** Variantes que aún no tenían grupo: heredan catálogo del principal (color/fotos/código se conservan). */
+    const inheritIds = others
+      .filter((r) => !canonicalVariantGroupCode(r.variantGroupCode))
+      .map((r) => r.id);
+
     const oldCodes = Array.from(
       new Set(
         members
@@ -223,9 +228,41 @@ export async function POST(req: NextRequest) {
       ),
     );
 
+    const primaryFull = await prisma.product.findUnique({ where: { id: primaryId } });
+    if (!primaryFull) {
+      return NextResponse.json({ error: "Producto principal no encontrado" }, { status: 404 });
+    }
+
     await prisma.$transaction(
       async (tx) => {
         await updateOrdersInChunks(tx, orderItems, groupCode);
+
+        if (inheritIds.length > 0) {
+          for (let i = 0; i < inheritIds.length; i += UPDATE_CHUNK) {
+            const chunk = inheritIds.slice(i, i + UPDATE_CHUNK);
+            await Promise.all(
+              chunk.map((id) =>
+                tx.product.update({
+                  where: { id },
+                  data: {
+                    name: primaryFull.name,
+                    brand: primaryFull.brand,
+                    category: primaryFull.category,
+                    subcategory: primaryFull.subcategory,
+                    description: primaryFull.description,
+                    price: primaryFull.price,
+                    originalPrice: primaryFull.originalPrice,
+                    wholesalePrice: primaryFull.wholesalePrice,
+                    tags: primaryFull.tags,
+                    badge: primaryFull.badge,
+                    emoji: primaryFull.emoji,
+                    // Conserva colorHex, colorName, imageUrl, stock, externalRef de cada variante.
+                  },
+                }),
+              ),
+            );
+          }
+        }
 
         for (const code of oldCodes) {
           const leftover = await tx.product.findMany({
