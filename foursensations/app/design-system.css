@@ -584,24 +584,15 @@ input, select, textarea { font-family: inherit; }
 }
 
 /* Mega Menu — panel bajo el ítem (puente de hover activo) */
+/* Megamenú desactivado: solo categorías principales en el nav. */
 .mega-dock {
-  display: none;
+  display: none !important;
+  pointer-events: none !important;
 }
 @media (min-width: 901px) {
   .mega-dock {
-    display: block;
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: calc(100% - 4px);
-    z-index: 960;
-    padding: 4px 24px 0;
-    background: transparent;
-    /* El wrapper a ancho completo no captura hover; solo el panel. */
-    pointer-events: none;
-  }
-  .mega-dock__inner {
-    pointer-events: auto;
+    display: none !important;
+    pointer-events: none !important;
   }
 }
 .nav-item--mayorista .nav-link {

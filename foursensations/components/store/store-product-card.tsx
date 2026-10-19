@@ -77,12 +77,6 @@ export function StoreProductCard({
             product.emoji
           )}
         </div>
-        {product.variantCount != null && product.variantCount >= 2 && (
-          <div className="product-variant-count-badge" aria-label={`${product.variantCount} variaciones`}>
-            <span className="product-variant-count-badge__num">{product.variantCount}</span>
-            <span className="product-variant-count-badge__lbl">vars</span>
-          </div>
-        )}
         <div className="product-badges">
           <StoreDiscountBadge product={product} />
           {product.badge ? (

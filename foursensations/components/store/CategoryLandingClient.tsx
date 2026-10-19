@@ -510,50 +510,14 @@ export function CategoryLandingClient({
 
       <section className="section-pad reveal" id="cat-catalog" style={{ paddingTop: 8 }}>
         <div className="container">
-          {hairMode || categorySlug === "cuidado-corporal" ? null : (
+          {hairMode || accessoryMode || categorySlug === "cuidado-corporal" ? null : (
           <div className="category-filter-panel">
             <div className="category-filter-title">Filtrar el catálogo</div>
-            {hairMode ? (
-              <p className="fs-cat-filter-lead">
-                Elige una familia (Tratamientos, Shampoo y Acondicionador, Crecimiento, Detox, Finalizadores, Hair Mist, Puntas o Pre-Shampoo) y, si quieres,
-                una línea concreta.
-              </p>
-            ) : accessoryMode ? (
-              <p className="fs-cat-filter-lead">
-                Accesorios en una sola colección. Filtra por tipo: cepillos, gorros, toallas, batas, scrunchies, ondas o cosmetiqueras.
-              </p>
-            ) : (
-              <p className="fs-cat-filter-lead">Encuentra lo que buscas dentro de {categoryLabel}.</p>
-            )}
-
-            {hairMode ? (
-              <div className="category-filter-step">
-                <div className="category-filter-label">Familia</div>
-                <div className="category-chip-row">
-                  <button
-                    type="button"
-                    className={`category-filter-chip${selectedGrupo === "" ? " active" : ""}`}
-                    onClick={() => pickGrupo("")}
-                  >
-                    Todas
-                  </button>
-                  {visibleGroups.map((g) => (
-                    <button
-                      key={g}
-                      type="button"
-                      className={`category-filter-chip${selectedGrupo === g ? " active" : ""}`}
-                      onClick={() => pickGrupo(g)}
-                    >
-                      {g}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
+            <p className="fs-cat-filter-lead">Encuentra lo que buscas dentro de {categoryLabel}.</p>
 
             {lineChips.length > 0 ? (
               <div className="category-filter-step" style={{ marginTop: 16 }}>
-                <div className="category-filter-label">{accessoryMode ? "Tipo" : "Línea"}</div>
+                <div className="category-filter-label">Línea</div>
                 <div className="category-chip-row">
                   <button
                     type="button"

@@ -33,7 +33,6 @@ import { isDisplayableImageUrl, isHttpImageUrl } from "@/lib/util/image-url";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { StoreFloatingActions } from "@/components/store/StoreFloatingActions";
 import { ProductModalGallery } from "@/components/store/ProductModalGallery";
-import { ProductVariantsPickerModal } from "@/components/store/ProductVariantsPickerModal";
 import {
   ProductColorSwatchField,
   productHasColorSwatch,
@@ -184,8 +183,6 @@ export function StorefrontShell({
   const [authMode, setAuthMode] = useState<"login" | "fav-warning">("login");
   const [customerAuthTab, setCustomerAuthTab] = useState<"login" | "register">("login");
   const [selectedProduct, setSelectedProduct] = useState<StoreProduct | null>(null);
-  const [variantPickerOpen, setVariantPickerOpen] = useState(false);
-  const [variantPickerProducts, setVariantPickerProducts] = useState<StoreProduct[]>([]);
   const [modalImgIdx, setModalImgIdx] = useState(0);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   /** Loader global (correo o redirección Google). */
@@ -279,11 +276,7 @@ export function StorefrontShell({
 
   useEffect(() => {
     const onResize = () => {
-      if (window.innerWidth > 900) {
-        setMobileMenuOpen(false);
-      } else {
-        setDesktopMegaCat(null);
-      }
+      if (window.innerWidth > 900) setMobileMenuOpen(false);
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
@@ -512,35 +505,7 @@ export function StorefrontShell({
     document.body.style.overflow = "hidden";
   }, [products]);
 
-  const closeVariantPicker = useCallback(() => {
-    setVariantPickerOpen(false);
-    setVariantPickerProducts([]);
-    if (!selectedProduct) document.body.style.overflow = "";
-  }, [selectedProduct]);
-
   const openProductModal = useCallback((id: string) => {
-    const p = products.find((x) => x.id === id);
-    if (!p) return;
-
-    preloadStorefrontProductImages(p);
-
-    const groupCode = p.variantGroupCode?.trim();
-    if (groupCode) {
-      const variants = listStorefrontVariantsInGroup(products, groupCode);
-      if (variants.length >= 2) {
-        setVariantPickerProducts(variants);
-        setVariantPickerOpen(true);
-        document.body.style.overflow = "hidden";
-        return;
-      }
-    }
-
-    openProductDetail(id);
-  }, [products, openProductDetail]);
-
-  const selectVariantFromPicker = useCallback((id: string) => {
-    setVariantPickerOpen(false);
-    setVariantPickerProducts([]);
     openProductDetail(id);
   }, [openProductDetail]);
 
@@ -1096,17 +1061,6 @@ export function StorefrontShell({
           </button>
         </div>
       </aside>
-
-      <ProductVariantsPickerModal
-        open={variantPickerOpen}
-        variants={variantPickerProducts}
-        groupLabel={variantPickerProducts[0]?.name}
-        favorites={favorites}
-        onSelect={selectVariantFromPicker}
-        onToggleFav={toggleFavorite}
-        onAddCart={addToCart}
-        onClose={closeVariantPicker}
-      />
 
       <div
         className={`modal-overlay modal-overlay--product-tech${selectedProduct ? " open" : ""}`}
