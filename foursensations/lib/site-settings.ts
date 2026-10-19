@@ -18,7 +18,7 @@ export type MegaPromoImageSlot = {
 
 export type MegaPromoByCategory = Record<string, MegaPromoImageSlot[]>;
 
-export const LANDING_COLLAGE_SLUGS = ["cuidado-capilar", "cuidado-corporal", "accesorios"] as const;
+export const LANDING_COLLAGE_SLUGS = ["cuidado-capilar", "cuidado-corporal", "accesorios", "kits"] as const;
 export type LandingCollageSlug = (typeof LANDING_COLLAGE_SLUGS)[number];
 export type LandingCollages = Record<LandingCollageSlug, [string, string, string]>;
 

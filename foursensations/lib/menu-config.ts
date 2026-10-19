@@ -58,6 +58,12 @@ export const defaultMenuConfig: MenuConfig = {
       Cosmetiqueras: [],
     },
   },
+  Kits: {
+    icon: "🎁",
+    subs: {
+      Kits: [],
+    },
+  },
   Mayorista: {
     icon: "📦",
     subs: {
@@ -124,10 +130,11 @@ export function filterStorefrontLaunchMenu<T extends { config: MenuConfig; slugB
     const isCorporal = norm === normalizeCategoryLabel("Cuidado Corporal");
     const isHair = norm === normalizeCategoryLabel("Cuidado capilar");
     const isAccesorios = norm === normalizeCategoryLabel("Accesorios");
+    const isKits = norm === normalizeCategoryLabel("Kits");
     const isMayorista = norm === normalizeCategoryLabel("Mayorista");
     config[canonicalName] = {
       icon: hit.cfg.icon || defaultCfg.icon,
-      subs: isCorporal || isAccesorios || isMayorista
+      subs: isCorporal || isAccesorios || isKits || isMayorista
         ? defaultCfg.subs
         : isHair
           ? remapHairMenuSubs(hit.cfg.subs)

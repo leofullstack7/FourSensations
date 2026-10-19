@@ -22,6 +22,7 @@ import {
 const COLLAGE_LABELS: Record<LandingCollageSlug, string> = {
   "cuidado-capilar": "Cuidado capilar",
   "cuidado-corporal": "Cuidado corporal",
+  kits: "Kits",
   accesorios: "Accesorios",
 };
 

@@ -2,6 +2,7 @@ import { CouponEmailSendStatus, CouponStatus, CouponType } from "@prisma/client"
 import { prisma } from "@/lib/prisma";
 import { couponTypeLabel, normalizeCouponCode } from "@/lib/coupons";
 import { couponValueLabel, sendCouponGiftEmail } from "@/lib/server/email/coupon-mail";
+import { upsertWelcomeLead } from "@/lib/server/welcome-lead";
 
 export const WELCOME_COUPON_CODE = "BIENVENIDA";
 export const WELCOME_COUPON_PERCENT = 10;
@@ -38,7 +39,10 @@ export function isWelcomeCouponCode(code: string | null | undefined): boolean {
   return normalizeCouponCode(code || "") === WELCOME_COUPON_CODE;
 }
 
-export async function claimWelcomeCoupon(rawEmail: string): Promise<
+export async function claimWelcomeCoupon(
+  rawEmail: string,
+  rawWhatsapp: string,
+): Promise<
   | { ok: true; alreadySent: true; message: string }
   | {
       ok: true;
@@ -51,8 +55,12 @@ export async function claimWelcomeCoupon(rawEmail: string): Promise<
   | { ok: false; error: string }
 > {
   const email = rawEmail.trim().toLowerCase();
+  const whatsappDigits = rawWhatsapp.replace(/\D/g, "");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { ok: false, error: "Ingresa un correo electrónico válido." };
+  }
+  if (whatsappDigits.length < 10) {
+    return { ok: false, error: "Ingresa un WhatsApp válido (mínimo 10 dígitos)." };
   }
 
   const coupon = await ensureWelcomeCoupon();
@@ -67,6 +75,7 @@ export async function claimWelcomeCoupon(rawEmail: string): Promise<
   });
 
   if (prior) {
+    await upsertWelcomeLead(email, whatsappDigits).catch(() => undefined);
     return {
       ok: true,
       alreadySent: true,
@@ -113,6 +122,10 @@ export async function claimWelcomeCoupon(rawEmail: string): Promise<
   if (!send.ok) {
     return { ok: false, error: send.error || "No pudimos enviar el correo. Intenta de nuevo en un momento." };
   }
+
+  await upsertWelcomeLead(email, whatsappDigits).catch((e) => {
+    console.error("[welcome-lead]", e);
+  });
 
   return {
     ok: true,

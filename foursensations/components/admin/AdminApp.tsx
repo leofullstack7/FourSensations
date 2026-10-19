@@ -180,7 +180,7 @@ const ADMIN_PAGE_TITLES: Record<AdminPageId, string> = {
   dashboard: "Dashboard",
   products: "Gestión de Productos",
   "category-products": "Gestión de PRODUCTOS en Categorías",
-  combos: "Crear Combos",
+  combos: "Crear Kit",
   discounts: "Descuentos",
   coupons: "Cupones",
   sales: "Ventas",
@@ -204,7 +204,7 @@ const ADMIN_NAV_ITEMS: {
   { id: "dashboard", icon: "📊", label: "Dashboard" },
   { id: "products", icon: "📦", label: "Productos" },
   { id: "category-products", icon: "✨", label: "Productos en Categorías" },
-  { id: "combos", icon: "🧩", label: "Crear Combos" },
+  { id: "combos", icon: "🎁", label: "Crear Kit" },
   { id: "discounts", icon: "🏷️", label: "Descuentos" },
   { id: "coupons", icon: "🎟️", label: "Cupones" },
   { id: "sales", icon: "💰", label: "Ventas" },
@@ -3072,12 +3072,41 @@ function AdminAddProductForm({
   const [galleryUrls, setGalleryUrls] = useState<string[]>([]);
   const [uploadingMain, setUploadingMain] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
+  const [variantDrafts, setVariantDrafts] = useState<
+    Array<{ id: string; colorName: string; colorHex: string; openMore: boolean; name: string; price: string; stock: string }>
+  >([]);
+
+  const categorySelectOptions = useMemo(() => {
+    const sorted = [...categories].sort((a, b) => a.sortOrder - b.sortOrder);
+    const haveCorporal = sorted.some((c) => c.slug === "cuidado-corporal" || /corporal/i.test(c.name));
+    if (haveCorporal) return sorted;
+    return [
+      ...sorted,
+      {
+        id: "virtual-corporal",
+        slug: "cuidado-corporal",
+        name: "Cuidado Corporal",
+        icon: "🧴",
+        sortOrder: 99,
+        subcategories: [
+          {
+            id: "v-corp",
+            slug: "corporal",
+            name: "Corporal",
+            menuTag: "Corporal",
+            sortOrder: 0,
+            categoryId: "virtual-corporal",
+          },
+        ],
+      },
+    ] as AdminCategoryTree[];
+  }, [categories]);
 
   const subOptions = useMemo(() => {
     if (!category) return [];
-    const c = categories.find((x) => x.slug === category);
+    const c = categorySelectOptions.find((x) => x.slug === category);
     return c ? [...c.subcategories].sort((a, b) => a.sortOrder - b.sortOrder) : [];
-  }, [category, categories]);
+  }, [category, categorySelectOptions]);
 
   return (
     <div className="admin-card">
@@ -3103,7 +3132,7 @@ function AdminAddProductForm({
           <label className="form-label">Categoría *</label>
           <select className="form-select" value={category} onChange={(e) => { setCategory(e.target.value); setSubcategory(""); }}>
             <option value="">Seleccionar...</option>
-            {[...categories].sort((a, b) => a.sortOrder - b.sortOrder).map((c) => (
+            {categorySelectOptions.map((c) => (
               <option key={c.id} value={c.slug}>
                 {c.icon ? `${c.icon} ` : ""}{c.name}
               </option>
@@ -3130,12 +3159,12 @@ function AdminAddProductForm({
           />
         </div>
         <div className="form-group">
-          <label className="form-label">Precio *</label>
-          <input type="number" className="form-input" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" />
+          <label className="form-label">Precio original (tachado)</label>
+          <input type="number" className="form-input" value={originalPrice} onChange={(e) => setOriginalPrice(e.target.value)} placeholder="Ej. 89000" />
         </div>
         <div className="form-group">
-          <label className="form-label">Precio original (tachado)</label>
-          <input type="number" className="form-input" value={originalPrice} onChange={(e) => setOriginalPrice(e.target.value)} placeholder="Opcional" />
+          <label className="form-label">Precio con descuento *</label>
+          <input type="number" className="form-input" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Precio de venta" />
         </div>
         <div className="form-group">
           <label className="form-label">Stock inicial *</label>
@@ -3266,7 +3295,135 @@ function AdminAddProductForm({
           </div>
         </div>
       </div>
-      <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+      <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
+        <button
+          type="button"
+          className="btn btn-outline"
+          disabled={saving}
+          onClick={() =>
+            setVariantDrafts((prev) => [
+              ...prev,
+              {
+                id: `v-${Date.now()}-${prev.length}`,
+                colorName: "",
+                colorHex: "#e8a0b4",
+                openMore: false,
+                name: "",
+                price: price,
+                stock: stock || "10",
+              },
+            ])
+          }
+        >
+          AGREGAR VARIANTES
+        </button>
+        <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--text-muted)" }}>
+          Heredan la info del producto principal. Destaca el color; el resto va en «Ver más».
+        </p>
+        {variantDrafts.map((v, idx) => (
+          <div
+            key={v.id}
+            style={{
+              marginTop: 12,
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid rgba(200,168,162,0.35)",
+              background: "rgba(255,252,250,0.9)",
+            }}
+          >
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <strong style={{ fontSize: 13 }}>Variante {idx + 1}</strong>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                Color
+                <input
+                  type="color"
+                  value={v.colorHex}
+                  onChange={(e) =>
+                    setVariantDrafts((list) =>
+                      list.map((x) => (x.id === v.id ? { ...x, colorHex: e.target.value } : x)),
+                    )
+                  }
+                />
+              </label>
+              <input
+                className="form-input"
+                style={{ flex: 1, minWidth: 140 }}
+                placeholder="Nombre del color"
+                value={v.colorName}
+                onChange={(e) =>
+                  setVariantDrafts((list) =>
+                    list.map((x) => (x.id === v.id ? { ...x, colorName: e.target.value } : x)),
+                  )
+                }
+              />
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                onClick={() =>
+                  setVariantDrafts((list) =>
+                    list.map((x) => (x.id === v.id ? { ...x, openMore: !x.openMore } : x)),
+                  )
+                }
+              >
+                {v.openMore ? "Ocultar" : "Ver más"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{ color: "var(--dusty-rose)" }}
+                onClick={() => setVariantDrafts((list) => list.filter((x) => x.id !== v.id))}
+              >
+                Quitar
+              </button>
+            </div>
+            {v.openMore ? (
+              <div className="form-grid" style={{ marginTop: 10 }}>
+                <div className="form-group">
+                  <label className="form-label">Nombre (opcional)</label>
+                  <input
+                    className="form-input"
+                    value={v.name}
+                    placeholder={`${name.trim() || "Producto"} — ${v.colorName || "color"}`}
+                    onChange={(e) =>
+                      setVariantDrafts((list) =>
+                        list.map((x) => (x.id === v.id ? { ...x, name: e.target.value } : x)),
+                      )
+                    }
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Precio con descuento</label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    value={v.price}
+                    onChange={(e) =>
+                      setVariantDrafts((list) =>
+                        list.map((x) => (x.id === v.id ? { ...x, price: e.target.value } : x)),
+                      )
+                    }
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Stock</label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    value={v.stock}
+                    onChange={(e) =>
+                      setVariantDrafts((list) =>
+                        list.map((x) => (x.id === v.id ? { ...x, stock: e.target.value } : x)),
+                      )
+                    }
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
         <button
           type="button"
           className="btn btn-primary"
@@ -3276,6 +3433,10 @@ function AdminAddProductForm({
               const pr = Number(price);
               if (!name.trim() || !pr || !category || !subcategory.trim()) return;
               if (!description.trim()) return;
+              const groupCode =
+                variantDrafts.length > 0
+                  ? `vg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+                  : undefined;
               await onSubmit({
                 name: name.trim(),
                 brand: brand || "Four Sensations",
@@ -3294,7 +3455,38 @@ function AdminAddProductForm({
                 extraImageUrls: galleryUrls.length ? galleryUrls : undefined,
                 active: true,
                 isNew: false,
+                ...(groupCode
+                  ? { variantGroupCode: groupCode, variantGroupOrder: 0 }
+                  : {}),
               });
+              for (let i = 0; i < variantDrafts.length; i++) {
+                const v = variantDrafts[i]!;
+                const colorLabel = v.colorName.trim() || `Color ${i + 1}`;
+                const vPrice = Number(v.price) || pr;
+                await onSubmit({
+                  name: (v.name.trim() || `${name.trim()} — ${colorLabel}`).slice(0, 160),
+                  brand: brand || "Four Sensations",
+                  category,
+                  subcategory: subcategory.trim(),
+                  tags: parseTagsInput(tagsText),
+                  price: vPrice,
+                  originalPrice: originalPrice ? Number(originalPrice) : null,
+                  stock: Number(v.stock) || 0,
+                  rating: 5,
+                  reviews: 0,
+                  badge: badge || null,
+                  description: description.trim(),
+                  emoji: emoji || "💜",
+                  imageUrl: mainImageUrl,
+                  extraImageUrls: galleryUrls.length ? galleryUrls : undefined,
+                  active: true,
+                  isNew: false,
+                  colorHex: v.colorHex,
+                  colorName: colorLabel,
+                  variantGroupCode: groupCode,
+                  variantGroupOrder: i + 1,
+                });
+              }
             })();
           }}
         >

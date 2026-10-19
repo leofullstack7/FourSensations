@@ -6,6 +6,7 @@ const map: Record<string, string> = {
   unas: "Uñas",
   hombres: "Hombres",
   accesorios: "Accesorios",
+  kits: "Kits",
   mayorista: "Mayorista",
   tintes: "Tintes",
 };

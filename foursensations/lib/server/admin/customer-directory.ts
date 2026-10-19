@@ -68,20 +68,36 @@ export async function listAdminCustomers(): Promise<AdminCustomersResponse> {
   }
 
   const emails = Array.from(byEmail.keys());
-  const users =
-    emails.length > 0
-      ? await prisma.user.findMany({
-          where: {
-            OR: emails.map((email) => ({ email: { equals: email, mode: "insensitive" as const } })),
-            role: "CUSTOMER",
-          },
-          select: { id: true, email: true, name: true, emailVerified: true },
-        })
-      : [];
+  const users = await prisma.user.findMany({
+    where: { role: "CUSTOMER", email: { not: null } },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      emailVerified: true,
+      phone: true,
+      city: true,
+      address: true,
+    },
+    take: 5000,
+  });
 
   const userByEmail = new Map<string, (typeof users)[number]>();
   for (const u of users) {
     if (u.email) userByEmail.set(normalizeCustomerEmail(u.email), u);
+  }
+
+  // Leads de cupón / CRM sin pedidos aún
+  for (const u of users) {
+    const email = u.email ? normalizeCustomerEmail(u.email) : "";
+    if (!email || byEmail.has(email)) continue;
+    byEmail.set(email, {
+      email,
+      names: u.name ? [u.name] : [],
+      phones: u.phone ? [u.phone] : [],
+      userIds: new Set([u.id]),
+      orders: [],
+    });
   }
 
   const customers: AdminCustomerRecord[] = [];
@@ -96,7 +112,7 @@ export async function listAdminCustomers(): Promise<AdminCustomersResponse> {
       bucket.names.find((n) => n.length > 0) ||
       "Cliente";
 
-    const phone = bucket.phones[0] ?? null;
+    const phone = bucket.phones[0] ?? linkedUser?.phone ?? null;
 
     const orders = bucket.orders
       .map((o) => {

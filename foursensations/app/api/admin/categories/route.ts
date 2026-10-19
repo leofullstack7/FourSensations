@@ -17,6 +17,7 @@ import {
   adminCategoryCreateSchema,
   formatZodError,
 } from "@/lib/validation/admin-category";
+import { ensureLaunchCategories } from "@/lib/server/ensure-launch-categories";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -55,6 +56,7 @@ function mapCategory(row: {
 
 export async function GET() {
   try {
+    await ensureLaunchCategories();
     const rows = await prisma.category.findMany({
       orderBy: { sortOrder: "asc" },
       include: {

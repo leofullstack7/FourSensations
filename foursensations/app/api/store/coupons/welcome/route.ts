@@ -8,13 +8,21 @@ export const revalidate = 0;
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json().catch(() => null)) as { email?: string } | null;
+    const body = (await req.json().catch(() => null)) as {
+      email?: string;
+      whatsapp?: string;
+      phone?: string;
+    } | null;
     const email = body?.email?.trim() || "";
+    const whatsapp = body?.whatsapp?.trim() || body?.phone?.trim() || "";
     if (!email) {
       return noStoreJson({ error: "Ingresa tu correo electrónico." }, { status: 400 });
     }
+    if (!whatsapp) {
+      return noStoreJson({ error: "Ingresa tu número de WhatsApp." }, { status: 400 });
+    }
 
-    const result = await claimWelcomeCoupon(email);
+    const result = await claimWelcomeCoupon(email, whatsapp);
     if (!result.ok) {
       return noStoreJson({ error: result.error }, { status: 400 });
     }

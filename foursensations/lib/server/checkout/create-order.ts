@@ -346,6 +346,20 @@ export async function createPendingOrderFromCheckout(
       };
     });
 
+    try {
+      const { enrichCustomerFromCheckout } = await import("@/lib/server/welcome-lead");
+      const addr = input.shippingAddress as { city?: string; line1?: string; address?: string };
+      await enrichCustomerFromCheckout({
+        email: input.customerEmail,
+        name: input.customerName,
+        phone: input.customerPhone,
+        city: addr?.city ?? null,
+        address: addr?.line1 || addr?.address || null,
+      });
+    } catch (e) {
+      console.error("[createCheckoutOrder] enrichCustomerFromCheckout", e);
+    }
+
     return { ok: true, ...data };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "No se pudo crear el pedido";

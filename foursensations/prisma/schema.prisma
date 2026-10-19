@@ -22,6 +22,8 @@ model User {
   passwordHash  String?
   role          UserRole  @default(CUSTOMER)
   isWholesale   Boolean   @default(false)
+  /// WhatsApp / teléfono (también leads de cupón de bienvenida).
+  phone         String?
   city          String?
   address       String?
   accounts      Account[]
@@ -149,13 +151,17 @@ model ProductFamily {
   updatedAt DateTime @updatedAt
 }
 
-/// Combo promocional creado en el panel (no altera el catálogo público hasta integración explícita).
+/// Kit promocional (antes “combo”) creado en el panel. También genera un Product categoría `kits`.
 model ProductCombo {
   id         String             @id @default(cuid())
   name       String
   slug       String             @unique
-  /// Precio de venta del combo (COP, misma unidad que `Product.price`).
+  /// Precio de venta del kit (COP, misma unidad que `Product.price`).
   comboPrice Int
+  /// Imagen principal del kit (vitrina / producto espejo).
+  imageUrl   String?
+  /// Producto de catálogo categoría `kits` vinculado a este kit.
+  storeProductId String?        @unique
   active     Boolean            @default(true)
   createdAt  DateTime           @default(now())
   updatedAt  DateTime           @updatedAt
@@ -172,6 +178,8 @@ model ProductComboItem {
   product   Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
   quantity  Int          @default(1)
   sortOrder Int          @default(0)
+  /// Precio con descuento de este ítem dentro del kit (COP). Null = precio de catálogo.
+  unitPrice Int?
 
   @@index([comboId])
   @@index([productId])

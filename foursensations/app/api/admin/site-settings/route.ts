@@ -19,6 +19,7 @@ function revalidatePublicContent() {
   revalidatePath("/categoria/cuidado-capilar");
   revalidatePath("/categoria/cuidado-corporal");
   revalidatePath("/categoria/accesorios");
+  revalidatePath("/categoria/kits");
 }
 
 export async function GET() {

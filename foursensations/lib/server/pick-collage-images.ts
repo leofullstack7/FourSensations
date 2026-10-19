@@ -6,6 +6,7 @@ import { isDisplayableImageUrl } from "@/lib/util/image-url";
 const CATEGORY_PHOTO_SKUS: Record<string, string[]> = {
   accesorios: ["FS027", "FS020"],
   "cuidado-corporal": ["FS029", "FS021"],
+  kits: ["FS029", "FS021", "FS001"],
 };
 
 function shuffle<T>(items: T[]): T[] {

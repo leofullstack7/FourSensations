@@ -70,6 +70,15 @@ const bySlug: Record<string, Partial<CategoryLandingCopy>> = {
     commercialLine: "",
     benefits: [],
   },
+  kits: {
+    eyebrow: "Kits · Four Sensations",
+    headline: "Kits pensados para elevar tu ritual completo 💗",
+    subtitle:
+      "Selecciones curadas con productos que se aman juntos: ahorro real, resultado visible y ese glow de Four Girl desde el primer uso.",
+    ctaExplore: "Ver todos los kits",
+    commercialLine: "Un solo kit. Todo lo que necesitas. Precio de enamorada.",
+    benefits: [],
+  },
   mayorista: {
     eyebrow: "Programa mayorista · FOUR SENSATIONS S.A.S.",
     headline: "TU VITRINA ESTÁ PIDIENDO FOUR SENSATIONS 👀💗",

@@ -17,6 +17,8 @@ type RailLine = {
   productId: string;
   name: string;
   price: number;
+  /** Precio con descuento dentro del kit */
+  kitPrice: number;
   imageUrl: string | null;
   emoji: string | null;
   quantity: number;
@@ -57,7 +59,7 @@ export function AdminCombosPanel({
   const [filterBrand, setFilterBrand] = useState("");
 
   const [comboName, setComboName] = useState("");
-  const [comboPriceInput, setComboPriceInput] = useState("");
+  const [kitCoverUrl, setKitCoverUrl] = useState<string | null>(null);
   const [railLines, setRailLines] = useState<RailLine[]>([]);
   const [preview, setPreview] = useState<AdminComboCatalogProduct | null>(null);
   const [saving, setSaving] = useState(false);
@@ -130,6 +132,10 @@ export function AdminCombosPanel({
     () => railLines.reduce((acc, l) => acc + l.price * l.quantity, 0),
     [railLines]
   );
+  const kitSum = useMemo(
+    () => railLines.reduce((acc, l) => acc + l.kitPrice * l.quantity, 0),
+    [railLines]
+  );
 
   const addProductToRail = useCallback((p: AdminComboCatalogProduct) => {
     setRailLines((prev) => {
@@ -146,6 +152,7 @@ export function AdminCombosPanel({
           productId: p.id,
           name: p.name,
           price: p.price,
+          kitPrice: p.price,
           imageUrl: p.imageUrl,
           emoji: p.emoji,
           quantity: 1,
@@ -172,7 +179,7 @@ export function AdminCombosPanel({
 
   const resetBuilder = useCallback(() => {
     setComboName("");
-    setComboPriceInput("");
+    setKitCoverUrl(null);
     setRailLines([]);
     setPreview(null);
     setSearchInput("");
@@ -185,26 +192,30 @@ export function AdminCombosPanel({
   const handleSaveCombo = useCallback(async () => {
     const name = comboName.trim();
     if (name.length < 2) {
-      showToast("Escribe un nombre para el combo", "danger", "⚠️");
+      showToast("Escribe un nombre para el kit", "danger", "⚠️");
       return;
     }
     if (railLines.length === 0) {
-      showToast("Añade al menos un producto al combo", "danger", "⚠️");
+      showToast("Añade al menos un producto al kit", "danger", "⚠️");
       return;
     }
-    const comboPrice = parseCopInput(comboPriceInput);
-    if (comboPrice == null) {
-      showToast("Indica un precio de venta válido para el combo", "danger", "⚠️");
+    if (kitSum <= 0) {
+      showToast("Indica precios con descuento válidos en los productos del kit", "danger", "⚠️");
       return;
     }
     setSaving(true);
     try {
       await postAdminCombo({
         name,
-        comboPrice,
-        items: railLines.map((l) => ({ productId: l.productId, quantity: l.quantity })),
+        comboPrice: kitSum,
+        imageUrl: kitCoverUrl,
+        items: railLines.map((l) => ({
+          productId: l.productId,
+          quantity: l.quantity,
+          unitPrice: l.kitPrice,
+        })),
       });
-      showToast("Combo guardado correctamente", "success", "✅");
+      showToast("Kit guardado y publicado en la categoría Kits", "success", "✅");
       resetBuilder();
       setView("list");
       await loadCombos();
@@ -213,7 +224,7 @@ export function AdminCombosPanel({
     } finally {
       setSaving(false);
     }
-  }, [comboName, comboPriceInput, railLines, loadCombos, resetBuilder, showToast]);
+  }, [comboName, kitCoverUrl, kitSum, railLines, loadCombos, resetBuilder, showToast]);
 
   const subcategoryOptions = useMemo(() => {
     if (!filterCategory) return filterOptions.subcategories;
@@ -232,15 +243,15 @@ export function AdminCombosPanel({
         <div className="admin-combos-list-view">
           <div className="admin-combos-hero-card">
             <div>
-              <div className="admin-combos-kicker">Combos promocionales</div>
-              <h2 className="admin-combos-list-title">Arma packs irresistibles</h2>
+              <div className="admin-combos-kicker">Kits Four Sensations</div>
+              <h2 className="admin-combos-list-title">Arma kits irresistibles</h2>
               <p className="admin-combos-list-sub">
-                Agrupa productos con poca rotación, define un precio especial y mantén el control desde un solo lugar.
+                Elige la imagen del kit, mete productos en la bolsa, define precio con descuento por ítem y publícalo en la categoría Kits.
               </p>
             </div>
             <button type="button" className="admin-combos-primary-cta" onClick={() => { setSelectedListComboId(null); setView("builder"); }}>
               <span className="admin-combos-primary-cta-icon">＋</span>
-              Añadir nuevo combo
+              Crear nuevo kit
             </button>
           </div>
 
@@ -366,7 +377,7 @@ export function AdminCombosPanel({
         <div className="admin-combos-builder">
           <div className="admin-combos-builder-toolbar">
             <button type="button" className="btn btn-outline btn-sm" onClick={() => { setView("list"); resetBuilder(); }}>
-              ← Volver a mis combos
+              ← Volver a mis kits
             </button>
           </div>
 
@@ -378,17 +389,33 @@ export function AdminCombosPanel({
                     <Image src={logoImage} alt="" width={72} height={72} className="admin-combos-logo-img" priority />
                   </div>
                   <div>
-                    <div className="admin-combos-brand-eyebrow">Crear combos</div>
+                    <div className="admin-combos-brand-eyebrow">Crear kit</div>
                     <h2 className="admin-combos-brand-title">
                       Four Sensations
                     </h2>
                   </div>
                 </div>
                 <p className="admin-combos-lead">
-                  Crea aquí combos con los productos que quieras y asígnales el precio que corresponda. Te sugerimos priorizar piezas con menor salida para darles
-                  visibilidad.
+                  Busca productos, mételos en la bolsa y define el precio con descuento de cada uno. A la derecha verás el acumulado del kit frente al valor real.
                 </p>
               </header>
+
+              <div className="admin-kit-cover-row">
+                <label className="admin-combos-field-label">Imagen principal del kit</label>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <input
+                    className="form-input"
+                    style={{ flex: 1, minWidth: 220 }}
+                    placeholder="URL de la imagen (Bunny CDN)"
+                    value={kitCoverUrl ?? ""}
+                    onChange={(e) => setKitCoverUrl(e.target.value.trim() || null)}
+                  />
+                  {kitCoverUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={kitCoverUrl} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 10 }} />
+                  ) : null}
+                </div>
+              </div>
 
               <div className="admin-combos-search admin-combos-search-bar">
                 <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden>
@@ -504,7 +531,7 @@ export function AdminCombosPanel({
                         </div>
                         <p className="admin-combos-detail-desc">{preview.description}</p>
                         <button type="button" className="btn btn-rose btn-lg admin-combos-add-btn" onClick={() => addProductToRail(preview)}>
-                          Poner en el combo
+                          Meter en la bolsa
                         </button>
                       </div>
                     </div>
@@ -513,10 +540,30 @@ export function AdminCombosPanel({
               )}
             </div>
 
-            <aside className="admin-combos-rail" aria-label="Resumen del combo">
+            <aside className="admin-combos-rail" aria-label="Bolsa del kit">
               <div className="admin-combos-rail-inner">
+                <div className="admin-kit-bag" aria-hidden>
+                  <div className="admin-kit-bag__shine" />
+                  <div className="admin-kit-bag__body">
+                    <Image src={logoImage} alt="" width={48} height={48} className="admin-kit-bag__logo" />
+                    <span className="admin-kit-bag__label">Bolsa FS</span>
+                    <div className="admin-kit-bag__floaters">
+                      {railLines.slice(0, 4).map((l) => (
+                        <span key={l.productId} className="admin-kit-bag__floater">
+                          {isHttpImageUrl(l.imageUrl) ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={l.imageUrl!} alt="" />
+                          ) : (
+                            l.emoji ?? "✨"
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 <label className="admin-combos-field-label" htmlFor="admin-combo-name">
-                  Nombre del combo
+                  Nombre del kit
                 </label>
                 <input
                   id="admin-combo-name"
@@ -526,30 +573,27 @@ export function AdminCombosPanel({
                   onChange={(e) => setComboName(e.target.value)}
                 />
 
-                <div className="admin-combos-rail-metrics">
+                <div className="admin-combos-rail-metrics admin-kit-metrics">
                   <div>
-                    <div className="admin-combos-metric-label">Suma catálogo</div>
-                    <div className="admin-combos-metric-value">{formatPrice(baseSum)}</div>
+                    <div className="admin-combos-metric-label">Valor real</div>
+                    <div className="admin-combos-metric-value admin-kit-metrics__retail">{formatPrice(baseSum)}</div>
                   </div>
                   <div>
-                    <div className="admin-combos-metric-label">Precio combo (venta)</div>
-                    <input
-                      className="form-input admin-combos-input admin-combos-input-compact"
-                      inputMode="numeric"
-                      placeholder="Ej. 129900"
-                      value={comboPriceInput}
-                      onChange={(e) => setComboPriceInput(e.target.value)}
-                    />
+                    <div className="admin-combos-metric-label">Precio del kit</div>
+                    <div className="admin-combos-metric-value admin-kit-metrics__kit">{formatPrice(kitSum)}</div>
                   </div>
                 </div>
+                {baseSum > kitSum ? (
+                  <p className="admin-kit-savings">Ahorro {formatPrice(baseSum - kitSum)}</p>
+                ) : null}
 
                 <button type="button" className="btn btn-primary admin-combos-save" disabled={saving} onClick={() => void handleSaveCombo()}>
-                  {saving ? "Guardando…" : "Guardar combo"}
+                  {saving ? "Guardando…" : "Guardar kit"}
                 </button>
 
-                <div className="admin-combos-rail-lines-head">Productos en el combo</div>
+                <div className="admin-combos-rail-lines-head">Productos en la bolsa</div>
                 {railLines.length === 0 ? (
-                  <p className="admin-combos-rail-empty">Toca un producto y úsalo en el combo desde la vista ampliada.</p>
+                  <p className="admin-combos-rail-empty">Toca un producto y mételo en la bolsa.</p>
                 ) : (
                   <ul className="admin-combos-rail-lines">
                     {railLines.map((l) => (
@@ -564,7 +608,27 @@ export function AdminCombosPanel({
                         </div>
                         <div className="admin-combos-rail-line-body">
                           <div className="admin-combos-rail-line-name">{l.name}</div>
-                          <div className="admin-combos-rail-line-price">{formatPrice(l.price)} × {l.quantity}</div>
+                          <div className="admin-combos-rail-line-price">
+                            <s>{formatPrice(l.price)}</s> × {l.quantity}
+                          </div>
+                          <label className="admin-kit-line-price">
+                            Precio con descuento
+                            <input
+                              className="form-input admin-combos-input-compact"
+                              inputMode="numeric"
+                              value={String(l.kitPrice)}
+                              onChange={(e) => {
+                                const n = parseCopInput(e.target.value);
+                                setRailLines((prev) =>
+                                  prev.map((x) =>
+                                    x.productId === l.productId
+                                      ? { ...x, kitPrice: n ?? 0 }
+                                      : x,
+                                  ),
+                                );
+                              }}
+                            />
+                          </label>
                           <div className="admin-combos-rail-line-actions">
                             <button type="button" className="admin-combos-mini" onClick={() => updateQty(l.productId, -1)} aria-label="Menos">
                               −

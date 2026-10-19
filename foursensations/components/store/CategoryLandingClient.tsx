@@ -122,12 +122,13 @@ export function CategoryLandingClient({
   collageUrls = [],
 }: CategoryLandingClientProps) {
   const { openProductModal, addToCart, toggleFavorite, favorites, mergeCatalogProducts } = useStorefrontUi();
-  const { categoryNavFilters } = useStoreNavigation();
+  useStoreNavigation();
   const router = useRouter();
   const pathname = usePathname();
 
   const hairMode = categorySlug === "cuidado-capilar";
   const accessoryMode = categorySlug === "accesorios";
+  const kitsMode = categorySlug === "kits";
 
   const [products, setProducts] = useState<StoreProduct[]>([]);
   const [totalProductCount, setTotalProductCount] = useState(0);
@@ -301,26 +302,15 @@ export function CategoryLandingClient({
     })();
   }, [hasMore, catalogLoading, products, filterOpts, restSkip, fillUntilDisplayCards]);
 
+  // Entrar a la categoría siempre muestra el catálogo completo (orden de vitrina).
+  // Los filtros del menú no reordenan ni crean un bloque "Selección" arriba.
   useEffect(() => {
-    setSelectedGrupo(defaultGrupo);
-    setSelectedLine(defaultLine || defaultProductTag);
+    setSelectedGrupo("");
+    setSelectedLine("");
     setVisibleLimit(INITIAL_VISIBLE);
-  }, [defaultGrupo, defaultProductTag, defaultLine, categorySlug]);
-
-  useEffect(() => {
-    if (!categoryNavFilters) return;
-    if (categoryNavFilters.grupo) {
-      setSelectedGrupo(categoryNavFilters.grupo);
-    } else if (categoryNavFilters.sub && grupoLabels.some((g) => fold(g) === fold(categoryNavFilters.sub))) {
-      setSelectedGrupo(categoryNavFilters.sub);
-    }
-    if (categoryNavFilters.linea) {
-      setSelectedLine(categoryNavFilters.linea);
-    } else if (categoryNavFilters.sub && hairMode) {
-      const asLine = subcategoriesFromDb.some((s) => fold(s.name) === fold(categoryNavFilters.sub));
-      if (asLine) setSelectedLine(categoryNavFilters.sub);
-    }
-  }, [categoryNavFilters, grupoLabels, hairMode, subcategoriesFromDb]);
+    syncUrl("", "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al cambiar de categoría
+  }, [categorySlug]);
 
   useEffect(() => {
     setVisibleLimit(INITIAL_VISIBLE);
@@ -329,43 +319,21 @@ export function CategoryLandingClient({
   const hasActiveFilters = Boolean(selectedGrupo || selectedLine);
 
   useEffect(() => {
-    if (!hasActiveFilters) {
-      setPulseActive(false);
-      return;
-    }
-    setPulseActive(true);
-    const t = window.setTimeout(() => setPulseActive(false), 5200);
-    return () => window.clearTimeout(t);
-  }, [hasActiveFilters, selectedGrupo, selectedLine, categorySlug]);
+    setPulseActive(false);
+  }, [categorySlug]);
 
-  const matchedProducts = useMemo(() => {
-    if (!hasActiveFilters) return [] as StoreProduct[];
-    const filtered = products.filter((p) => productMatchesCategoryFilters(p, filterOpts));
+  const displayProducts = useMemo(() => {
+    const base = hasActiveFilters
+      ? products.filter((p) => productMatchesCategoryFilters(p, filterOpts))
+      : products;
     return enrichStorefrontDisplayProducts(
-      resolveStorefrontDisplayAfterFilter(filtered, products),
+      resolveStorefrontDisplayAfterFilter(base, products),
       products,
     );
   }, [hasActiveFilters, products, filterOpts]);
 
-  const restProducts = useMemo(() => {
-    if (!hasActiveFilters) {
-      return enrichStorefrontDisplayProducts(
-        resolveStorefrontDisplayAfterFilter(products, products),
-        products,
-      );
-    }
-    const matchedIds = new Set(matchedProducts.map((p) => p.id));
-    const rest = products.filter((p) => !matchedIds.has(p.id));
-    return enrichStorefrontDisplayProducts(
-      resolveStorefrontDisplayAfterFilter(rest, products),
-      products,
-    );
-  }, [hasActiveFilters, products, matchedProducts]);
-
-  const displayProducts = useMemo(
-    () => (hasActiveFilters ? [...matchedProducts, ...restProducts] : restProducts),
-    [hasActiveFilters, matchedProducts, restProducts],
-  );
+  const matchedProducts = displayProducts;
+  const restProducts: StoreProduct[] = [];
 
   const shouldCapVisible = false;
   const shownProducts = shouldCapVisible ? displayProducts.slice(0, visibleLimit) : displayProducts;
@@ -426,38 +394,10 @@ export function CategoryLandingClient({
     syncUrl(selectedGrupo, line);
   };
 
-  const groupedShown = useMemo(() => {
-    if (!hasActiveFilters) {
-      return [{ title: null as string | null, items: shownProducts, pulse: false }];
-    }
-    const matchedIds = new Set(matchedProducts.map((p) => p.id));
-    const matchedShown = shownProducts.filter((p) => matchedIds.has(p.id));
-    const restShown = shownProducts.filter((p) => !matchedIds.has(p.id));
-    const groups: { title: string | null; items: StoreProduct[]; pulse: boolean }[] = [];
-    if (matchedShown.length > 0) {
-      groups.push({
-        title: selectedLine || selectedGrupo ? `Selección: ${selectedLine || selectedGrupo}` : "Selección del menú",
-        items: matchedShown,
-        pulse: pulseActive,
-      });
-    }
-    if (restShown.length > 0) {
-      groups.push({
-        title: matchedShown.length > 0 ? `Más de ${categoryLabel}` : null,
-        items: restShown,
-        pulse: false,
-      });
-    }
-    return groups.length > 0 ? groups : [{ title: null, items: shownProducts, pulse: false }];
-  }, [
-    hasActiveFilters,
-    shownProducts,
-    matchedProducts,
-    selectedLine,
-    selectedGrupo,
-    pulseActive,
-    categoryLabel,
-  ]);
+  const groupedShown = useMemo(
+    () => [{ title: null as string | null, items: shownProducts, pulse: pulseActive }],
+    [shownProducts, pulseActive],
+  );
 
   useReveal();
 
@@ -546,7 +486,7 @@ export function CategoryLandingClient({
             {showInitialSkeleton
               ? "Cargando productos…"
               : hasActiveFilters
-                ? `${matchedProducts.length} destacados · ${restProducts.length} más en ${categoryLabel}`
+                ? `${shownProducts.length} productos · filtro activo en ${categoryLabel}`
                 : `Mostrando ${shownProducts.length} de ${totalProductCount} en ${categoryLabel}`}
             {catalogLoading && products.length > 0 ? " · cargando más…" : ""}
           </p>
@@ -566,11 +506,18 @@ export function CategoryLandingClient({
               {groupedShown.map((group) => (
                 <div key={group.title ?? "all"} className="fs-cat-group">
                   {group.title ? <h2 className="fs-cat-group__title">{group.title}</h2> : null}
-                  <div className={`cat-mosaic${accessoryMode ? " cat-mosaic--accessories" : ""}`}>
+                  <div
+                    className={`cat-mosaic${accessoryMode ? " cat-mosaic--accessories" : ""}${
+                      kitsMode ? " cat-mosaic--kits" : ""
+                    }`}
+                  >
                     {group.items.map((p, i) => (
                       <div
                         key={`${categorySlug}-${p.id}`}
-                        className={`cat-mosaic__cell${group.pulse ? " cat-mosaic__cell--pulse" : ""}`}
+                        className={`cat-mosaic__cell${group.pulse ? " cat-mosaic__cell--pulse" : ""}${
+                          kitsMode ? " cat-mosaic__cell--kit" : ""
+                        }`}
+                        style={kitsMode ? { animationDelay: `${(i % 6) * 0.35}s` } : undefined}
                       >
                         <StoreProductCard
                           product={p}

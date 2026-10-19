@@ -53,6 +53,8 @@ export const adminProductCreateSchema = z.object({
     .optional()
     .refine((v) => v == null || v === "" || /^#[0-9A-Fa-f]{6}$/.test(v), "colorHex inválido"),
   colorName: z.string().trim().max(80).nullable().optional(),
+  variantGroupCode: z.string().trim().min(1).max(120).nullable().optional(),
+  variantGroupOrder: z.coerce.number().int().min(0).max(9999).nullable().optional(),
   /** URLs ya subidas a nuestro CDN (vía `/api/admin/upload`); se validan en el handler. */
   extraImageUrls: z.array(z.string().trim().max(500)).max(80).optional(),
 });

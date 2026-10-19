@@ -91,7 +91,8 @@ export async function fetchAdminCombos(): Promise<{ combos: AdminComboRow[] }> {
 export async function postAdminCombo(body: {
   name: string;
   comboPrice: number;
-  items: { productId: string; quantity?: number }[];
+  imageUrl?: string | null;
+  items: { productId: string; quantity?: number; unitPrice?: number | null }[];
 }): Promise<{ combo: AdminComboRow }> {
   const res = await adminFetch("/api/admin/combos", {
     method: "POST",
