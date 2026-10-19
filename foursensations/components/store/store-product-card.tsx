@@ -26,7 +26,13 @@ export function StoreProductCard({
 }) {
   const badgeMap = { new: "badge-new", sale: "badge-sale", hot: "badge-hot", best: "badge-best" } as const;
   const badgeLbl = { new: "Nuevo", sale: "Oferta", hot: "🔥 Hot", best: "⭐ Top" } as const;
-  const colorHex = normalizeColorHex(product.colorHex);
+  const variantColors =
+    product.variantColors && product.variantColors.length > 0
+      ? product.variantColors
+      : (() => {
+          const hex = normalizeColorHex(product.colorHex);
+          return hex ? [{ hex, name: product.colorName?.trim() || null }] : [];
+        })();
   const displayName = getProductDisplayName(product.name);
   const hasMain = isDisplayableImageUrl(product.img);
   const hoverSrc =
@@ -113,22 +119,34 @@ export function StoreProductCard({
         <div className="product-brand">{product.brand}</div>
         <div className="product-name">{displayName.title}</div>
         {displayName.subtitle ? <div className="product-subtitle">{displayName.subtitle}</div> : null}
-        {colorHex ? (
-          <div className="product-card-color" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 4 }}>
-            <span
-              style={{
-                width: 18,
-                height: 18,
-                borderRadius: "50%",
-                backgroundColor: colorHex,
-                border: "2px solid white",
-                boxShadow: "0 0 0 1px var(--line)",
-                flexShrink: 0,
-              }}
-              aria-hidden
-            />
-            {product.colorName?.trim() ? (
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{product.colorName.trim()}</span>
+        {variantColors.length > 0 ? (
+          <div
+            className="product-card-color"
+            style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, marginBottom: 4, flexWrap: "wrap" }}
+            aria-label={
+              variantColors.length > 1
+                ? `${variantColors.length} colores disponibles`
+                : variantColors[0]?.name || "Color"
+            }
+          >
+            {variantColors.map((c) => (
+              <span
+                key={c.hex}
+                title={c.name || undefined}
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: "50%",
+                  backgroundColor: c.hex,
+                  border: "2px solid white",
+                  boxShadow: "0 0 0 1px var(--line)",
+                  flexShrink: 0,
+                }}
+                aria-hidden
+              />
+            ))}
+            {variantColors.length === 1 && variantColors[0]?.name ? (
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{variantColors[0].name}</span>
             ) : null}
           </div>
         ) : null}

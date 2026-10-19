@@ -3,6 +3,7 @@ import {
   canonicalVariantGroupCode,
   variantGroupCodesMatch,
 } from "@/lib/bulk-import/variant-group-code";
+import { normalizeColorHex } from "@/lib/product-color";
 
 /** Cantidad de variantes activas por código de grupo. */
 export function buildVariantCountByGroup(products: StoreProduct[]): Map<string, number> {
@@ -111,7 +112,23 @@ export function resolveStorefrontDisplayAfterFilter(
   return out;
 }
 
-/** Añade `variantCount` a tarjetas representantes de un grupo (≥ 2 variantes). */
+/** Colores únicos del grupo, en orden de variante. */
+export function buildVariantColorsForGroup(
+  products: StoreProduct[],
+  variantGroupCode: string
+): { hex: string; name?: string | null }[] {
+  const seen = new Set<string>();
+  const colors: { hex: string; name?: string | null }[] = [];
+  for (const v of listStorefrontVariantsInGroup(products, variantGroupCode)) {
+    const hex = normalizeColorHex(v.colorHex);
+    if (!hex || seen.has(hex)) continue;
+    seen.add(hex);
+    colors.push({ hex, name: v.colorName?.trim() || null });
+  }
+  return colors;
+}
+
+/** Añade `variantCount` y `variantColors` a tarjetas representantes de un grupo. */
 export function enrichStorefrontDisplayProducts(
   displayRows: StoreProduct[],
   allProducts: StoreProduct[]
@@ -119,8 +136,18 @@ export function enrichStorefrontDisplayProducts(
   const counts = buildVariantCountByGroup(allProducts);
   return displayRows.map((p) => {
     const code = canonicalVariantGroupCode(p.variantGroupCode);
-    if (!code) return p;
+    if (!code) {
+      const hex = normalizeColorHex(p.colorHex);
+      return hex
+        ? { ...p, variantColors: [{ hex, name: p.colorName?.trim() || null }] }
+        : p;
+    }
     const count = counts.get(code) ?? 1;
-    return count >= 2 ? { ...p, variantCount: count } : p;
+    const variantColors = buildVariantColorsForGroup(allProducts, code);
+    return {
+      ...p,
+      ...(count >= 2 ? { variantCount: count } : {}),
+      ...(variantColors.length > 0 ? { variantColors } : {}),
+    };
   });
 }

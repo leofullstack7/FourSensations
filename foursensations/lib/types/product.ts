@@ -46,6 +46,8 @@ export type StoreProduct = {
   colorHex?: string | null;
   /** Nombre legible del color (opcional). */
   colorName?: string | null;
+  /** Colores de todas las variantes del grupo (para bolitas en la tarjeta). */
+  variantColors?: { hex: string; name?: string | null }[];
   /** Precio de vitrina mayorista (tachado = público). */
   isWholesalePrice?: boolean;
 };

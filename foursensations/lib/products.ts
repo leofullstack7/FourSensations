@@ -17,6 +17,7 @@ import { prisma } from "@/lib/prisma";
 import { mergeLocalProductPhotoUrls } from "@/lib/server/product-photo-files";
 import { slugify } from "@/lib/slugify";
 import { normalizeMenuLookup } from "@/lib/store/menu-item-href";
+import { enrichStorefrontDisplayProducts } from "@/lib/store/variant-groups";
 
 const productStoreInclude = {
   images: { orderBy: { sortOrder: "asc" as const } },
@@ -121,9 +122,10 @@ const getCachedStorefrontProducts = unstable_cache(
       include: productStoreInclude,
     });
     if (rows.length === 0) return mockProducts.map((p) => ({ ...p, slug: slugify(p.name) }));
-    return rows.map((r) => rowToStore(r, r.images));
+    const mapped = rows.map((r) => rowToStore(r, r.images));
+    return enrichStorefrontDisplayProducts(mapped, mapped);
   },
-  ["storefront-products-v7-catalog-prices"],
+  ["storefront-products-v8-variant-colors"],
   { revalidate: 300, tags: [STOREFRONT_PRODUCTS_CACHE_TAG] }
 );
 
@@ -207,7 +209,7 @@ export async function getStorefrontCategoryProductsPage(
     );
     const page = ordered.slice(skip, skip + take);
     return {
-      products: page,
+      products: enrichStorefrontDisplayProducts(page, products),
       totalCount: ordered.length,
       hasMore: skip + page.length < ordered.length,
     };
