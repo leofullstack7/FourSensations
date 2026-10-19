@@ -3565,14 +3565,14 @@ footer {
   z-index: 12000;
   display: grid;
   place-items: center;
-  padding: 16px;
+  padding: 12px;
 }
 .fs-welcome-coupon__veil {
   position: absolute;
   inset: 0;
-  background: rgba(28, 14, 22, 0.52);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(40, 18, 30, 0.42);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 .fs-welcome-coupon__orbs {
   position: absolute;
@@ -3630,127 +3630,199 @@ footer {
 .fs-welcome-coupon__panel {
   position: relative;
   z-index: 1;
-  width: min(520px, 94vw);
-  max-height: min(92vh, 820px);
-  overflow: auto;
-  border-radius: 22px;
-  box-shadow: 0 28px 80px rgba(20, 8, 16, 0.45);
+  width: min(820px, 97vw);
+  max-height: min(95vh, 920px);
+  background: transparent;
+  filter: drop-shadow(0 22px 48px rgba(28, 8, 20, 0.38));
 }
 .fs-welcome-coupon__close {
   position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 3;
-  width: 36px;
-  height: 36px;
+  top: 2.2%;
+  right: 3.2%;
+  z-index: 4;
+  width: 34px;
+  height: 34px;
   border: none;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--dark);
+  background: rgba(255, 255, 255, 0.94);
+  color: #5a2740;
   cursor: pointer;
-  font-size: 16px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  font-size: 15px;
+  line-height: 1;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
 }
 .fs-welcome-coupon__art {
   position: relative;
-  background: #1a0f14;
+  background: transparent;
+  line-height: 0;
 }
 .fs-welcome-coupon__img {
   width: 100%;
   height: auto;
   display: block;
-  border-radius: 22px;
+  background: transparent;
 }
-.fs-welcome-coupon__form-wrap {
+/* Hueco central entre productos, debajo de “EN TU PRIMERA COMPRA” */
+.fs-welcome-coupon__form-slot {
   position: absolute;
   left: 50%;
-  bottom: 7%;
+  top: 61.5%;
   transform: translateX(-50%);
-  width: min(86%, 360px);
-  padding: 12px 12px 14px;
-  border-radius: 16px;
-  background: rgba(255, 252, 250, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  box-shadow: 0 10px 28px rgba(40, 16, 28, 0.22);
-  backdrop-filter: blur(6px);
-}
-.fs-welcome-coupon__kicker {
-  margin: 0 0 8px;
-  text-align: center;
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  font-weight: 700;
+  width: 40%;
+  max-width: 260px;
+  z-index: 2;
 }
 .fs-welcome-coupon__form {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  align-items: stretch;
 }
-.fs-welcome-coupon__label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--dark);
+.fs-welcome-coupon__field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.fs-welcome-coupon__icon {
+  position: absolute;
+  left: 12px;
+  width: 16px;
+  height: 16px;
+  color: #e85a8c;
+  pointer-events: none;
+  z-index: 1;
 }
 .fs-welcome-coupon__input {
   width: 100%;
-  border: 1px solid rgba(200, 168, 162, 0.45);
-  border-radius: 12px;
-  padding: 12px 14px;
-  font-size: 15px;
+  height: 38px;
+  border: 1.5px solid #f28ab0;
+  border-radius: 999px;
+  padding: 0 14px 0 34px;
+  font-size: 12.5px;
+  font-weight: 500;
   background: #fff;
-  color: var(--dark);
+  color: #5a2740;
+  outline: none;
+  box-shadow: 0 3px 10px rgba(180, 60, 110, 0.12);
+}
+.fs-welcome-coupon__input::placeholder {
+  color: #e8a0b8;
+  font-weight: 500;
+}
+.fs-welcome-coupon__input:focus {
+  border-color: #e85a8c;
+  box-shadow: 0 0 0 3px rgba(232, 90, 140, 0.18);
 }
 .fs-welcome-coupon__submit {
   width: 100%;
+  height: 38px;
+  border: none;
+  border-radius: 999px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  margin-top: 2px;
+  gap: 6px;
+  background: #e83d7a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(200, 40, 100, 0.35);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.fs-welcome-coupon__submit:hover:not(:disabled) {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+.fs-welcome-coupon__submit:disabled {
+  opacity: 0.75;
+  cursor: wait;
 }
 .fs-welcome-coupon__error {
   margin: 0;
-  font-size: 12px;
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: center;
   color: #b00020;
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 999px;
+  padding: 3px 8px;
 }
 .fs-welcome-coupon__result {
   text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 6px 18px rgba(40, 16, 28, 0.16);
 }
 .fs-welcome-coupon__result p {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--dark);
+  font-size: 11px;
+  line-height: 1.4;
+  color: #5a2740;
 }
 .fs-welcome-coupon__code {
-  font-size: 22px;
+  font-size: 16px;
   letter-spacing: 0.12em;
-  color: var(--dusty-rose, #c9918b);
+  color: #e83d7a;
 }
-@media (max-width: 640px) {
+@media (max-width: 720px) {
   .fs-welcome-coupon {
-    padding: 10px;
-    align-items: flex-end;
+    padding: 8px;
   }
   .fs-welcome-coupon__panel {
-    width: 100%;
-    max-height: 90vh;
-    border-radius: 18px 18px 14px 14px;
+    width: min(100vw - 12px, 560px);
   }
-  .fs-welcome-coupon__img {
-    border-radius: 18px 18px 14px 14px;
+  .fs-welcome-coupon__form-slot {
+    top: 61%;
+    width: 44%;
+    max-width: 210px;
   }
-  .fs-welcome-coupon__form-wrap {
-    bottom: 5%;
-    width: min(92%, 360px);
-    padding: 11px 11px 12px;
+  .fs-welcome-coupon__input,
+  .fs-welcome-coupon__submit {
+    height: 34px;
   }
   .fs-welcome-coupon__input {
-    font-size: 16px;
-    padding: 13px 14px;
+    font-size: 12px;
+    padding-left: 32px;
+  }
+  .fs-welcome-coupon__icon {
+    left: 10px;
+    width: 14px;
+    height: 14px;
+  }
+  .fs-welcome-coupon__submit {
+    font-size: 9.5px;
+    letter-spacing: 0.02em;
+  }
+  .fs-welcome-coupon__close {
+    width: 30px;
+    height: 30px;
+    font-size: 13px;
+  }
+}
+@media (max-width: 420px) {
+  .fs-welcome-coupon__form-slot {
+    top: 60.5%;
+    width: 48%;
+    max-width: 180px;
+  }
+  .fs-welcome-coupon__form {
+    gap: 6px;
+  }
+  .fs-welcome-coupon__input,
+  .fs-welcome-coupon__submit {
+    height: 32px;
+  }
+  .fs-welcome-coupon__submit {
+    font-size: 8.5px;
   }
 }
 

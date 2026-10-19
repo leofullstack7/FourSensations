@@ -14,6 +14,28 @@ type ClaimOk = {
   message?: string;
 };
 
+function MailIcon() {
+  return (
+    <svg className="fs-welcome-coupon__icon" viewBox="0 0 24 24" aria-hidden focusable="false">
+      <path
+        d="M4.5 6.75h15a1.5 1.5 0 0 1 1.5 1.5v7.5a1.5 1.5 0 0 1-1.5 1.5h-15a1.5 1.5 0 0 1-1.5-1.5v-7.5a1.5 1.5 0 0 1 1.5-1.5Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path
+        d="m4 8.25 7.2 5.1a1.4 1.4 0 0 0 1.6 0L20 8.25"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function WelcomeCouponModal() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -73,7 +95,12 @@ export function WelcomeCouponModal() {
   if (!open) return null;
 
   return (
-    <div className="fs-welcome-coupon" role="dialog" aria-modal="true" aria-labelledby="fs-welcome-coupon-title">
+    <div
+      className="fs-welcome-coupon"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="fs-welcome-coupon-title"
+    >
       <div className="fs-welcome-coupon__veil" aria-hidden />
       <div className="fs-welcome-coupon__orbs" aria-hidden>
         <span />
@@ -95,14 +122,15 @@ export function WelcomeCouponModal() {
             src={couponArt}
             alt="Cupón de descuento Four Sensations"
             className="fs-welcome-coupon__img"
-            sizes="(max-width: 640px) 92vw, 520px"
+            sizes="(max-width: 640px) 97vw, (max-width: 1100px) 86vw, 820px"
             priority
             placeholder="blur"
+            style={{ width: "100%", height: "auto", background: "transparent" }}
           />
-          <div className="fs-welcome-coupon__form-wrap">
-            <p id="fs-welcome-coupon-title" className="fs-welcome-coupon__kicker">
-              Un detalle para ti
-            </p>
+          <div className="fs-welcome-coupon__form-slot">
+            <h2 id="fs-welcome-coupon-title" className="sr-only">
+              Cupón de bienvenida
+            </h2>
             {done ? (
               <div className="fs-welcome-coupon__result">
                 <p>{done.message}</p>
@@ -112,30 +140,43 @@ export function WelcomeCouponModal() {
                     <span>{done.valueLabel}</span>
                   </>
                 )}
-                <button type="button" className="btn btn-primary btn-sm" onClick={() => dismiss(true)}>
+                <button
+                  type="button"
+                  className="fs-welcome-coupon__submit"
+                  onClick={() => dismiss(true)}
+                >
                   Seguir explorando
                 </button>
               </div>
             ) : (
               <form className="fs-welcome-coupon__form" onSubmit={onSubmit}>
-                <label className="fs-welcome-coupon__label" htmlFor="fs-welcome-email">
+                <label className="sr-only" htmlFor="fs-welcome-email">
                   Tu correo electrónico
                 </label>
-                <input
-                  id="fs-welcome-email"
-                  type="email"
-                  inputMode="email"
-                  autoComplete="email"
-                  required
-                  placeholder="tu@correo.com"
-                  value={email}
-                  disabled={busy}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="fs-welcome-coupon__input"
-                />
+                <div className="fs-welcome-coupon__field">
+                  <MailIcon />
+                  <input
+                    id="fs-welcome-email"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    required
+                    placeholder="Tu correo electrónico"
+                    value={email}
+                    disabled={busy}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="fs-welcome-coupon__input"
+                  />
+                </div>
                 {error ? <p className="fs-welcome-coupon__error">{error}</p> : null}
-                <button type="submit" className="btn btn-primary fs-welcome-coupon__submit" disabled={busy}>
-                  {busy ? "Enviando…" : "Quiero mi cupón"}
+                <button type="submit" className="fs-welcome-coupon__submit" disabled={busy}>
+                  {busy ? (
+                    "Enviando…"
+                  ) : (
+                    <>
+                      Quiero mi descuento <span aria-hidden>♥</span>
+                    </>
+                  )}
                 </button>
               </form>
             )}
