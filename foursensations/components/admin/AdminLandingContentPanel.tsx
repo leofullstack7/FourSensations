@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { adminFetch } from "@/lib/api/admin-fetch";
-import { uploadAdminProductImage } from "@/lib/api/admin-upload";
+import { uploadAdminImage, type AdminUploadResult } from "@/lib/api/admin-upload";
 import { CATEGORY_SHOWCASE_ITEMS } from "@/lib/category-showcase";
 import {
   HOME_CONTENT_IMAGE_SPECS,
@@ -62,10 +62,25 @@ function SpecCard({
         <br />
         {hint}
         <br />
-        Formato: WebP o JPG, máx. ~2&nbsp;MB.
+        Formato: JPG/PNG/WebP (se convierte a WebP al subir).
       </div>
     </article>
   );
+}
+
+function formatKb(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function toastForUpload(result: AdminUploadResult): string {
+  if (!result.optimized || result.beforeBytes <= result.afterBytes) {
+    return "Imagen publicada (WebP)";
+  }
+  const saved = result.beforeBytes - result.afterBytes;
+  const pct = Math.round((saved / result.beforeBytes) * 100);
+  return `Publicada en WebP · ${formatKb(result.beforeBytes)} → ${formatKb(result.afterBytes)} (−${pct}%)`;
 }
 
 function ImageSlot({
@@ -103,10 +118,10 @@ function ImageSlot({
       <div style={{ padding: 10 }}>
         <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{label}</div>
         <label className="btn btn-outline btn-sm" style={{ width: "100%", cursor: busy ? "wait" : "pointer" }}>
-          {busy ? "Subiendo…" : url ? "Cambiar foto" : "Subir foto"}
+          {busy ? "Optimizando a WebP…" : url ? "Cambiar foto" : "Subir foto"}
           <input
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
+            accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp"
             disabled={busy}
             style={{ display: "none" }}
             onChange={(e) => {
@@ -145,7 +160,11 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
     void load().catch((e) => showToast(e instanceof Error ? e.message : "No se pudo cargar", "danger"));
   }, [active, load, showToast]);
 
-  const saveHomeContent = async (next: HomeContentSettings, key: string) => {
+  const saveHomeContent = async (
+    next: HomeContentSettings,
+    key: string,
+    uploadMeta?: AdminUploadResult,
+  ) => {
     setBusyKey(key);
     try {
       const res = await adminFetch("/api/admin/site-settings", {
@@ -157,7 +176,7 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
       const data = (await res.json()) as { homeContent?: unknown; error?: string };
       if (!res.ok) throw new Error(data.error || "No se pudo guardar");
       setHomeContent(normalizeHomeContent(data.homeContent));
-      showToast("Imagen publicada", "success");
+      showToast(uploadMeta ? toastForUpload(uploadMeta) : "Imagen publicada", "success");
     } catch (e) {
       showToast(e instanceof Error ? e.message : "No se pudo guardar", "danger");
     } finally {
@@ -167,36 +186,50 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
 
   const uploadShowcase = async (label: string, file: File) => {
     if (!homeContent) return;
-    const url = await uploadAdminProductImage(file);
-    await saveHomeContent(
-      {
-        ...homeContent,
-        showcaseImages: { ...homeContent.showcaseImages, [label]: url },
-      },
-      `showcase:${label}`,
-    );
+    setBusyKey(`showcase:${label}`);
+    try {
+      const uploaded = await uploadAdminImage(file);
+      await saveHomeContent(
+        {
+          ...homeContent,
+          showcaseImages: { ...homeContent.showcaseImages, [label]: uploaded.url },
+        },
+        `showcase:${label}`,
+        uploaded,
+      );
+    } catch (e) {
+      setBusyKey(null);
+      showToast(e instanceof Error ? e.message : "No se pudo subir", "danger");
+    }
   };
 
   const uploadPromo = async (key: HomePromoWidgetKey, file: File) => {
     if (!homeContent) return;
-    const url = await uploadAdminProductImage(file);
-    await saveHomeContent(
-      {
-        ...homeContent,
-        promoWidgets: { ...homeContent.promoWidgets, [key]: url },
-      },
-      `promo:${key}`,
-    );
+    setBusyKey(`promo:${key}`);
+    try {
+      const uploaded = await uploadAdminImage(file);
+      await saveHomeContent(
+        {
+          ...homeContent,
+          promoWidgets: { ...homeContent.promoWidgets, [key]: uploaded.url },
+        },
+        `promo:${key}`,
+        uploaded,
+      );
+    } catch (e) {
+      setBusyKey(null);
+      showToast(e instanceof Error ? e.message : "No se pudo subir", "danger");
+    }
   };
 
   const saveCollageSlot = async (index: number, file: File) => {
     if (!collages) return;
     setBusyKey(`collage:${section}:${index}`);
     try {
-      const url = await uploadAdminProductImage(file);
+      const uploaded = await uploadAdminImage(file);
       const next = normalizeLandingCollages({
         ...collages,
-        [section]: collages[section].map((current, i) => (i === index ? url : current)),
+        [section]: collages[section].map((current, i) => (i === index ? uploaded.url : current)),
       });
       const res = await adminFetch("/api/admin/site-settings", {
         method: "PUT",
@@ -207,7 +240,7 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
       const data = (await res.json()) as { landingCollages?: unknown; error?: string };
       if (!res.ok) throw new Error(data.error || "No se pudo guardar");
       setCollages(normalizeLandingCollages(data.landingCollages));
-      showToast("Foto actualizada", "success");
+      showToast(toastForUpload(uploaded), "success");
     } catch (e) {
       showToast(e instanceof Error ? e.message : "No se pudo subir la foto", "danger");
     } finally {
@@ -230,8 +263,9 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
         Contenido de la tienda
       </h2>
       <p style={{ marginTop: 0, color: "var(--text-muted)", fontSize: 13, lineHeight: 1.5 }}>
-        Cambia las imágenes del home y de las landings. Usa las medidas recomendadas para que se vean nítidas en
-        móvil y escritorio.
+        Cambia las imágenes del home y de las landings. Al subir, el sistema las{" "}
+        <strong>optimiza y convierte a WebP</strong> (máx. 1920&nbsp;px) para que la tienda cargue más rápido.
+        Usa las medidas recomendadas para que se vean nítidas en móvil y escritorio.
       </p>
 
       <div className="category-chip-row" style={{ marginBottom: 18 }}>
@@ -338,10 +372,10 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
                     <span className="admin-landing-collage__empty">Foto {index + 1}</span>
                   )}
                   <label className="admin-landing-collage__change">
-                    {busyKey === `collage:${section}:${index}` ? "Subiendo…" : "Cambiar"}
+                    {busyKey === `collage:${section}:${index}` ? "Optimizando…" : "Cambiar"}
                     <input
                       type="file"
-                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp"
                       disabled={busyKey != null}
                       onChange={(e) => {
                         const file = e.target.files?.[0];

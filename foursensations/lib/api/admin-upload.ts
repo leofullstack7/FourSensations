@@ -10,8 +10,18 @@ async function parseError(res: Response): Promise<string> {
   }
 }
 
-/** Sube un archivo a Bunny vía API admin (requiere sesión). */
-export async function uploadAdminProductImage(file: File): Promise<string> {
+export type AdminUploadResult = {
+  url: string;
+  optimized: boolean;
+  contentType: string;
+  beforeBytes: number;
+  afterBytes: number;
+  width?: number;
+  height?: number;
+};
+
+/** Sube un archivo a Bunny/storage vía API admin; el servidor lo optimiza a WebP. */
+export async function uploadAdminImage(file: File): Promise<AdminUploadResult> {
   const fd = new FormData();
   fd.append("file", file);
   const res = await adminFetch("/api/admin/upload", {
@@ -22,9 +32,23 @@ export async function uploadAdminProductImage(file: File): Promise<string> {
     timeoutMs: 120_000,
   });
   if (!res.ok) throw new Error(await parseError(res));
-  const data = (await res.json()) as { url?: string };
+  const data = (await res.json()) as Partial<AdminUploadResult> & { url?: string };
   if (!data.url) throw new Error("Respuesta sin URL");
-  return data.url;
+  return {
+    url: data.url,
+    optimized: Boolean(data.optimized),
+    contentType: data.contentType || "image/webp",
+    beforeBytes: typeof data.beforeBytes === "number" ? data.beforeBytes : 0,
+    afterBytes: typeof data.afterBytes === "number" ? data.afterBytes : 0,
+    width: data.width,
+    height: data.height,
+  };
+}
+
+/** Sube un archivo a Bunny vía API admin (requiere sesión). */
+export async function uploadAdminProductImage(file: File): Promise<string> {
+  const result = await uploadAdminImage(file);
+  return result.url;
 }
 
 export async function setProductCoverImages(

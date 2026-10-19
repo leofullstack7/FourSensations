@@ -22,10 +22,12 @@ function storagePutUrl(cfg: NonNullable<ReturnType<typeof getBunnyStorageConfig>
 
 /**
  * Sube bytes a Bunny Storage. Devuelve la URL pública del Pull Zone.
+ * @param folder Prefijo de carpeta en el Storage Zone (default `uploads`).
  */
 export async function uploadImageToBunny(
   buffer: Buffer,
-  contentType: string
+  contentType: string,
+  folder = "uploads",
 ): Promise<BunnyUploadResult> {
   const cfg = getBunnyStorageConfig();
   if (!cfg) {
@@ -40,7 +42,8 @@ export async function uploadImageToBunny(
     throw new Error(`Imagen demasiado grande (máx. ${MAX_BYTES / (1024 * 1024)} MB)`);
   }
 
-  const path = `products/${randomUUID()}.${ext}`;
+  const safeFolder = folder.replace(/[^a-zA-Z0-9/_-]/g, "").replace(/^\/+|\/+$/g, "") || "uploads";
+  const path = `${safeFolder}/${randomUUID()}.${ext}`;
   const res = await fetch(storagePutUrl(cfg, path), {
     method: "PUT",
     headers: {
