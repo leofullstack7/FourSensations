@@ -12,11 +12,6 @@ export function productPagePath(slug: string): string {
   return `/producto/${slug}`;
 }
 
-export function resolveStoreCategoryHref(categorySlug: string): string {
-  if (normalizeMenuLookup(categorySlug).includes("mayorista")) return "/mayorista";
-  return `/categoria/${categorySlug}`;
-}
-
 /** Enlaces del mega menú: el ítem es un producto cuando hay slug; si no, filtra la categoría por subcategoría (grupo). */
 export function resolveStoreMenuItemHref(opts: {
   categorySlug: string;
