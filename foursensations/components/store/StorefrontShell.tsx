@@ -44,10 +44,7 @@ import {
   listStorefrontVariantsInGroup,
   resolveStorefrontDisplayAfterFilter,
 } from "@/lib/store/variant-groups";
-import {
-  resolveStoreCategoryHref,
-  resolveStoreMenuGroupHref,
-} from "@/lib/store/menu-item-href";
+import { resolveStoreCategoryHref } from "@/lib/store/menu-item-href";
 import type { MegaPromoByCategory } from "@/lib/site-settings";
 
 type ToastItem = { id: number; msg: string; type: string; icon: string };
@@ -179,9 +176,6 @@ export function StorefrontShell({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [desktopMegaCat, setDesktopMegaCat] = useState<string | null>(null);
-  const [megaAlignLeft, setMegaAlignLeft] = useState<number | null>(null);
-  const megaCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const router = useRouter();
@@ -637,108 +631,6 @@ export function StorefrontShell({
     document.body.style.overflow = "hidden";
   }, []);
 
-  const alignCompactMega = useCallback((cat: string) => {
-    const el = document.querySelector<HTMLElement>(`[data-mega-cat="${CSS.escape(cat)}"]`);
-    if (!el) {
-      setMegaAlignLeft(null);
-      return;
-    }
-    const panelWidth = 340;
-    const left = Math.max(16, Math.round(el.getBoundingClientRect().left));
-    const maxLeft = Math.max(16, window.innerWidth - panelWidth - 16);
-    setMegaAlignLeft(Math.min(left, maxLeft));
-  }, []);
-
-  const closeDesktopMega = useCallback(() => {
-    if (megaCloseTimer.current) {
-      clearTimeout(megaCloseTimer.current);
-      megaCloseTimer.current = null;
-    }
-    setDesktopMegaCat(null);
-    setMegaAlignLeft(null);
-  }, []);
-
-  const openDesktopMega = useCallback(
-    (cat: string) => {
-      if (megaCloseTimer.current) {
-        clearTimeout(megaCloseTimer.current);
-        megaCloseTimer.current = null;
-      }
-      setDesktopMegaCat(cat);
-      requestAnimationFrame(() => alignCompactMega(cat));
-    },
-    [alignCompactMega],
-  );
-
-  const cancelCloseDesktopMega = useCallback(() => {
-    if (megaCloseTimer.current) {
-      clearTimeout(megaCloseTimer.current);
-      megaCloseTimer.current = null;
-    }
-  }, []);
-
-  const scheduleCloseDesktopMega = useCallback(() => {
-    if (megaCloseTimer.current) clearTimeout(megaCloseTimer.current);
-    megaCloseTimer.current = setTimeout(() => {
-      megaCloseTimer.current = null;
-      setDesktopMegaCat(null);
-      setMegaAlignLeft(null);
-    }, 70);
-  }, []);
-
-  useEffect(() => {
-    if (!desktopMegaCat) return;
-
-    const pointInRect = (x: number, y: number, rect: DOMRect, pad = 0) =>
-      x >= rect.left - pad && x <= rect.right + pad && y >= rect.top - pad && y <= rect.bottom + pad;
-
-    const isOverMegaZone = (x: number, y: number) => {
-      const item = document.querySelector<HTMLElement>(
-        `[data-mega-cat="${CSS.escape(desktopMegaCat)}"]`,
-      );
-      const panel = document.querySelector<HTMLElement>(".mega-dock__inner");
-      if (item && pointInRect(x, y, item.getBoundingClientRect(), 2)) return true;
-      if (panel && pointInRect(x, y, panel.getBoundingClientRect(), 2)) return true;
-      // Puente estrecho solo entre el ítem activo y el panel (no todo el header/nav).
-      if (item && panel) {
-        const ir = item.getBoundingClientRect();
-        const pr = panel.getBoundingClientRect();
-        const top = Math.min(ir.bottom, pr.top);
-        const bottom = Math.max(ir.bottom, pr.top);
-        const left = Math.min(ir.left, pr.left);
-        const right = Math.max(ir.right, pr.right);
-        if (y >= top - 1 && y <= bottom + 1 && x >= left && x <= right) return true;
-      }
-      return false;
-    };
-
-    const onMove = (event: MouseEvent) => {
-      if (isOverMegaZone(event.clientX, event.clientY)) {
-        cancelCloseDesktopMega();
-        return;
-      }
-      closeDesktopMega();
-    };
-
-    document.addEventListener("pointermove", onMove, { passive: true });
-    return () => document.removeEventListener("pointermove", onMove);
-  }, [desktopMegaCat, cancelCloseDesktopMega, closeDesktopMega]);
-
-  useEffect(() => {
-    return () => {
-      if (megaCloseTimer.current) clearTimeout(megaCloseTimer.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!desktopMegaCat) return;
-    const onResize = () => alignCompactMega(desktopMegaCat);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [alignCompactMega, desktopMegaCat]);
-
-  const desktopMega = desktopMegaCat ? menuConfig[desktopMegaCat] : null;
-
   const subtotal = getCartTotal();
   const shipping = buyingAsWholesale ? 0 : computeShippingCop(subtotal);
   const cartTotal = buyingAsWholesale ? subtotal : subtotal + shipping;
@@ -796,20 +688,7 @@ export function StorefrontShell({
         </div>
       </div>
 
-      <header
-        className="header"
-        id="main-header"
-        onMouseLeave={(event) => {
-          const related = event.relatedTarget as Node | null;
-          if (related && event.currentTarget.contains(related)) return;
-          closeDesktopMega();
-        }}
-        onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-            closeDesktopMega();
-          }
-        }}
-      >
+      <header className="header" id="main-header">
         <div className="header-inner">
           <BrandLogo variant="store" priority />
 
@@ -830,39 +709,21 @@ export function StorefrontShell({
               {Object.entries(menuConfig).map(([cat, data]) => {
                 const isMayorista = /mayorista/i.test(cat);
                 return (
-                <li
-                  key={cat}
-                  data-mega-cat={cat}
-                  className={`nav-item${desktopMegaCat === cat ? " is-mega-open" : ""}${isMayorista ? " nav-item--mayorista" : ""}`}
-                  onMouseEnter={() => {
-                    cancelCloseDesktopMega();
-                    openDesktopMega(cat);
-                  }}
-                  onMouseLeave={(event) => {
-                    const related = event.relatedTarget as Node | null;
-                    const panel = document.querySelector(".mega-dock__inner");
-                    if (related && panel?.contains(related)) return;
-                    scheduleCloseDesktopMega();
-                  }}
-                >
-                  <StoreNavLink
-                    href={resolveStoreCategoryHref(categoryPath(cat))}
-                    className="nav-link"
-                    prefetch
-                    onFocus={() => {
-                      cancelCloseDesktopMega();
-                      openDesktopMega(cat);
-                    }}
+                  <li
+                    key={cat}
+                    className={`nav-item${isMayorista ? " nav-item--mayorista" : ""}`}
                   >
-                    <span className="nav-link-icon" aria-hidden>
-                      {data.icon}
-                    </span>
-                    <span className="nav-link-label">{cat}</span>
-                    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
-                      <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-                    </svg>
-                  </StoreNavLink>
-                </li>
+                    <StoreNavLink
+                      href={resolveStoreCategoryHref(categoryPath(cat))}
+                      className="nav-link"
+                      prefetch
+                    >
+                      <span className="nav-link-icon" aria-hidden>
+                        {data.icon}
+                      </span>
+                      <span className="nav-link-label">{cat}</span>
+                    </StoreNavLink>
+                  </li>
                 );
               })}
             </ul>
@@ -1044,100 +905,36 @@ export function StorefrontShell({
             </div>
           </div>
 
-          <div className={`mobile-mega-menu${mobileMenuOpen ? " open" : ""}`}>
-            <div className="mobile-mega-menu-inner">
-              {Object.entries(menuConfig).map(([cat, data]) => (
-                <div key={cat} className="mobile-mega-group mobile-mega-group--flat">
-                  <button
-                    type="button"
-                    className="mobile-mega-cat mobile-mega-cat--nav"
-                    onClick={() => {
-                      navigateTo(resolveStoreCategoryHref(cat));
-                      closeMobileMenu();
-                    }}
-                  >
-                    <span>
-                      {data.icon} {cat}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="mobile-mega-ver-todo"
-                    onClick={() => {
-                      navigateTo(resolveStoreCategoryHref(cat));
-                      closeMobileMenu();
-                    }}
-                  >
-                    Ver todo
-                  </button>
-                  <div className="mobile-mega-sublinks">
-                    {Object.keys(data.subs).map((group) => (
-                      <button
-                        key={`${cat}-${group}`}
-                        type="button"
-                        className="mobile-mega-sublink"
-                        onClick={() => {
-                          navigateTo(resolveStoreMenuGroupHref(categoryPath(cat), group));
-                          closeMobileMenu();
-                        }}
-                      >
-                        {group}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        {desktopMegaCat && desktopMega ? (
-          <div className="mega-dock" aria-hidden={false}>
-            <div
-              className="mega-dock__inner mega-dock__inner--vertical"
-              style={
-                megaAlignLeft != null
-                  ? ({ marginLeft: megaAlignLeft, marginRight: "auto" } as CSSProperties)
-                  : undefined
-              }
-              onMouseEnter={() => {
-                cancelCloseDesktopMega();
-                openDesktopMega(desktopMegaCat);
-              }}
-              onMouseLeave={(event) => {
-                const related = event.relatedTarget as Node | null;
-                const item = document.querySelector(
-                  `[data-mega-cat="${CSS.escape(desktopMegaCat)}"]`,
-                );
-                if (related && item?.contains(related)) return;
-                closeDesktopMega();
-              }}
-            >
-              <div className="mega-dock__head">
-                <div>
-                  <p className="mega-kicker">Colección</p>
-                  <h3 className="mega-header">{desktopMegaCat}</h3>
-                </div>
-                <StoreNavLink href={resolveStoreCategoryHref(categoryPath(desktopMegaCat))} className="mega-promo-btn">
-                  Ver todo
-                </StoreNavLink>
-              </div>
-              <nav className="mega-dock__columns" aria-label={`Subcategorías de ${desktopMegaCat}`}>
-                {Object.keys(desktopMega.subs).map((group) => (
-                  <StoreNavLink
-                    key={group}
-                    href={resolveStoreMenuGroupHref(categoryPath(desktopMegaCat), group)}
-                    className="mega-dock__column-link"
-                  >
-                    <span className="mega-dock__column-label">{group}</span>
-                    <span className="mega-dock__column-arrow" aria-hidden>
-                      →
-                    </span>
-                  </StoreNavLink>
-                ))}
+          <div className={`mobile-mega-menu${mobileMenuOpen ? " open" : ""}`} id="mobile-categories-menu">
+            <div className="mobile-mega-menu-inner mobile-cat-panel">
+              <p className="mobile-cat-panel__title">Categorías</p>
+              <nav className="mobile-cat-panel__list" aria-label="Categorías">
+                {Object.entries(menuConfig).map(([cat, data]) => {
+                  const isMayorista = /mayorista/i.test(cat);
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      className={`mobile-cat-panel__item${isMayorista ? " mobile-cat-panel__item--mayorista" : ""}`}
+                      onClick={() => {
+                        navigateTo(resolveStoreCategoryHref(categoryPath(cat)));
+                        closeMobileMenu();
+                      }}
+                    >
+                      <span className="mobile-cat-panel__icon" aria-hidden>
+                        {data.icon}
+                      </span>
+                      <span className="mobile-cat-panel__label">{cat}</span>
+                      <span className="mobile-cat-panel__arrow" aria-hidden>
+                        →
+                      </span>
+                    </button>
+                  );
+                })}
               </nav>
             </div>
           </div>
-        ) : null}
+        </div>
       </header>
       </div>
       <div className="store-nav-offset" aria-hidden />
