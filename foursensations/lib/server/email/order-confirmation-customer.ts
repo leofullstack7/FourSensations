@@ -167,7 +167,7 @@ export async function sendOrderConfirmationToCustomer(order: CustomerOrderConfir
   });
   if (!result.ok) {
     console.error("[email] confirmación cliente falló:", result.error);
-    return;
+    throw new Error(`Email cliente falló: ${result.error}`);
   }
   console.log("[email] confirmación enviada al cliente vía", result.provider, to, order.reference);
 }

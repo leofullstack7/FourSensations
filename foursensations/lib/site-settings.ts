@@ -30,6 +30,18 @@ export type SiteSettingsData = {
   homeShowcaseImages?: HomeShowcaseImageMap;
   homePromoWidgets?: HomePromoWidgets;
   productFichas?: Record<string, ProductFichaCopy>;
+  /** Credenciales de correo (Brevo) si no están en env de Render. */
+  emailConfig?: {
+    brevoApiKey?: string;
+    smtpUser?: string;
+    smtpPass?: string;
+    smtpHost?: string;
+    smtpPort?: string;
+    smtpSecure?: string;
+    emailFrom?: string;
+    emailFromName?: string;
+    notifyEmail?: string;
+  };
   [key: string]: unknown;
 };
 

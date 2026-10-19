@@ -47,19 +47,20 @@ export async function GET() {
     bunnyResolvedStorageHost: getBunnyStorageConfig()?.storageApiHostname ?? null,
     hasGmailUser: Boolean(process.env.GMAIL_USER?.trim()),
     hasGmailAppPassword: Boolean(process.env.GMAIL_APP_PASSWORD?.trim()),
+    hasBrevoApiKey: Boolean(process.env.BREVO_API_KEY?.trim()),
     hasSmtpUser: Boolean(process.env.SMTP_USER?.trim()),
     hasSmtpPass: Boolean(process.env.SMTP_PASS?.trim()),
     smtpHost: process.env.SMTP_HOST?.trim() || null,
+    emailFrom: process.env.EMAIL_FROM?.trim() || null,
     hasResendApiKey: Boolean(process.env.RESEND_API_KEY?.trim()),
     hasResendNotifyEmail: Boolean(process.env.RESEND_NOTIFY_EMAIL?.trim()),
     resendFromEmail: process.env.RESEND_FROM_EMAIL?.trim() || null,
     resendNotifyEmail: process.env.RESEND_NOTIFY_EMAIL?.trim() || null,
-    emailProviderHint:
-      process.env.SMTP_USER?.trim() && process.env.SMTP_PASS?.trim()
-        ? "SMTP (Brevo) → puede enviar a cualquier clienta"
-        : process.env.GMAIL_USER?.trim() && process.env.GMAIL_APP_PASSWORD?.trim()
-          ? "Gmail SMTP → puede enviar a cualquier clienta"
-          : "Configura Brevo: SMTP_USER + SMTP_PASS. Gmail App Password no está disponible sin 2FA.",
+    emailProviderHint: process.env.BREVO_API_KEY?.trim()
+      ? "Brevo API → puede enviar a cualquier clienta + aviso a tienda"
+      : process.env.SMTP_USER?.trim() && process.env.SMTP_PASS?.trim()
+        ? "SMTP → puede enviar a cualquier clienta"
+        : "FALTA BREVO_API_KEY (o SMTP_USER+SMTP_PASS) en este entorno. Sin eso no llegan correos.",
     note:
       "Login admin: usuario ADMIN en la base (seed con SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD). Ya no se usa ADMIN_BOOTSTRAP_*.",
     hint:

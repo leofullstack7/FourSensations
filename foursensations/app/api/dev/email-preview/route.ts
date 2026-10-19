@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
 import { sendOrderConfirmationToCustomer } from "@/lib/server/email/order-confirmation-customer";
 import { sendOrderNotification } from "@/lib/server/email/order-notification";
-import { describeEmailProvider } from "@/lib/server/email/send";
+import { describeEmailProvider, resolveStoreNotifyEmail } from "@/lib/server/email/send";
+import { requireAdminApi } from "@/lib/server/require-admin-api";
 
 /**
- * Solo desarrollo: envía un correo de prueba (cliente + tienda) con datos ficticios.
- * POST /api/dev/email-preview  body opcional: { "to": "cualquier@correo.com" }
+ * Envía un correo de prueba (cliente + tienda).
+ * - Dev: libre
+ * - Prod: solo admin autenticado (para validar Brevo en Render)
+ * POST body opcional: { "to": "cualquier@correo.com" }
  */
 export async function POST(req: Request) {
   if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "No disponible" }, { status: 404 });
+    const denied = await requireAdminApi();
+    if (denied) return denied;
   }
 
   let toOverride: string | undefined;
@@ -20,25 +24,22 @@ export async function POST(req: Request) {
     /* body vacío OK */
   }
 
-  const provider = describeEmailProvider();
+  const provider = await describeEmailProvider();
   if (provider.active === "none") {
     return NextResponse.json(
       {
-        error: "Sin proveedor. Configura GMAIL_USER + GMAIL_APP_PASSWORD en .env.local",
+        error: "Sin proveedor. En Render agrega BREVO_API_KEY + EMAIL_FROM + RESEND_NOTIFY_EMAIL.",
         provider,
       },
       { status: 503 },
     );
   }
 
+  const notify = await resolveStoreNotifyEmail();
   const sample = {
     reference: `FS-PREVIEW-${Date.now().toString(36).toUpperCase()}`,
     customerName: "Juliana Prueba",
-    customerEmail:
-      toOverride ||
-      process.env.GMAIL_USER?.trim() ||
-      process.env.RESEND_NOTIFY_EMAIL?.trim() ||
-      "pedidosfoursensations@gmail.com",
+    customerEmail: toOverride || notify || "pedidosfoursensations@gmail.com",
     customerPhone: "+57 304 363 2492",
     total: 73_900,
     subtotal: 58_000,
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
       ok: true,
       reference: sample.reference,
       customerTo: sample.customerEmail,
-      storeTo: process.env.RESEND_NOTIFY_EMAIL?.trim() || process.env.GMAIL_USER?.trim() || null,
+      storeTo: notify,
       provider,
     });
   } catch (e) {

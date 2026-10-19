@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { sendTransactionalEmail } from "@/lib/server/email/send";
+import { resolveStoreNotifyEmail, sendTransactionalEmail } from "@/lib/server/email/send";
 import {
   emailShell,
   escapeHtml,
@@ -74,9 +74,9 @@ export async function sendOrderNotification(order: {
   }>;
   shippingAddress: string;
 }): Promise<void> {
-  const to = process.env.RESEND_NOTIFY_EMAIL?.trim() || process.env.GMAIL_USER?.trim();
+  const to = await resolveStoreNotifyEmail();
   if (!to) {
-    console.warn("[email] RESEND_NOTIFY_EMAIL / GMAIL_USER no configurados, omitiendo aviso a tienda");
+    console.warn("[email] sin destinatario de tienda, omitiendo aviso interno");
     return;
   }
 
@@ -139,7 +139,7 @@ export async function sendOrderNotification(order: {
   });
   if (!result.ok) {
     console.error("[email] notificación tienda falló:", result.error);
-    return;
+    throw new Error(`Email tienda falló: ${result.error}`);
   }
   console.log("[email] notificación enviada a tienda vía", result.provider, to, order.reference);
 }
