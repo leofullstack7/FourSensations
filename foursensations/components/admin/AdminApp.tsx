@@ -2986,6 +2986,20 @@ function AdminProductListTab({
             setVariantSavingId(null);
           }
         }}
+        onVariantProductUpdated={async (updated) => {
+          await onProductsRefresh();
+          if (
+            variantsModalProduct &&
+            (variantsModalProduct.id === updated.id ||
+              (variantsModalProduct.variantGroupCode &&
+                variantsModalProduct.variantGroupCode === updated.variantGroupCode))
+          ) {
+            setVariantsModalProduct(
+              variantsModalProduct.id === updated.id ? updated : variantsModalProduct
+            );
+          }
+          showToast("Fotos de la variante actualizadas (WebP)", "success", "🖼️");
+        }}
         onMergeVariants={async ({ survivorId, absorbedIds, name }) => {
           try {
             const res = await postAdminProductsMerge({ survivorId, absorbedIds, name });

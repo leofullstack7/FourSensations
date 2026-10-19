@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import heroPc1 from "@/assets/foursensations/banners/pc1.jpeg";
-import heroPc2 from "@/assets/foursensations/banners/pc2.jpeg";
-import heroPc3 from "@/assets/foursensations/banners/3.jpeg";
-import heroPc4 from "@/assets/foursensations/banners/pc4.jpeg";
-import heroMobile1 from "@/assets/foursensations/banners/movil1.jpeg";
-import heroMobile2 from "@/assets/foursensations/banners/movil2.jpeg";
-import heroMobile3 from "@/assets/foursensations/banners/movil3.jpeg";
-import heroMobile4 from "@/assets/foursensations/banners/movil4.jpeg";
+import heroPc1 from "@/assets/foursensations/banners/pc1.webp";
+import heroPc2 from "@/assets/foursensations/banners/pc2.webp";
+import heroPc3 from "@/assets/foursensations/banners/3.webp";
+import heroPc4 from "@/assets/foursensations/banners/pc4.webp";
+import heroMobile1 from "@/assets/foursensations/banners/movil1.webp";
+import heroMobile2 from "@/assets/foursensations/banners/movil2.webp";
+import heroMobile3 from "@/assets/foursensations/banners/movil3.webp";
+import heroMobile4 from "@/assets/foursensations/banners/movil4.webp";
 import { useReveal } from "@/hooks/useReveal";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreFooter } from "@/components/store/StoreFooter";
@@ -111,10 +111,19 @@ export function StoreHomeClient({
   const [sortValue, setSortValue] = useState<string>("default");
   const [manualSub, setManualSub] = useState<string | null>(null);
   const [heroBannerIndex, setHeroBannerIndex] = useState(0);
+  const [heroIsMobile, setHeroIsMobile] = useState(false);
   const [visibleCount, setVisibleCount] = useState(DESKTOP_INITIAL_VISIBLE_PRODUCTS);
   const [loadMoreStep, setLoadMoreStep] = useState(DESKTOP_LOAD_MORE_PRODUCTS);
 
   useReveal();
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const sync = () => setHeroIsMobile(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -122,6 +131,11 @@ export function StoreHomeClient({
     }, 7000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const heroMountIndexes = useMemo(() => {
+    const next = (heroBannerIndex + 1) % HERO_SLIDES.length;
+    return next === heroBannerIndex ? [heroBannerIndex] : [heroBannerIndex, next];
+  }, [heroBannerIndex]);
 
   const filteredProducts = useMemo(() => {
     let list: StoreProduct[];
@@ -179,30 +193,31 @@ export function StoreHomeClient({
     <>
       <section className="hero-section" aria-label="Destacados Four Sensations">
         <div className="banner-placeholder-wrapper" id="hero-banner">
-          {HERO_SLIDES.map((slide, index) => (
-            <div
-              key={slide.desktop.src}
-              className={`hero-banner-layer${heroBannerIndex === index ? " active" : ""}`}
-            >
-              <Image
-                src={slide.desktop}
-                alt=""
-                className="hero-banner-kenburns hero-banner-kenburns--desktop"
-                sizes="100vw"
-                fill
-                priority={index === 0}
-              />
-              <Image
-                src={slide.mobile}
-                alt=""
-                className="hero-banner-kenburns hero-banner-kenburns--mobile"
-                sizes="100vw"
-                fill
-                priority={index === 0}
-              />
-              <Link href={slide.href} className="hero-banner-hit" prefetch aria-label={slide.alt} />
-            </div>
-          ))}
+          {heroMountIndexes.map((index) => {
+            const slide = HERO_SLIDES[index]!;
+            const isActive = heroBannerIndex === index;
+            const src = heroIsMobile ? slide.mobile : slide.desktop;
+            return (
+              <div
+                key={`${slide.desktop.src}-${heroIsMobile ? "m" : "d"}`}
+                className={`hero-banner-layer${isActive ? " active" : ""}`}
+              >
+                <Image
+                  src={src}
+                  alt=""
+                  className={`hero-banner-kenburns${heroIsMobile ? " hero-banner-kenburns--mobile" : " hero-banner-kenburns--desktop"}`}
+                  sizes="100vw"
+                  fill
+                  priority={index === 0}
+                  quality={78}
+                  placeholder="blur"
+                />
+                {isActive ? (
+                  <Link href={slide.href} className="hero-banner-hit" prefetch aria-label={slide.alt} />
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </section>
 

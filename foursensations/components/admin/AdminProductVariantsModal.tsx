@@ -5,6 +5,12 @@ import { createPortal } from "react-dom";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import { listVariantsInGroup } from "@/lib/admin/variant-groups";
 import type { AdminProduct } from "@/lib/types/admin";
+import {
+  addProductGalleryImage,
+  removeProductGalleryImage,
+  uploadAdminProductImage,
+} from "@/lib/api/admin-upload";
+import { updateAdminProduct } from "@/lib/api/admin-products";
 import { isHttpImageUrl } from "@/lib/util/image-url";
 import { isValidColorHex, normalizeColorHex } from "@/lib/product-color";
 
@@ -152,6 +158,8 @@ type Props = {
   onClose: () => void;
   onDeleteVariant: (id: string) => void | Promise<void>;
   onSaveVariant?: (id: string, payload: VariantSavePayload) => void | Promise<void>;
+  /** Tras subir/quitar fotos de una variante (WebP vía /api/admin/upload). */
+  onVariantProductUpdated?: (product: AdminProduct) => void | Promise<void>;
   categoryDisplayName: (slug: string, tree: AdminCategoryTree[]) => string;
   onMergeVariants?: (payload: {
     survivorId: string;
@@ -170,6 +178,7 @@ export function AdminProductVariantsModal({
   onClose,
   onDeleteVariant,
   onSaveVariant,
+  onVariantProductUpdated,
   categoryDisplayName,
   onMergeVariants,
 }: Props) {
@@ -183,6 +192,7 @@ export function AdminProductVariantsModal({
   const [mergeCustomName, setMergeCustomName] = useState("");
   const [drafts, setDrafts] = useState<Record<string, VariantEditDraft>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
+  const [imageBusyId, setImageBusyId] = useState<string | null>(null);
 
   useEffect(() => setMounted(true), []);
 
@@ -194,6 +204,7 @@ export function AdminProductVariantsModal({
       setMergeCustomName("");
       setDrafts({});
       setFieldErrors({});
+      setImageBusyId(null);
     }
   }, [open]);
 
@@ -336,6 +347,92 @@ export function AdminProductVariantsModal({
       colorName: draft.colorName.trim() || null,
       externalRef: draft.externalRef.trim() || null,
     });
+  };
+
+  const notifyProductUpdated = async (updated: AdminProduct) => {
+    if (onVariantProductUpdated) await onVariantProductUpdated(updated);
+  };
+
+  const uploadVariantMainImage = async (v: AdminProduct, file: File) => {
+    setImageBusyId(v.id);
+    setFieldErrors((prev) => ({ ...prev, [v.id]: null }));
+    try {
+      const previousMain = v.imageUrl?.trim() || null;
+      const url = await uploadAdminProductImage(file);
+      let updated = await updateAdminProduct(v.id, { imageUrl: url });
+      const galleryHasPrevious = (updated.images ?? []).some((im) => im.url === previousMain);
+      if (
+        previousMain &&
+        isHttpImageUrl(previousMain) &&
+        previousMain !== url &&
+        !galleryHasPrevious
+      ) {
+        updated = await addProductGalleryImage(v.id, previousMain);
+      }
+      await notifyProductUpdated(updated);
+    } catch (e) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        [v.id]: e instanceof Error ? e.message : "No se pudo subir la imagen principal",
+      }));
+    } finally {
+      setImageBusyId(null);
+    }
+  };
+
+  const uploadVariantGalleryImage = async (v: AdminProduct, file: File) => {
+    if ((v.images?.length ?? 0) >= 24) {
+      setFieldErrors((prev) => ({ ...prev, [v.id]: "Máximo 24 imágenes adicionales" }));
+      return;
+    }
+    setImageBusyId(v.id);
+    setFieldErrors((prev) => ({ ...prev, [v.id]: null }));
+    try {
+      const url = await uploadAdminProductImage(file);
+      const updated = await addProductGalleryImage(v.id, url);
+      await notifyProductUpdated(updated);
+    } catch (e) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        [v.id]: e instanceof Error ? e.message : "No se pudo añadir la imagen",
+      }));
+    } finally {
+      setImageBusyId(null);
+    }
+  };
+
+  const removeVariantGalleryImage = async (v: AdminProduct, imageId: string) => {
+    setImageBusyId(v.id);
+    setFieldErrors((prev) => ({ ...prev, [v.id]: null }));
+    try {
+      const updated = await removeProductGalleryImage(v.id, imageId);
+      await notifyProductUpdated(updated);
+    } catch (e) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        [v.id]: e instanceof Error ? e.message : "No se pudo eliminar la imagen",
+      }));
+    } finally {
+      setImageBusyId(null);
+    }
+  };
+
+  const clearVariantMainImage = async (v: AdminProduct) => {
+    if (!v.imageUrl) return;
+    if (!confirm("¿Quitar la foto principal de esta variante?")) return;
+    setImageBusyId(v.id);
+    setFieldErrors((prev) => ({ ...prev, [v.id]: null }));
+    try {
+      const updated = await updateAdminProduct(v.id, { imageUrl: null });
+      await notifyProductUpdated(updated);
+    } catch (e) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        [v.id]: e instanceof Error ? e.message : "No se pudo quitar la foto principal",
+      }));
+    } finally {
+      setImageBusyId(null);
+    }
   };
 
   if (!mounted || !open || !anchorProduct || variants.length < 2) return null;
@@ -511,8 +608,9 @@ export function AdminProductVariantsModal({
             const baseline = draftFromProduct(v);
             const dirty = !draftsEqual(draft, baseline);
             const previewHex = normalizeColorHex(draft.colorHex) ?? "#CCCCCC";
-            const busy = savingId === v.id;
+            const busy = savingId === v.id || imageBusyId === v.id;
             const err = fieldErrors[v.id];
+            const imageBusy = imageBusyId === v.id;
 
             return (
               <div
@@ -764,22 +862,131 @@ export function AdminProductVariantsModal({
                       </label>
                     </div>
 
-                    {(v.imageUrl || gallery.length > 0) && (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
-                        {v.imageUrl && isHttpImageUrl(v.imageUrl) && (
-                          <VariantGalleryThumb src={v.imageUrl} onExpand={() => setExpandedImage(v.imageUrl!)} />
+                    <div
+                      className="admin-card"
+                      style={{
+                        marginTop: 4,
+                        marginBottom: 8,
+                        padding: 12,
+                        border: "1px solid rgba(201, 145, 139, 0.28)",
+                        background: "rgba(255,252,250,0.92)",
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>
+                        Fotos de esta variante
+                      </div>
+                      <p style={{ margin: "0 0 10px", fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4 }}>
+                        Principal y adicionales propias de esta variante. Al subir, se optimizan a WebP automáticamente.
+                      </p>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                        <label
+                          className="btn btn-outline btn-sm"
+                          style={{ cursor: imageBusy ? "wait" : "pointer", margin: 0 }}
+                        >
+                          {imageBusy ? "Subiendo…" : "📤 Principal"}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            style={{ display: "none" }}
+                            disabled={busy}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              e.target.value = "";
+                              if (!f) return;
+                              void uploadVariantMainImage(v, f);
+                            }}
+                          />
+                        </label>
+                        <label
+                          className="btn btn-outline btn-sm"
+                          style={{ cursor: imageBusy ? "wait" : "pointer", margin: 0 }}
+                        >
+                          ➕ Adicional
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            style={{ display: "none" }}
+                            disabled={busy || gallery.length >= 24}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              e.target.value = "";
+                              if (!f) return;
+                              void uploadVariantGalleryImage(v, f);
+                            }}
+                          />
+                        </label>
+                        {v.imageUrl ? (
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            disabled={busy}
+                            onClick={() => void clearVariantMainImage(v)}
+                          >
+                            Quitar principal
+                          </button>
+                        ) : null}
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {v.imageUrl && isHttpImageUrl(v.imageUrl) ? (
+                          <span style={{ position: "relative", display: "inline-block" }}>
+                            <VariantGalleryThumb
+                              src={v.imageUrl}
+                              onExpand={() => setExpandedImage(v.imageUrl!)}
+                            />
+                            <span
+                              style={{
+                                position: "absolute",
+                                left: 3,
+                                bottom: 3,
+                                fontSize: 9,
+                                fontWeight: 700,
+                                padding: "1px 5px",
+                                borderRadius: 999,
+                                background: "rgba(40,20,30,0.75)",
+                                color: "#fff",
+                              }}
+                            >
+                              Principal
+                            </span>
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Sin foto principal</span>
                         )}
                         {gallery.map((img) =>
                           isHttpImageUrl(img.url) ? (
-                            <VariantGalleryThumb
-                              key={img.id}
-                              src={img.url}
-                              onExpand={() => setExpandedImage(img.url)}
-                            />
+                            <span key={img.id} style={{ position: "relative", display: "inline-block" }}>
+                              <VariantGalleryThumb
+                                src={img.url}
+                                onExpand={() => setExpandedImage(img.url)}
+                              />
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => void removeVariantGalleryImage(v, img.id)}
+                                title="Eliminar imagen adicional"
+                                aria-label="Eliminar imagen adicional"
+                                style={{
+                                  position: "absolute",
+                                  top: -6,
+                                  right: -6,
+                                  width: 20,
+                                  height: 20,
+                                  borderRadius: "50%",
+                                  border: "none",
+                                  background: "var(--dusty-rose)",
+                                  color: "#fff",
+                                  fontSize: 11,
+                                  cursor: busy ? "wait" : "pointer",
+                                  lineHeight: 1,
+                                }}
+                              >
+                                ×
+                              </button>
+                            </span>
                           ) : null
                         )}
                       </div>
-                    )}
+                    </div>
 
                     {err ? (
                       <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--danger, #b00020)" }}>{err}</p>
