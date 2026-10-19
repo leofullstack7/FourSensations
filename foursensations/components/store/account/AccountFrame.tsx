@@ -80,6 +80,12 @@ export function AccountFrame({
           >
             Mis pedidos
           </Link>
+          <Link
+            href="/cuenta/cupones"
+            className={`fs-account-tab${pathname === "/cuenta/cupones" ? " is-active" : ""}`}
+          >
+            Mis cupones
+          </Link>
         </nav>
 
         <div className="fs-account-grid">

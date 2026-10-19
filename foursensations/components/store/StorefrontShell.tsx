@@ -32,6 +32,7 @@ import { findBombaCapilarParts, isBombaCapilarProduct } from "@/lib/bomba-capila
 import { isDisplayableImageUrl, isHttpImageUrl } from "@/lib/util/image-url";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { StoreFloatingActions } from "@/components/store/StoreFloatingActions";
+import { WelcomeCouponModal } from "@/components/store/WelcomeCouponModal";
 import { ProductModalGallery } from "@/components/store/ProductModalGallery";
 import {
   ProductColorSwatchField,
@@ -844,6 +845,13 @@ export function StorefrontShell({
                           >
                             Mis pedidos <span aria-hidden>→</span>
                           </Link>
+                          <Link
+                            href="/cuenta/cupones"
+                            className="gb-customer-popover__link"
+                            onClick={() => setCustomerProfileOpen(false)}
+                          >
+                            Mis cupones <span aria-hidden>→</span>
+                          </Link>
                         </nav>
                         <div className="gb-customer-popover__footer" aria-hidden>
                           <span className="gb-customer-popover__heart">♥</span>
@@ -1471,6 +1479,8 @@ export function StorefrontShell({
           </div>
         </div>
       ) : null}
+
+      {!hideNavChrome ? <WelcomeCouponModal /> : null}
 
       <StoreFloatingActions cartCount={cartCount} onOpenCart={openCart} />
 

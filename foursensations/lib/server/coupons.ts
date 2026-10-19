@@ -1,4 +1,4 @@
-import { CouponStatus, Prisma } from "@prisma/client";
+import { CouponEmailSendStatus, CouponStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   computeCouponDiscount,
@@ -6,6 +6,7 @@ import {
   validateCouponForCart,
   type CouponDiscountInput,
 } from "@/lib/coupons";
+import { isWelcomeCouponCode } from "@/lib/server/welcome-coupon";
 
 export async function findCouponByCode(code: string) {
   const normalized = normalizeCouponCode(code);
@@ -24,6 +25,27 @@ export async function quoteCouponForCart(
   if (!coupon) return { ok: false, error: "Cupón no encontrado" };
 
   const email = input.customerEmail?.trim().toLowerCase() || null;
+
+  // Cupón inicial: solo el correo al que se envió puede redimirlo (con o sin sesión).
+  if (isWelcomeCouponCode(coupon.code)) {
+    if (!email) {
+      return { ok: false, error: "Ingresa el correo al que te enviamos tu cupón de bienvenida." };
+    }
+    const gifted = await prisma.couponEmailSend.findFirst({
+      where: {
+        couponId: coupon.id,
+        toEmail: { equals: email, mode: "insensitive" },
+        status: CouponEmailSendStatus.SENT,
+      },
+      select: { id: true },
+    });
+    if (!gifted) {
+      return {
+        ok: false,
+        error: "Este cupón está asociado a otro correo. Usa el mismo con el que lo reclamaste.",
+      };
+    }
+  }
 
   const [redemptionCount, userRedemptionCount, pendingOrderCount] = await Promise.all([
     prisma.couponRedemption.count({ where: { couponId: coupon.id } }),
