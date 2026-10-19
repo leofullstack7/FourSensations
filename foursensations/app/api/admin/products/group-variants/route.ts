@@ -215,7 +215,10 @@ export async function POST(req: NextRequest) {
       ...others.map((r, i) => ({ id: r.id, order: i + 1 })),
     ];
 
-    /** Variantes que aún no tenían grupo: heredan catálogo del principal (color/fotos/código se conservan). */
+    /**
+     * Al agrupar por primera vez (sin grupo previo), heredan catálogo del principal.
+     * Conservan: color, fotos, stock, código y nombre propio de cada variante.
+     */
     const inheritIds = others
       .filter((r) => !canonicalVariantGroupCode(r.variantGroupCode))
       .map((r) => r.id);
@@ -256,7 +259,7 @@ export async function POST(req: NextRequest) {
                     tags: primaryFull.tags,
                     badge: primaryFull.badge,
                     emoji: primaryFull.emoji,
-                    // Conserva colorHex, colorName, imageUrl, stock, externalRef de cada variante.
+                    // Conserva colorHex, colorName, imageUrl, stock, externalRef (identidad de variante).
                   },
                 }),
               ),

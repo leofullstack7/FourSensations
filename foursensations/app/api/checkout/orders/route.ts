@@ -31,20 +31,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }
 
-  if (result.paymentProvider === "CONTRAENTREGA") {
+  // Aviso a la tienda en todo pedido nuevo (incluye Mercado Pago / Addi pendientes de pago).
+  // Confirmación a la clienta: contraentrega ya; pasarelas al confirmar el pago (webhook).
+  {
     const order = await prisma.order.findUnique({
       where: { id: result.orderId },
       include: { items: true },
     });
     if (order) {
       void sendOrderNotification(orderPayloadForEmail(order)).catch((err) =>
-        console.error("[email] contraentrega admin", err),
+        console.error("[email] aviso tienda pedido nuevo", err),
       );
-      const customerPayload = buildCustomerOrderConfirmationPayload(order);
-      if (customerPayload) {
-        void sendOrderConfirmationToCustomer(customerPayload).catch((err) =>
-          console.error("[email] contraentrega cliente", err),
-        );
+      if (result.paymentProvider === "CONTRAENTREGA") {
+        const customerPayload = buildCustomerOrderConfirmationPayload(order);
+        if (customerPayload) {
+          void sendOrderConfirmationToCustomer(customerPayload).catch((err) =>
+            console.error("[email] contraentrega cliente", err),
+          );
+        }
       }
     }
   }

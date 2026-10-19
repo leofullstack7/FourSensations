@@ -125,8 +125,13 @@ async function sendViaResend(input: SendEmailInput, toList: string[]): Promise<S
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) return { ok: false, error: "Resend no configurado" };
   const from = process.env.RESEND_FROM_EMAIL?.trim() || "onboarding@resend.dev";
+  // onboarding@resend.dev NO entrega a clientas ni a Gmail de la tienda salvo el dueño de la cuenta.
   if (/onboarding@resend\.dev/i.test(from)) {
-    console.warn("[email] Resend onboarding@ solo entrega a correos de prueba.");
+    return {
+      ok: false,
+      error:
+        "Resend está en modo prueba (onboarding@). Configura BREVO_API_KEY en Admin → Correos o en Render.",
+    };
   }
 
   try {

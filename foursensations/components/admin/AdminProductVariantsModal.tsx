@@ -320,13 +320,14 @@ export function AdminProductVariantsModal({
         ? (badgeRaw as BadgeValue)
         : null;
 
+    const subcategory = draft.subcategory.trim() || v.subcategory?.trim() || "General";
     await onSaveVariant(v.id, {
       name,
       price,
       wholesalePrice,
       description: draft.description.trim(),
       brand: draft.brand.trim() || "Four Sensations",
-      subcategory: draft.subcategory.trim(),
+      subcategory,
       stock,
       emoji: draft.emoji.trim() || null,
       badge,

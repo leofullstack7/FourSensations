@@ -65,8 +65,9 @@ export const adminProductUpdateSchema = z
     name: z.string().trim().min(1).max(200).optional(),
     brand: z.string().trim().min(1).max(120).optional(),
     category: z.string().trim().min(1).max(80).optional(),
-    subcategory: z.string().trim().min(1).max(120).optional(),
-    tags: z.array(z.string().trim().min(1).max(60)).max(30).optional(),
+    /** Vacío permitido al editar variantes (no forzar min(1)). */
+    subcategory: z.string().trim().max(120).optional(),
+    tags: z.array(z.string().trim().max(60)).max(30).optional(),
     description: z.string().trim().max(20_000).optional(),
     price: z
       .coerce.number({ invalid_type_error: "El precio debe ser un número" })

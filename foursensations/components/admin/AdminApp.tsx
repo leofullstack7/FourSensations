@@ -59,6 +59,7 @@ import {
   type AiBulkProgressItem,
 } from "@/components/admin/AdminAiBulkProgressModal";
 import { AdminProductVariantsModal } from "@/components/admin/AdminProductVariantsModal";
+import { AdminEmailPanel } from "@/components/admin/AdminEmailPanel";
 import { AdminProductColorModal } from "@/components/admin/AdminProductColorModal";
 import { AdminBulkTemplateModal } from "@/components/admin/AdminBulkTemplateModal";
 import { AdminBulkRowEditModal } from "@/components/admin/AdminBulkRowEditModal";
@@ -169,7 +170,7 @@ import {
   resolveMenuTagFromEditor,
 } from "@/lib/admin/menu-utils";
 
-type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "discounts" | "coupons" | "sales" | "stock" | "customers" | "categories" | "families" | "menu" | "contenido" | "versions" | "reports";
+type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "discounts" | "coupons" | "sales" | "stock" | "customers" | "categories" | "families" | "menu" | "contenido" | "correos" | "versions" | "reports";
 
 type GoPageOptions = {
   productTab?: "list" | "add" | "bulk";
@@ -189,6 +190,7 @@ const ADMIN_PAGE_TITLES: Record<AdminPageId, string> = {
   families: "Familias",
   menu: "Gestión del Menú",
   contenido: "Contenido",
+  correos: "Correos",
   versions: "Versiones",
   reports: "Reportes",
 };
@@ -212,6 +214,7 @@ const ADMIN_NAV_ITEMS: {
   { id: "families", icon: "🧬", label: "Familias", section: "config" },
   { id: "menu", icon: "🗂️", label: "Gestión de Menú", section: "config" },
   { id: "contenido", icon: "🖼️", label: "Contenido", section: "config" },
+  { id: "correos", icon: "✉️", label: "Correos", section: "config" },
   { id: "versions", icon: "🕘", label: "Versiones", section: "config" },
   { id: "reports", icon: "📈", label: "Reportes", section: "config" },
 ];
@@ -2099,6 +2102,9 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
 
             <div className={`admin-page ${page === "contenido" ? "active" : ""}`} style={{ display: page === "contenido" ? "block" : "none" }}>
               <AdminLandingContentPanel active={page === "contenido"} showToast={showToast} />
+            </div>
+            <div className={`admin-page ${page === "correos" ? "active" : ""}`} style={{ display: page === "correos" ? "block" : "none" }}>
+              <AdminEmailPanel active={page === "correos"} showToast={showToast} />
             </div>
 
             <div className={`admin-page ${page === "versions" ? "active" : ""}`} style={{ display: page === "versions" ? "block" : "none" }}>
