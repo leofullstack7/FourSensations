@@ -156,6 +156,7 @@ import type { AdminProduct, AdminSale } from "@/lib/types/admin";
 import { formatPrice } from "@/lib/format";
 import { getWholesaleUnitPrice } from "@/lib/wholesale-pricing";
 import { AdminCombosPanel } from "@/components/admin/AdminCombosPanel";
+import { AdminFulfillmentKanban } from "@/components/admin/AdminFulfillmentKanban";
 import { AdminDiscountsPanel } from "@/components/admin/AdminDiscountsPanel";
 import { AdminCouponsPanel } from "@/components/admin/AdminCouponsPanel";
 import { AdminProductListBoard } from "@/components/admin/AdminProductListBoard";
@@ -170,7 +171,7 @@ import {
   resolveMenuTagFromEditor,
 } from "@/lib/admin/menu-utils";
 
-type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "discounts" | "coupons" | "sales" | "stock" | "customers" | "categories" | "families" | "menu" | "contenido" | "correos" | "versions" | "reports";
+type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "discounts" | "coupons" | "sales" | "shipments" | "stock" | "customers" | "categories" | "families" | "menu" | "contenido" | "correos" | "versions" | "reports";
 
 type GoPageOptions = {
   productTab?: "list" | "add" | "bulk";
@@ -184,6 +185,7 @@ const ADMIN_PAGE_TITLES: Record<AdminPageId, string> = {
   discounts: "Descuentos",
   coupons: "Cupones",
   sales: "Ventas",
+  shipments: "Envíos del día",
   stock: "Inventario",
   customers: "Clientes CRM",
   categories: "Categorías y subcategorías",
@@ -208,6 +210,7 @@ const ADMIN_NAV_ITEMS: {
   { id: "discounts", icon: "🏷️", label: "Descuentos" },
   { id: "coupons", icon: "🎟️", label: "Cupones" },
   { id: "sales", icon: "💰", label: "Ventas" },
+  { id: "shipments", icon: "🚚", label: "Envíos del día" },
   { id: "customers", icon: "👥", label: "Clientes CRM" },
   { id: "stock", icon: "📋", label: "Inventario" },
   { id: "categories", icon: "🏷️", label: "Categorías", section: "config" },
@@ -2039,7 +2042,17 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
             </div>
 
             <div className={`admin-page ${page === "sales" ? "active" : ""}`} style={{ display: page === "sales" ? "block" : "none" }}>
-              <AdminSalesTab sales={sales} products={products} onReloadOnline={() => void loadPaidOrders()} />
+              <AdminSalesTab
+                sales={sales}
+                products={products}
+                onReloadOnline={() => void loadPaidOrders()}
+                showToast={showToast}
+              />
+            </div>
+            <div className={`admin-page ${page === "shipments" ? "active" : ""}`} style={{ display: page === "shipments" ? "block" : "none" }}>
+              {page === "shipments" ? (
+                <AdminFulfillmentKanban mode="day" showToast={showToast} />
+              ) : null}
             </div>
 
             <div className={`admin-page ${page === "customers" ? "active" : ""}`} style={{ display: page === "customers" ? "block" : "none" }}>
@@ -8714,15 +8727,18 @@ function AdminSalesTab({
   sales,
   products,
   onReloadOnline,
+  showToast,
 }: {
   sales: AdminSale[];
   products: AdminProduct[];
   onReloadOnline?: () => void;
+  showToast: (msg: string, type?: string, icon?: string) => void;
 }) {
+  const [view, setView] = useState<"kanban" | "list">("kanban");
   const total = sales.reduce((s, v) => s + Number(v.total), 0);
   return (
     <>
-      <div className="admin-sales-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+      <div className="admin-sales-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
         <div className="admin-sales-stats" style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           <div className="admin-card" style={{ padding: "16px 24px", minWidth: 160, textAlign: "center" }}>
             <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Total ventas</div>
@@ -8739,55 +8755,71 @@ function AdminSalesTab({
           </button>
         ) : null}
       </div>
-      <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "-12px 0 20px" }}>
-        Se listan las compras aprobadas del checkout (base de datos) y las ventas que registres manualmente en esta sesión.
-      </p>
-      <div className="admin-card admin-table-wrap" style={{ padding: 0 }}>
-        <table className="admin-table admin-table--sticky-product">
-          <thead>
-            <tr>
-              <th style={{ padding: 16 }}>Producto</th>
-              <th>Cliente</th>
-              <th>Canal</th>
-              <th>Cantidad</th>
-              <th>Total</th>
-              <th>Estado</th>
-              <th>Fecha</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sales.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
-                  Sin ventas aún. Si acabas de cobrar en la tienda, pulsa «Actualizar pedidos web» o recarga el panel.
-                </td>
-              </tr>
-            ) : (
-              sales.map((s) => {
-                const p = products.find((x) => x.id === s.productId);
-                return (
-                  <tr key={String(s.id)}>
-                    <td>
-                      <div className="table-product-cell">
-                        <AdminProductThumb imageUrl={p?.imageUrl ?? null} emoji={p?.emoji ?? "📦"} />
-                        <div className="table-product-name">{s.productName}</div>
-                      </div>
-                    </td>
-                    <td>{s.client}</td>
-                    <td>{s.channel}</td>
-                    <td>{s.qty}</td>
-                    <td style={{ fontWeight: 600, color: "var(--dark)" }}>{formatPrice(s.total)}</td>
-                    <td>
-                      <span className={`status-chip ${s.status === "Completada" ? "status-active" : "status-low"}`}>{s.status}</span>
-                    </td>
-                    <td>{s.date}</td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+
+      <div className="admin-sales-view-tabs" role="tablist" aria-label="Vista de ventas">
+        <button type="button" className={view === "kanban" ? "is-active" : ""} onClick={() => setView("kanban")}>
+          Tablero Kanban
+        </button>
+        <button type="button" className={view === "list" ? "is-active" : ""} onClick={() => setView("list")}>
+          Lista clásica
+        </button>
       </div>
+
+      {view === "kanban" ? (
+        <AdminFulfillmentKanban mode="all" showToast={showToast} embedded />
+      ) : (
+        <>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px" }}>
+            Compras aprobadas del checkout y ventas manuales de esta sesión.
+          </p>
+          <div className="admin-card admin-table-wrap" style={{ padding: 0 }}>
+            <table className="admin-table admin-table--sticky-product">
+              <thead>
+                <tr>
+                  <th style={{ padding: 16 }}>Producto</th>
+                  <th>Cliente</th>
+                  <th>Canal</th>
+                  <th>Cantidad</th>
+                  <th>Total</th>
+                  <th>Estado</th>
+                  <th>Fecha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sales.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
+                      Sin ventas aún. Si acabas de cobrar en la tienda, pulsa «Actualizar pedidos web» o recarga el panel.
+                    </td>
+                  </tr>
+                ) : (
+                  sales.map((s) => {
+                    const p = products.find((x) => x.id === s.productId);
+                    return (
+                      <tr key={String(s.id)}>
+                        <td>
+                          <div className="table-product-cell">
+                            <AdminProductThumb imageUrl={p?.imageUrl ?? null} emoji={p?.emoji ?? "📦"} />
+                            <div className="table-product-name">{s.productName}</div>
+                          </div>
+                        </td>
+                        <td>{s.client}</td>
+                        <td>{s.channel}</td>
+                        <td>{s.qty}</td>
+                        <td style={{ fontWeight: 600, color: "var(--dark)" }}>{formatPrice(s.total)}</td>
+                        <td>
+                          <span className={`status-chip ${s.status === "Completada" ? "status-active" : "status-low"}`}>{s.status}</span>
+                        </td>
+                        <td>{s.date}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </>
   );
 }

@@ -21,9 +21,21 @@ export async function ensureStoreSchemaExtras(): Promise<void> {
       await addColumnIfMissing("ProductCombo", "imageUrl", "TEXT");
       await addColumnIfMissing("ProductCombo", "storeProductId", "TEXT");
       await addColumnIfMissing("ProductComboItem", "unitPrice", "INTEGER");
+      await addColumnIfMissing("Order", "fulfillmentStage", "INTEGER NOT NULL DEFAULT 1");
+      await addColumnIfMissing("Order", "fulfillmentStageAt", "TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP");
       try {
         await prisma.$executeRawUnsafe(
           `CREATE UNIQUE INDEX IF NOT EXISTS "ProductCombo_storeProductId_key" ON "ProductCombo"("storeProductId")`,
+        );
+      } catch {
+        /* ignore */
+      }
+      try {
+        await prisma.$executeRawUnsafe(
+          `CREATE INDEX IF NOT EXISTS "Order_fulfillmentStage_idx" ON "Order"("fulfillmentStage")`,
+        );
+        await prisma.$executeRawUnsafe(
+          `CREATE INDEX IF NOT EXISTS "Order_fulfillmentStageAt_idx" ON "Order"("fulfillmentStageAt")`,
         );
       } catch {
         /* ignore */
