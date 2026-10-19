@@ -133,7 +133,7 @@ export function ProductLandingClient({
                 </div>
               ) : null}
               <div className="product-buy__actions">
-                <button type="button" className="btn btn-primary" onClick={() => addToCart(product.id, product)}>
+                <button type="button" className="btn btn-primary" onClick={() => addToCart(product.id, product, { confirmVariant: true })}>
                   Añadir al carrito
                 </button>
                 <button

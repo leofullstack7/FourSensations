@@ -14,6 +14,7 @@ import { generateOrderReference } from "@/lib/server/checkout/reference";
 import { getWholesaleUnitPrice } from "@/lib/wholesale-pricing";
 import { checkoutChannelFromAddress, resolveWholesaleCycle } from "@/lib/wholesale-rules";
 import { quoteCouponForCart } from "@/lib/server/coupons";
+import { formatOrderLineName } from "@/lib/store/variant-cart";
 
 export type CreateOrderResult =
   | {
@@ -196,7 +197,11 @@ export async function createPendingOrderFromCheckout(
         subtotal += lineTotal;
         lines.push({
           productId: p.id,
-          name: p.name,
+          name: formatOrderLineName({
+            name: p.name,
+            colorName: p.colorName,
+            colorHex: p.colorHex,
+          }),
           imageUrl: p.imageUrl,
           unitPrice,
           quantity: line.quantity,
@@ -237,8 +242,11 @@ export async function createPendingOrderFromCheckout(
       };
       const city = (addr.city ?? "").trim();
       const region = addr.region?.trim();
-      const zoneId = guessShippingZoneFromCity(city) || input.shippingZoneId;
-      const carrier = resolveShippingCarrier(city, region);
+      const wantsPickup = input.shippingZoneId === "pickup";
+      const zoneId = wantsPickup
+        ? "pickup"
+        : guessShippingZoneFromCity(city) || input.shippingZoneId;
+      const carrier = wantsPickup ? "pickup" : resolveShippingCarrier(city, region);
       const shippingBase = wholesaleCheckout
         ? 0
         : checkoutShippingCop(zoneId, { city, region, carrier });
@@ -281,9 +289,15 @@ export async function createPendingOrderFromCheckout(
         shippingZoneId: zoneId,
         shippingZoneLabel: zoneMeta.shortLabel,
         shippingCarrier: carrier,
-        shippingCarrierLabel: carrier === "envia" ? "Envía" : "Interrapidísimo",
+        shippingCarrierLabel:
+          carrier === "pickup"
+            ? "Recoger en tienda"
+            : carrier === "envia"
+              ? "Envía"
+              : "Interrapidísimo",
         ...(couponCode ? { couponCode, couponDiscount: discount } : {}),
         checkoutChannel: wholesaleCheckout ? "wholesale" : "retail",
+        ...(wantsPickup ? { fulfillment: "store_pickup" } : {}),
       } as unknown as Prisma.InputJsonValue;
       const paymentProvider = wholesaleCheckout ? "CONTRAENTREGA" : input.paymentProvider ?? null;
 

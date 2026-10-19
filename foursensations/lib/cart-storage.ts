@@ -59,6 +59,9 @@ export function syncCartPricesFromCatalog(cart: CartLine[], catalog: StoreProduc
       imgHover: live.imgHover,
       emoji: live.emoji,
       gallery: live.gallery,
+      colorHex: live.colorHex,
+      colorName: live.colorName,
+      variantGroupCode: live.variantGroupCode,
     };
   });
   return changed ? next : cart;

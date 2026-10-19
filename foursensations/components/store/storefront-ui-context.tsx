@@ -12,7 +12,7 @@ export type StorefrontUiContextValue = {
   markFullCatalogLoaded: () => void;
   ensureFullCatalog: () => Promise<void>;
   showToast: (msg: string, type?: string, icon?: string) => void;
-  openProductModal: (id: string) => void;
+  openProductModal: (id: string, opts?: { pulseVariantColors?: boolean }) => void;
   closeProductModal: () => void;
   openSearch: () => void;
   openSearchWithQuery: (query: string) => void;
@@ -20,8 +20,15 @@ export type StorefrontUiContextValue = {
   openWishlist: () => void;
   openAccount: () => void;
   cartCount: number;
-  /** `productSnapshot` evita fallar cuando el producto aún no está en el catálogo del shell (tintes, etc.). */
-  addToCart: (id: string, productSnapshot?: StoreProduct) => void;
+  /**
+   * `productSnapshot` evita fallar cuando el producto aún no está en el catálogo del shell.
+   * Con variantes, sin `confirmVariant` abre el modal para elegir color.
+   */
+  addToCart: (
+    id: string,
+    productSnapshot?: StoreProduct,
+    opts?: { confirmVariant?: boolean },
+  ) => void;
   addComboToCart: (combo: import("@/lib/types/store-combo").StoreCombo) => void;
   toggleFavorite: (id: string) => void;
   favorites: string[];

@@ -33,11 +33,12 @@ function dtoToAdminSale(o: AdminOrderDto): AdminSale {
   const productName =
     lines.length === 0
       ? "(Sin líneas)"
-      : lines.length === 1
-        ? first.name
-        : `${first.name} + ${lines.length - 1} más`;
+      : lines.map((i) => `${i.quantity}× ${i.name}`).join(" · ");
   const channel = (o.paymentProvider?.trim() || "Tienda web").toUpperCase();
   const t = new Date(o.updatedAt).getTime();
+  const shippingMeta =
+    o.customerNote?.trim() ||
+    "";
   return {
     id: `order-${o.id}`,
     source: "online",
@@ -49,7 +50,7 @@ function dtoToAdminSale(o: AdminOrderDto): AdminSale {
     qty: qtySum,
     total: o.total,
     status: "Completada",
-    notes: [o.customerNote?.trim(), `Ref: ${o.reference}`].filter(Boolean).join(" · ") || `Ref: ${o.reference}`,
+    notes: [shippingMeta, `Ref: ${o.reference}`].filter(Boolean).join(" · ") || `Ref: ${o.reference}`,
     date: new Date(o.updatedAt).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" }),
     createdAtMs: Number.isFinite(t) ? t : Date.now(),
   };

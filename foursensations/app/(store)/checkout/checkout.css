@@ -736,6 +736,23 @@
   }
 }
 
+.gb-co-fulfillment-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+@media (min-width: 640px) {
+  .gb-co-fulfillment-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.gb-co-pickup-card strong {
+  font-size: 15px;
+}
+
 .gb-co-carrier-grid {
   display: grid;
   grid-template-columns: 1fr;

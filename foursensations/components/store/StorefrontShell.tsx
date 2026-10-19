@@ -43,6 +43,11 @@ import {
   listStorefrontVariantsInGroup,
   resolveStorefrontDisplayAfterFilter,
 } from "@/lib/store/variant-groups";
+import {
+  formatProductVariantLabel,
+  productNeedsVariantSelection,
+} from "@/lib/store/variant-cart";
+import { normalizeColorHex } from "@/lib/product-color";
 import { resolveStoreCategoryHref } from "@/lib/store/menu-item-href";
 import type { MegaPromoByCategory } from "@/lib/site-settings";
 
@@ -184,6 +189,7 @@ export function StorefrontShell({
   const [customerAuthTab, setCustomerAuthTab] = useState<"login" | "register">("login");
   const [selectedProduct, setSelectedProduct] = useState<StoreProduct | null>(null);
   const [modalImgIdx, setModalImgIdx] = useState(0);
+  const [pulseVariantColors, setPulseVariantColors] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   /** Loader global (correo o redirección Google). */
   const [authBusyLabel, setAuthBusyLabel] = useState<string | null>(null);
@@ -305,8 +311,18 @@ export function StorefrontShell({
   const productsRef = useRef(products);
   productsRef.current = products;
 
+  const openProductDetail = useCallback((id: string, opts?: { pulseVariantColors?: boolean }) => {
+    const p = productsRef.current.find((x) => x.id === id);
+    if (!p) return;
+    preloadStorefrontProductImages(p);
+    setSelectedProduct(p);
+    setModalImgIdx(0);
+    setPulseVariantColors(Boolean(opts?.pulseVariantColors));
+    document.body.style.overflow = "hidden";
+  }, []);
+
   const addToCart = useCallback(
-    (productId: string, productSnapshot?: StoreProduct) => {
+    (productId: string, productSnapshot?: StoreProduct, opts?: { confirmVariant?: boolean }) => {
       if (isBombaCapilarProduct(productId) || (productSnapshot && isBombaCapilarProduct(productSnapshot.id))) {
         const { dulce, primaveral } = findBombaCapilarParts(productsRef.current);
         const kit = [dulce, primaveral].filter((p): p is StoreProduct => Boolean(p));
@@ -336,6 +352,16 @@ export function StorefrontShell({
         showToast("No se pudo agregar al carrito. Abre el producto e inténtalo de nuevo.", "danger", "⚠️");
         return;
       }
+      if (!opts?.confirmVariant && productNeedsVariantSelection(product, productsRef.current)) {
+        showToast("Elige el color o variante antes de agregar al carrito", "info", "🎨");
+        void ensureFullCatalog().finally(() => {
+          // Espera a que el catálogo se fusione en estado antes de abrir el modal con swatches.
+          window.setTimeout(() => {
+            openProductDetail(product.id, { pulseVariantColors: true });
+          }, 80);
+        });
+        return;
+      }
       const priced = buyingAsWholesale ? applyWholesalePricing(product) : { ...product, isWholesalePrice: false };
       if (productSnapshot) {
         mergeCatalogProducts([product]);
@@ -348,10 +374,15 @@ export function StorefrontShell({
         saveCart(next);
         return next;
       });
-      showToast(`${product.name} agregado al carrito`, "success", "🛒");
+      const variant = formatProductVariantLabel(product);
+      showToast(
+        variant ? `${product.name} (${variant}) agregado al carrito` : `${product.name} agregado al carrito`,
+        "success",
+        "🛒",
+      );
       setCartOpen(true);
     },
-    [buyingAsWholesale, mergeCatalogProducts, showToast],
+    [buyingAsWholesale, ensureFullCatalog, mergeCatalogProducts, openProductDetail, showToast],
   );
 
   const addComboToCart = useCallback(
@@ -496,22 +527,14 @@ export function StorefrontShell({
   const normalizedSearchQuery = useMemo(() => normalizeSearchText(searchQuery), [searchQuery]);
   const hasSearchQuery = normalizedSearchQuery.length >= 1;
 
-  const openProductDetail = useCallback((id: string) => {
-    const p = products.find((x) => x.id === id);
-    if (!p) return;
-    preloadStorefrontProductImages(p);
-    setSelectedProduct(p);
-    setModalImgIdx(0);
-    document.body.style.overflow = "hidden";
-  }, [products]);
-
-  const openProductModal = useCallback((id: string) => {
-    openProductDetail(id);
+  const openProductModal = useCallback((id: string, opts?: { pulseVariantColors?: boolean }) => {
+    openProductDetail(id, opts);
   }, [openProductDetail]);
 
   const closeProductModal = () => {
     setSelectedProduct(null);
     setModalImgIdx(0);
+    setPulseVariantColors(false);
     document.body.style.overflow = "";
   };
 
@@ -941,7 +964,27 @@ export function StorefrontShell({
                 <div className="cart-item-info" style={{ flex: 1 }}>
                   <div className="cart-item-name">{item.name}</div>
                   <div className="cart-item-variant">
-                    {item.comboId ? "Combo promocional" : item.brand}
+                    {item.comboId
+                      ? "Combo promocional"
+                      : formatProductVariantLabel(item)
+                        ? (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            {normalizeColorHex(item.colorHex) ? (
+                              <span
+                                aria-hidden
+                                style={{
+                                  width: 12,
+                                  height: 12,
+                                  borderRadius: "50%",
+                                  background: normalizeColorHex(item.colorHex)!,
+                                  border: "1px solid var(--line)",
+                                }}
+                              />
+                            ) : null}
+                            Color: {formatProductVariantLabel(item)}
+                          </span>
+                          )
+                        : item.brand}
                   </div>
                   {item.comboItems && item.comboItems.length > 0 ? (
                     <ul style={{ margin: "6px 0 0", padding: "0 0 0 14px", fontSize: 11, color: "var(--text-muted)", lineHeight: 1.35 }}>
@@ -1138,10 +1181,18 @@ export function StorefrontShell({
                       <StoreProductPrice product={selectedProduct} currentStyle={{ fontSize: 32 }} />
                     </div>
                     {showSelectedProductColorPicker ? (
-                      <div className="product-modal-color-picker" style={{ marginBottom: 20 }}>
+                      <div
+                        className={`product-modal-color-picker${pulseVariantColors ? " product-modal-color-picker--pulse" : ""}`}
+                        style={{ marginBottom: 20 }}
+                      >
                         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dark)", marginBottom: 10 }}>
                           Colores disponibles
                         </div>
+                        {pulseVariantColors ? (
+                          <p className="product-modal-color-picker__hint">
+                            Recuerda seleccionar que color deseas
+                          </p>
+                        ) : null}
                         <ProductColorSwatchField
                           items={selectedProductVariants}
                           selectedId={selectedProduct.id}
@@ -1150,6 +1201,7 @@ export function StorefrontShell({
                             if (next) {
                               setSelectedProduct(next);
                               setModalImgIdx(0);
+                              setPulseVariantColors(false);
                             }
                           }}
                           size="sm"
@@ -1167,6 +1219,34 @@ export function StorefrontShell({
                           size="sm"
                         />
                       </div>
+                    ) : pulseVariantColors && selectedProductVariants.length >= 2 ? (
+                      <div
+                        className="product-modal-color-picker product-modal-color-picker--pulse"
+                        style={{ marginBottom: 20 }}
+                      >
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dark)", marginBottom: 10 }}>
+                          Variantes disponibles
+                        </div>
+                        <p className="product-modal-color-picker__hint">
+                          Recuerda seleccionar que color deseas
+                        </p>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                          {selectedProductVariants.map((v) => (
+                            <button
+                              key={v.id}
+                              type="button"
+                              className={`btn btn-sm ${v.id === selectedProduct.id ? "btn-primary" : "btn-outline"}`}
+                              onClick={() => {
+                                setSelectedProduct(v);
+                                setModalImgIdx(0);
+                                setPulseVariantColors(false);
+                              }}
+                            >
+                              {formatProductVariantLabel(v) || v.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     ) : null}
                     <p className="product-modal-desc" style={{ fontSize: 14, color: "var(--text-light)", lineHeight: 1.75, marginBottom: 24 }}>{selectedProduct.description}</p>
                   </div>
@@ -1176,7 +1256,14 @@ export function StorefrontShell({
                       className="btn btn-primary btn-glow"
                       style={{ flex: 1, justifyContent: "center" }}
                       onClick={() => {
-                        addToCart(selectedProduct.id, selectedProduct);
+                        if (
+                          pulseVariantColors &&
+                          productNeedsVariantSelection(selectedProduct, products)
+                        ) {
+                          showToast("Recuerda seleccionar que color deseas", "info", "🎨");
+                          return;
+                        }
+                        addToCart(selectedProduct.id, selectedProduct, { confirmVariant: true });
                         closeProductModal();
                       }}
                     >

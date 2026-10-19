@@ -9,6 +9,7 @@ import {
   CHECKOUT_BULK_SHIPPING_NOTICE,
   CHECKOUT_COURIER_NOTE,
   ENVIA_NO_REEXPEDITION_NOTE,
+  STORE_PICKUP_ADDRESS,
   type ShippingCarrier,
   type ShippingZoneId,
   SHIPPING_ZONES,
@@ -17,6 +18,8 @@ import {
   resolveShippingCarrier,
   shippingZoneContextMessage,
 } from "@/lib/checkout/shipping-zones";
+import { formatProductVariantLabel } from "@/lib/store/variant-cart";
+import { normalizeColorHex } from "@/lib/product-color";
 import { loadCart, saveCart, syncCartPricesFromCatalog } from "@/lib/cart-storage";
 import { searchColombiaCities, type ColombiaCity } from "@/lib/checkout/colombia-cities";
 import { formatPrice } from "@/lib/format";
@@ -217,11 +220,12 @@ export function CheckoutPageClient() {
   }, [paymentMethod]);
 
   useEffect(() => {
+    if (shippingZoneId === "pickup") return;
     const c = city.trim();
     if (c.length < 2) return;
     setShippingZoneId(guessShippingZoneFromCity(c));
     setShippingCarrier(resolveShippingCarrier(c, region.trim() || undefined));
-  }, [city, region]);
+  }, [city, region, shippingZoneId]);
 
   useEffect(() => {
     const header = document.querySelector<HTMLElement>(".gb-co-header");
@@ -251,12 +255,13 @@ export function CheckoutPageClient() {
 
   const subtotal = useMemo(() => cart.reduce((s, i) => s + i.price * i.qty, 0), [cart]);
   const citySuggestions = useMemo(() => (city.trim().length < 1 ? [] : searchColombiaCities(city, 8)), [city]);
+  const isStorePickup = shippingZoneId === "pickup";
   const enviaExclusion = useMemo(() => findEnviaExclusion(city, region), [city, region]);
-  const enviaBlocked = Boolean(enviaExclusion);
+  const enviaBlocked = Boolean(enviaExclusion) && !isStorePickup;
   const shippingAmount = useMemo(() => {
-    if (buyingAsWholesale) return 0;
+    if (buyingAsWholesale || isStorePickup) return 0;
     return checkoutShippingCop(shippingZoneId, { city, region, carrier: shippingCarrier });
-  }, [buyingAsWholesale, city, region, shippingCarrier, shippingZoneId]);
+  }, [buyingAsWholesale, city, isStorePickup, region, shippingCarrier, shippingZoneId]);
   const shippingPaid = buyingAsWholesale
     ? 0
     : couponApplied
@@ -804,6 +809,33 @@ export function CheckoutPageClient() {
                     <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
                       {item.comboId ? "Combo promocional" : item.brand}
                     </div>
+                    {!item.comboId && formatProductVariantLabel(item) ? (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: "var(--dark)",
+                        }}
+                      >
+                        {normalizeColorHex(item.colorHex) ? (
+                          <span
+                            aria-hidden
+                            style={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: "50%",
+                              background: normalizeColorHex(item.colorHex)!,
+                              border: "1px solid var(--line)",
+                            }}
+                          />
+                        ) : null}
+                        Color: {formatProductVariantLabel(item)}
+                      </div>
+                    ) : null}
                     {item.comboItems && item.comboItems.length > 0 ? (
                       <ul style={{ margin: "6px 0 0", padding: "0 0 0 14px", fontSize: 12, color: "var(--text-muted)" }}>
                         {item.comboItems.map((ci, idx) => (
@@ -1055,6 +1087,46 @@ export function CheckoutPageClient() {
                 </p>
               ) : (
               <>
+              <div className="gb-co-fulfillment-grid" role="radiogroup" aria-label="Tipo de entrega">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={isStorePickup}
+                  className={`gb-co-carrier-card gb-co-pickup-card${isStorePickup ? " gb-co-carrier-card--active" : ""}`}
+                  onClick={() => {
+                    setShippingZoneId("pickup");
+                    setShippingCarrier("pickup");
+                    if (!line1.trim()) setLine1(STORE_PICKUP_ADDRESS.line1);
+                    if (!city.trim()) setCity(STORE_PICKUP_ADDRESS.city);
+                    if (!region.trim()) setRegion(STORE_PICKUP_ADDRESS.region);
+                  }}
+                >
+                  <strong>🏪 Recoger en tienda</strong>
+                  <span>Manizales · sin costo de envío</span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!isStorePickup}
+                  className={`gb-co-carrier-card${!isStorePickup ? " gb-co-carrier-card--active" : ""}`}
+                  onClick={() => {
+                    if (isStorePickup) {
+                      const nextZone = guessShippingZoneFromCity(city) || "nacional";
+                      setShippingZoneId(nextZone === "pickup" ? "nacional" : nextZone);
+                      setShippingCarrier(resolveShippingCarrier(city, region));
+                    }
+                  }}
+                >
+                  <strong>📦 Envío a domicilio</strong>
+                  <span>Envía o Interrapidísimo según cobertura</span>
+                </button>
+              </div>
+              {isStorePickup ? (
+                <p className="gb-co-hint" style={{ marginTop: 12 }}>
+                  Retiras tu pedido en la tienda. El envío queda en $0.
+                </p>
+              ) : (
+                <>
               <p className="gb-co-hint">
                 Envía según zona · Interrapidísimo contraentrega del flete. Los productos se pagan con Mercado Pago o Addi.
               </p>
@@ -1085,7 +1157,7 @@ export function CheckoutPageClient() {
                 </button>
               </div>
               <div className="gb-co-zone-grid" role="radiogroup" aria-label="Zona de envío">
-                {(Object.keys(SHIPPING_ZONES) as ShippingZoneId[]).map((zid) => {
+                {(["manizales", "villamaria", "nacional"] as ShippingZoneId[]).map((zid) => {
                   const z = SHIPPING_ZONES[zid];
                   const selected = shippingZoneId === zid;
                   const enviaRate = z.rateSubtotalLow;
@@ -1138,6 +1210,8 @@ export function CheckoutPageClient() {
                 </motion.div>
               )}
               <p className="gb-co-bulk-notice">{CHECKOUT_BULK_SHIPPING_NOTICE}</p>
+                </>
+              )}
               </>
               )}
             </motion.section>
@@ -1165,14 +1239,18 @@ export function CheckoutPageClient() {
               <span>
                 Envío{" "}
                 <span className="gb-co-total-zone">
-                  ({SHIPPING_ZONES[shippingZoneId].shortLabel} · {shippingCarrier === "envia" ? "Envía" : "Interrapidísimo"})
+                  {isStorePickup
+                    ? "(Recoger en tienda)"
+                    : `(${SHIPPING_ZONES[shippingZoneId].shortLabel} · ${
+                        shippingCarrier === "envia" ? "Envía" : "Interrapidísimo"
+                      })`}
                 </span>
               </span>
               <strong>
-                {shippingCarrier === "interrapidismo" ? (
-                  <span className="gb-co-price-cod">Contraentrega</span>
-                ) : shippingPaid === 0 && couponApplied ? (
+                {isStorePickup || (shippingPaid === 0 && couponApplied) ? (
                   <span className="gb-co-price-cod">Gratis</span>
+                ) : shippingCarrier === "interrapidismo" ? (
+                  <span className="gb-co-price-cod">Contraentrega</span>
                 ) : (
                   formatPrice(shippingPaid)
                 )}

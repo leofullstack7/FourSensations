@@ -1,9 +1,9 @@
 import { findEnviaExclusion, isEnviaReexpedition } from "@/lib/checkout/envia-exclusions";
 
-export const SHIPPING_ZONE_IDS = ["manizales", "villamaria", "nacional"] as const;
+export const SHIPPING_ZONE_IDS = ["pickup", "manizales", "villamaria", "nacional"] as const;
 
 export type ShippingZoneId = (typeof SHIPPING_ZONE_IDS)[number];
-export type ShippingCarrier = "envia" | "interrapidismo";
+export type ShippingCarrier = "envia" | "interrapidismo" | "pickup";
 
 export type ShippingZoneDef = {
   id: ShippingZoneId;
@@ -14,6 +14,13 @@ export type ShippingZoneDef = {
 };
 
 export const SHIPPING_ZONES: Record<ShippingZoneId, ShippingZoneDef> = {
+  pickup: {
+    id: "pickup",
+    icon: "🏪",
+    name: "Recoger en tienda",
+    shortLabel: "Recoger en tienda",
+    rateSubtotalLow: 0,
+  },
   manizales: {
     id: "manizales",
     icon: "☕",
@@ -35,6 +42,13 @@ export const SHIPPING_ZONES: Record<ShippingZoneId, ShippingZoneDef> = {
     shortLabel: "Nacional",
     rateSubtotalLow: 15_900,
   },
+};
+
+export const STORE_PICKUP_ADDRESS = {
+  line1: "Recoger en tienda Four Sensations",
+  city: "Manizales",
+  region: "Caldas",
+  country: "CO" as const,
 };
 
 export function isShippingZoneId(v: string): v is ShippingZoneId {
@@ -60,6 +74,7 @@ export function checkoutShippingCop(
   zoneId: ShippingZoneId,
   context?: { city?: string; region?: string; carrier?: ShippingCarrier },
 ): number {
+  if (zoneId === "pickup" || context?.carrier === "pickup") return 0;
   const city = context?.city ?? "";
   const region = context?.region;
   const carrier = context?.carrier ?? resolveShippingCarrier(city, region);
@@ -73,6 +88,9 @@ export function shippingZoneContextMessage(
   city?: string,
   region?: string,
 ): string | null {
+  if (zoneId === "pickup" || carrier === "pickup") {
+    return "Retiras tu pedido en nuestra tienda en Manizales. No se cobra envío.";
+  }
   if (carrier === "interrapidismo") {
     const hit = city ? findEnviaExclusion(city, region) : null;
     const place = hit ? `${hit.city} (${hit.department})` : "este destino";
