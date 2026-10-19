@@ -18,6 +18,89 @@ export type SendCouponEmailInput = {
   storeUrl: string;
 };
 
+function siteBase(storeUrl: string): string {
+  return storeUrl.replace(/\/$/, "") || "https://foursensations.onrender.com";
+}
+
+/** Correo de bienvenida — layout claro tipo referencia (rosa / lavanda). */
+export async function sendWelcomeCouponEmail(input: {
+  to: string;
+  storeUrl: string;
+  coupon: { code: string; valueLabel: string; percent: number };
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const to = input.to.trim();
+  if (!to) return { ok: false, error: "Correo vacío" };
+
+  const base = siteBase(input.storeUrl);
+  const bannerUrl = `${base}/email/bannercorreocupon.jpg`;
+  const code = escapeHtml(input.coupon.code);
+  const pct = input.coupon.percent;
+  const subject = "Girl, ¡bienvenida al club! Tu cupón te espera 🎀";
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#fdf0f5;font-family:Georgia,'Times New Roman',serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fdf0f5;padding:28px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #f0d4e0;">
+        <tr><td style="padding:22px 22px 8px;text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#9b6b9e;">
+          FOUR SENSATIONS · EL CLUB DE LOS CABELLOS PERFECTOS
+        </td></tr>
+        <tr><td style="padding:0 16px 8px;">
+          <img src="${escapeHtml(bannerUrl)}" alt="Four Sensations" width="528" style="display:block;width:100%;max-width:528px;height:auto;border-radius:12px;"/>
+        </td></tr>
+        <tr><td style="padding:18px 28px 6px;text-align:center;">
+          <p style="margin:0 0 10px;font-family:Georgia,serif;font-size:26px;line-height:1.25;color:#8b5a9e;font-weight:700;">
+            Girl, ¡bienvenida al club! 🎀
+          </p>
+          <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;color:#a07aa8;">
+            Tus próximos must-haves capilares están esperando por ti. Y como toda buena bienvenida merece algo especial, tenemos un regalito para tu primera compra.
+          </p>
+        </td></tr>
+        <tr><td style="padding:18px 28px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fce8f1;border-radius:16px;">
+            <tr><td style="padding:22px 18px;text-align:center;">
+              <p style="margin:0 0 8px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#9b6b9e;font-weight:700;">
+                UN REGALITO SOLO PARA TI
+              </p>
+              <p style="margin:0 0 4px;font-family:Georgia,serif;font-size:36px;line-height:1;color:#8b5a9e;font-weight:700;">
+                ${pct}% OFF
+              </p>
+              <p style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#a07aa8;">
+                en tu primera compra
+              </p>
+              <p style="margin:0 auto 10px;display:inline-block;padding:12px 22px;background:#fff;border-radius:999px;font-family:Arial,Helvetica,sans-serif;font-size:20px;letter-spacing:0.14em;font-weight:800;color:#8b5a9e;">
+                ${code}
+              </p>
+              <p style="margin:10px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#a07aa8;">
+                Usa este código al finalizar tu compra.
+              </p>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:8px 28px 24px;text-align:center;">
+          <a href="${escapeHtml(base)}" style="display:inline-block;padding:14px 28px;border-radius:999px;background:#9b6b9e;color:#fff;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:14px;letter-spacing:0.06em;font-weight:700;">
+            ¡QUIERO MIS MUST-HAVES! ♡
+          </a>
+          <p style="margin:18px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#b08ab0;">
+            Tu historia con FOUR SENSATIONS apenas comienza. ✨
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  const result = await sendTransactionalEmail({ to, subject, html });
+  if (!result.ok) {
+    console.error("[welcome-coupon-email]", result.error);
+    return { ok: false, error: result.error };
+  }
+  return { ok: true };
+}
+
 export async function sendCouponGiftEmail(
   input: SendCouponEmailInput,
 ): Promise<{ ok: true } | { ok: false; error: string }> {

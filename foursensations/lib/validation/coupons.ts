@@ -52,4 +52,7 @@ export const storeValidateCouponSchema = z.object({
   subtotal: z.number().int().min(0),
   shipping: z.number().int().min(0),
   customerEmail: z.string().email().max(320).optional(),
+  productIds: z.array(z.string().min(1).max(80)).max(80).optional(),
+  comboIds: z.array(z.string().min(1).max(80)).max(40).optional(),
+  isWholesale: z.boolean().optional(),
 });

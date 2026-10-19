@@ -6,7 +6,9 @@ import {
   validateCouponForCart,
   type CouponDiscountInput,
 } from "@/lib/coupons";
-import { isWelcomeCouponCode } from "@/lib/server/welcome-coupon";
+import { productHasStoreDiscount } from "@/lib/coupon-eligibility";
+import { isWelcomeCouponKind } from "@/lib/server/welcome-coupon";
+import { ensureStoreSchemaExtras } from "@/lib/server/ensure-schema";
 
 export async function findCouponByCode(code: string) {
   const normalized = normalizeCouponCode(code);
@@ -16,35 +18,82 @@ export async function findCouponByCode(code: string) {
 
 export async function quoteCouponForCart(
   code: string,
-  input: CouponDiscountInput,
+  input: CouponDiscountInput & {
+    productIds?: string[];
+    comboIds?: string[];
+    isWholesale?: boolean;
+  },
 ): Promise<
   | { ok: true; couponId: string; code: string; discount: number; shippingAfter: number; label: string; name: string }
-  | { ok: false; error: string }
+  | { ok: false; error: string; blockedProducts?: string[] }
 > {
+  await ensureStoreSchemaExtras();
   const coupon = await findCouponByCode(code);
   if (!coupon) return { ok: false, error: "Cupón no encontrado" };
 
-  const email = input.customerEmail?.trim().toLowerCase() || null;
+  if (input.isWholesale) {
+    return { ok: false, error: "Los pedidos mayorista no pueden redimir cupones." };
+  }
 
-  // Cupón inicial: solo el correo al que se envió puede redimirlo (con o sin sesión).
-  if (isWelcomeCouponCode(coupon.code)) {
+  const email = input.customerEmail?.trim().toLowerCase() || null;
+  const kind = ((coupon as { kind?: string }).kind || "CLASSIC").toUpperCase();
+
+  if (isWelcomeCouponKind(kind)) {
     if (!email) {
       return { ok: false, error: "Ingresa el correo al que te enviamos tu cupón de bienvenida." };
     }
-    const gifted = await prisma.couponEmailSend.findFirst({
-      where: {
-        couponId: coupon.id,
-        toEmail: { equals: email, mode: "insensitive" },
-        status: CouponEmailSendStatus.SENT,
-      },
-      select: { id: true },
-    });
+    const assigned = ((coupon as { assignedEmail?: string | null }).assignedEmail || "").toLowerCase();
+    const gifted =
+      assigned === email ||
+      Boolean(
+        await prisma.couponEmailSend.findFirst({
+          where: {
+            couponId: coupon.id,
+            toEmail: { equals: email, mode: "insensitive" },
+            status: CouponEmailSendStatus.SENT,
+          },
+          select: { id: true },
+        }),
+      );
     if (!gifted) {
       return {
         ok: false,
         error: "Este cupón está asociado a otro correo. Usa el mismo con el que lo reclamaste.",
       };
     }
+  }
+
+  const blockedNames: string[] = [];
+
+  const productIds = (input.productIds || []).filter(Boolean);
+  if (productIds.length > 0) {
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, name: true, price: true, originalPrice: true, discountPercent: true },
+    });
+    for (const p of products) {
+      if (productHasStoreDiscount(p)) blockedNames.push(p.name);
+    }
+  }
+
+  const comboIds = (input.comboIds || []).filter(Boolean);
+  if (comboIds.length > 0) {
+    const combos = await prisma.productCombo.findMany({
+      where: { id: { in: comboIds } },
+      select: { id: true, name: true, comboPrice: true, items: { select: { quantity: true, product: { select: { price: true } } } } },
+    });
+    for (const c of combos) {
+      const retail = c.items.reduce((s, i) => s + i.product.price * i.quantity, 0);
+      if (retail > c.comboPrice) blockedNames.push(c.name);
+    }
+  }
+
+  if (blockedNames.length > 0) {
+    return {
+      ok: false,
+      error: "Hay productos con descuento en tu carrito que no pueden usarse con cupón.",
+      blockedProducts: [...new Set(blockedNames)],
+    };
   }
 
   const [redemptionCount, userRedemptionCount, pendingOrderCount] = await Promise.all([

@@ -16,12 +16,25 @@ export type AdminCoupon = {
   status: "DRAFT" | "ACTIVE" | "PAUSED" | "EXPIRED" | "ARCHIVED";
   effectiveStatus: string;
   theme: string;
+  kind?: "WELCOME" | "CLASSIC" | string;
+  assignedEmail?: string | null;
+  assignedAt?: string | null;
+  poolState?: "activo" | "libre" | "clasico" | string;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
   redemptionCount: number;
   emailSendCount: number;
   remaining: number | null;
+};
+
+export type AdminCouponStats = {
+  total: number;
+  active: number;
+  free: number;
+  classic?: number;
+  redemptions: number;
+  emails: number;
 };
 
 export type AdminCouponDetail = {
@@ -72,9 +85,33 @@ async function parseJson<T>(res: Response): Promise<T> {
 
 export async function fetchAdminCoupons(): Promise<{
   coupons: AdminCoupon[];
-  stats: { total: number; active: number; redemptions: number; emails: number };
+  stats: AdminCouponStats;
 }> {
   const res = await adminFetch("/api/admin/coupons", { credentials: "same-origin", cache: "no-store" });
+  return parseJson(res);
+}
+
+export type CreateCouponsBatchPayload =
+  | { kind: "WELCOME"; quantity: number; value?: number }
+  | {
+      kind: "CLASSIC";
+      code: string;
+      name?: string;
+      type: "PERCENT" | "FIXED" | "FREE_SHIPPING";
+      value: number;
+      endsAt: string;
+      perUserLimit?: number | null;
+    };
+
+export async function createAdminCouponsBatch(
+  payload: CreateCouponsBatchPayload,
+): Promise<{ ok: true; kind: string; created: number; codes?: string[]; code?: string }> {
+  const res = await adminFetch("/api/admin/coupons/batch", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
   return parseJson(res);
 }
 

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import couponArt from "@/assets/foursensations/cupondescuento.webp";
 
 const STORAGE_KEY = "fs_welcome_coupon_v1";
+const SHOW_DELAY_MS = 3000;
 
 type ClaimOk = {
   ok: true;
@@ -54,16 +55,47 @@ export function WelcomeCouponModal() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<ClaimOk | null>(null);
+  const [imageReady, setImageReady] = useState(false);
+  const [delayDone, setDelayDone] = useState(false);
 
+  // Precarga la imagen de inmediato; el popup solo aparece cuando ya está lista + 3s de espera.
   useEffect(() => {
     try {
       if (window.localStorage.getItem(STORAGE_KEY)) return;
     } catch {
       /* ignore */
     }
-    const timer = window.setTimeout(() => setOpen(true), 3000);
-    return () => window.clearTimeout(timer);
+
+    let cancelled = false;
+    const src = typeof couponArt === "object" && couponArt && "src" in couponArt ? String(couponArt.src) : "";
+    if (!src) {
+      setImageReady(true);
+    } else {
+      const img = new window.Image();
+      img.decoding = "async";
+      img.onload = () => {
+        if (!cancelled) setImageReady(true);
+      };
+      img.onerror = () => {
+        if (!cancelled) setImageReady(true);
+      };
+      img.src = src;
+      if (img.complete) setImageReady(true);
+    }
+
+    const timer = window.setTimeout(() => {
+      if (!cancelled) setDelayDone(true);
+    }, SHOW_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, []);
+
+  useEffect(() => {
+    if (imageReady && delayDone) setOpen(true);
+  }, [imageReady, delayDone]);
 
   const dismiss = (permanent: boolean) => {
     setOpen(false);
@@ -134,24 +166,22 @@ export function WelcomeCouponModal() {
             src={couponArt}
             alt="Cupón de descuento Four Sensations"
             className="fs-welcome-coupon__img"
-            sizes="(max-width: 640px) 97vw, (max-width: 1100px) 86vw, 820px"
+            sizes="(max-width: 640px) 88vw, 420px"
             priority
             placeholder="blur"
             style={{ width: "100%", height: "auto", background: "transparent" }}
           />
-          <div className="fs-welcome-coupon__form-slot">
+          <div className={`fs-welcome-coupon__form-slot${done ? " is-done" : ""}`}>
             <h2 id="fs-welcome-coupon-title" className="sr-only">
               Cupón de bienvenida
             </h2>
             {done ? (
               <div className="fs-welcome-coupon__result">
-                <p>{done.message}</p>
-                {done.alreadySent ? null : (
-                  <>
-                    <strong className="fs-welcome-coupon__code">{done.code}</strong>
-                    <span>{done.valueLabel}</span>
-                  </>
-                )}
+                <p className="fs-welcome-coupon__result-msg">
+                  {done.alreadySent
+                    ? done.message
+                    : "Revisa tu correo electrónico: tu cupón ya va en camino ✨"}
+                </p>
                 <button
                   type="button"
                   className="fs-welcome-coupon__submit"

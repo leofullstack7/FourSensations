@@ -4,7 +4,8 @@ import { noStoreJson } from "@/lib/server/no-store-json";
 import { prisma } from "@/lib/prisma";
 import { couponTypeLabel } from "@/lib/coupons";
 import { couponValueLabel } from "@/lib/server/email/coupon-mail";
-import { isWelcomeCouponCode } from "@/lib/server/welcome-coupon";
+import { isWelcomeCouponKind } from "@/lib/server/welcome-coupon";
+import { ensureStoreSchemaExtras } from "@/lib/server/ensure-schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,9 @@ export async function GET() {
   }
 
   try {
-    const [sends, redemptions] = await Promise.all([
+    await ensureStoreSchemaExtras();
+
+    const [sends, assignedWelcome, redemptions] = await Promise.all([
       prisma.couponEmailSend.findMany({
         where: {
           toEmail: { equals: email, mode: "insensitive" },
@@ -27,6 +30,12 @@ export async function GET() {
         },
         include: { coupon: true },
         orderBy: { sentAt: "desc" },
+      }),
+      prisma.coupon.findMany({
+        where: {
+          kind: "WELCOME",
+          assignedEmail: { equals: email, mode: "insensitive" },
+        },
       }),
       prisma.couponRedemption.findMany({
         where: { customerEmail: { equals: email, mode: "insensitive" } },
@@ -36,27 +45,51 @@ export async function GET() {
 
     const redeemedByCoupon = new Map(redemptions.map((r) => [r.couponId, r.redeemedAt]));
     const seenCoupon = new Set<string>();
-    const coupons = [];
+    type MineCoupon = {
+      id: string;
+      code: string;
+      name: string;
+      kind: string;
+      reference: string;
+      description: string | null;
+      valueLabel: string;
+      typeLabel: string;
+      status: string;
+      redeemed: boolean;
+      sentAt: string | null;
+      endsAt: string | null;
+    };
+    const coupons: MineCoupon[] = [];
 
-    for (const send of sends) {
-      if (seenCoupon.has(send.couponId)) continue;
-      seenCoupon.add(send.couponId);
-      const c = send.coupon;
+    const pushCoupon = (
+      c: (typeof sends)[number]["coupon"],
+      sentAt: Date | null,
+    ) => {
+      if (seenCoupon.has(c.id)) return;
+      seenCoupon.add(c.id);
       const redeemedAt = redeemedByCoupon.get(c.id) ?? null;
-      const welcome = isWelcomeCouponCode(c.code);
+      const welcome = isWelcomeCouponKind(c.kind) || c.code === "BIENVENIDA";
       coupons.push({
         id: c.id,
         code: c.code,
         name: c.name,
+        kind: (c.kind || "CLASSIC").toUpperCase(),
         reference: welcome ? "Cupón inicial" : c.name,
         description: c.description,
         valueLabel: couponValueLabel(c.type, c.value),
         typeLabel: couponTypeLabel(c.type),
         status: redeemedAt ? "Ya Redimido" : "Listo para redimir",
         redeemed: Boolean(redeemedAt),
-        sentAt: send.sentAt.toISOString(),
+        sentAt: sentAt?.toISOString() ?? null,
         endsAt: c.endsAt?.toISOString() ?? null,
       });
+    };
+
+    for (const send of sends) {
+      pushCoupon(send.coupon, send.sentAt);
+    }
+    for (const c of assignedWelcome) {
+      pushCoupon(c, (c as { assignedAt?: Date | null }).assignedAt ?? c.createdAt);
     }
 
     return noStoreJson({ coupons });

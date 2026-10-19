@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createAdminCoupon,
+  createAdminCouponsBatch,
   deleteAdminCoupon,
   fetchAdminCouponDetail,
   fetchAdminCoupons,
   sendAdminCouponEmails,
   updateAdminCoupon,
   type AdminCoupon,
+  type AdminCouponStats,
   type CouponUpsertPayload,
 } from "@/lib/api/admin-coupons";
 import { formatPrice } from "@/lib/format";
@@ -123,7 +125,14 @@ export function AdminCouponsPanel({
   showToast: (msg: string, type?: string, icon?: string) => void;
 }) {
   const [coupons, setCoupons] = useState<AdminCoupon[]>([]);
-  const [stats, setStats] = useState({ total: 0, active: 0, redemptions: 0, emails: 0 });
+  const [stats, setStats] = useState<AdminCouponStats>({
+    total: 0,
+    active: 0,
+    free: 0,
+    classic: 0,
+    redemptions: 0,
+    emails: 0,
+  });
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "ACTIVE" | "PAUSED" | "DRAFT" | "EXPIRED" | "ARCHIVED">("all");
@@ -132,6 +141,16 @@ export function AdminCouponsPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
+
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchKind, setBatchKind] = useState<"WELCOME" | "CLASSIC">("WELCOME");
+  const [batchQty, setBatchQty] = useState("50");
+  const [batchCode, setBatchCode] = useState("");
+  const [batchName, setBatchName] = useState("");
+  const [batchType, setBatchType] = useState<"PERCENT" | "FIXED" | "FREE_SHIPPING">("PERCENT");
+  const [batchValue, setBatchValue] = useState("10");
+  const [batchEndsAt, setBatchEndsAt] = useState("");
+  const [batchBusy, setBatchBusy] = useState(false);
 
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Awaited<ReturnType<typeof fetchAdminCouponDetail>> | null>(null);
@@ -181,6 +200,62 @@ export function AdminCouponsPanel({
       code: `FS${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
     });
     setEditorOpen(true);
+  };
+
+  const openBatch = () => {
+    setBatchKind("WELCOME");
+    setBatchQty("50");
+    setBatchCode("");
+    setBatchName("");
+    setBatchType("PERCENT");
+    setBatchValue("10");
+    setBatchEndsAt("");
+    setBatchOpen(true);
+  };
+
+  const submitBatch = async () => {
+    setBatchBusy(true);
+    try {
+      if (batchKind === "WELCOME") {
+        const quantity = Math.max(1, Math.min(500, Number(batchQty) || 0));
+        const res = await createAdminCouponsBatch({
+          kind: "WELCOME",
+          quantity,
+          value: 10,
+        });
+        showToast(`Se crearon ${res.created} cupones iniciales libres`, "success", "🎟️");
+      } else {
+        if (!batchCode.trim()) {
+          showToast("Indica el código del cupón clásico", "danger", "⚠️");
+          return;
+        }
+        if (!batchEndsAt.trim()) {
+          showToast("Indica la fecha de caducidad", "danger", "⚠️");
+          return;
+        }
+        const ends = localInputToIso(batchEndsAt);
+        if (!ends) {
+          showToast("Fecha de caducidad inválida", "danger", "⚠️");
+          return;
+        }
+        const res = await createAdminCouponsBatch({
+          kind: "CLASSIC",
+          code: batchCode.trim().toUpperCase(),
+          name: batchName.trim() || undefined,
+          type: batchType,
+          value: batchType === "FREE_SHIPPING" ? 0 : Number(batchValue) || 0,
+          endsAt: ends,
+          perUserLimit: null,
+        });
+        showToast(`Cupón clásico ${res.code || batchCode} creado`, "success", "🎟️");
+      }
+      setBatchOpen(false);
+      await load();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "No se pudieron crear cupones", "danger", "⚠️");
+    } finally {
+      setBatchBusy(false);
+    }
   };
 
   const openEdit = (c: AdminCoupon) => {
@@ -297,22 +372,35 @@ export function AdminCouponsPanel({
           <p className="fs-cp-kicker">Atelier de cupones</p>
           <h2 className="fs-cp-title">Códigos que se sienten como un regalo</h2>
           <p className="fs-cp-sub">
-            Crea, envía por correo y sigue en vivo quién canjea cada código. Porcentaje, monto fijo o envío gratis.
+            Bolsa de cupones iniciales (libres → activos al reclamar) y cupones clásicos compartidos con fecha de
+            caducidad.
           </p>
         </div>
-        <button type="button" className="fs-cp-btn fs-cp-btn--primary" onClick={openCreate}>
-          + Nuevo cupón
-        </button>
+        <div className="fs-cp-hero__actions">
+          <button type="button" className="fs-cp-btn fs-cp-btn--primary" onClick={openBatch}>
+            Crear cupones
+          </button>
+          <button type="button" className="fs-cp-btn" onClick={openCreate}>
+            Cupón avanzado
+          </button>
+        </div>
       </header>
 
       <div className="fs-cp-stats">
         <div className="fs-cp-stat">
-          <span>Cupones</span>
-          <strong>{stats.total}</strong>
+          <span>Cupones activos</span>
+          <strong>{stats.active}</strong>
+          <em>Iniciales ya asociados a un cliente</em>
         </div>
         <div className="fs-cp-stat">
-          <span>Activos</span>
-          <strong>{stats.active}</strong>
+          <span>Cupones libres</span>
+          <strong>{stats.free ?? 0}</strong>
+          <em>Iniciales listos para asignar</em>
+        </div>
+        <div className="fs-cp-stat">
+          <span>Clásicos</span>
+          <strong>{stats.classic ?? 0}</strong>
+          <em>Códigos compartidos</em>
         </div>
         <div className="fs-cp-stat">
           <span>Canjes</span>
@@ -361,10 +449,19 @@ export function AdminCouponsPanel({
               <div className="fs-cp-card__shine" aria-hidden />
               <div className="fs-cp-card__top">
                 <span className={statusClass(c.effectiveStatus)}>{c.effectiveStatus}</span>
-                <span className="fs-cp-card__type">{c.typeLabel}</span>
+                <span className="fs-cp-card__type">
+                  {c.kind === "WELCOME"
+                    ? c.poolState === "libre"
+                      ? "Inicial · libre"
+                      : "Inicial · activo"
+                    : c.typeLabel}
+                </span>
               </div>
               <h3 className="fs-cp-card__code">{c.code}</h3>
-              <p className="fs-cp-card__name">{c.name}</p>
+              <p className="fs-cp-card__name">
+                {c.name}
+                {c.assignedEmail ? ` · ${c.assignedEmail}` : ""}
+              </p>
               <p className="fs-cp-card__value">
                 {c.type === "PERCENT"
                   ? `${c.value}%`
@@ -400,6 +497,121 @@ export function AdminCouponsPanel({
           ))}
         </div>
       )}
+
+      {batchOpen ? (
+        <div className="fs-cp-modal" role="dialog" aria-modal="true">
+          <div className="fs-cp-modal__panel">
+            <div className="fs-cp-modal__head">
+              <div>
+                <p className="fs-cp-kicker">Bolsa de cupones</p>
+                <h3>Crear cupones</h3>
+              </div>
+              <button type="button" className="fs-cp-icon-btn" onClick={() => setBatchOpen(false)} aria-label="Cerrar">
+                ×
+              </button>
+            </div>
+
+            <div className="fs-cp-batch-kinds" role="group" aria-label="Tipo de cupón">
+              <button
+                type="button"
+                className={`fs-cp-chip${batchKind === "WELCOME" ? " is-on" : ""}`}
+                onClick={() => setBatchKind("WELCOME")}
+              >
+                Iniciales (F1025S)
+              </button>
+              <button
+                type="button"
+                className={`fs-cp-chip${batchKind === "CLASSIC" ? " is-on" : ""}`}
+                onClick={() => setBatchKind("CLASSIC")}
+              >
+                Clásicos (ej. DIASINIVA)
+              </button>
+            </div>
+
+            {batchKind === "WELCOME" ? (
+              <div className="fs-cp-form fs-cp-form--single">
+                <p className="fs-cp-batch-hint">
+                  Genera códigos únicos tipo <strong>F1025S</strong> al 10% OFF. Quedan en la bolsa de{" "}
+                  <strong>libres</strong> hasta que una clienta los reclame desde el popup.
+                </p>
+                <label>
+                  Cantidad a crear
+                  <input
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={batchQty}
+                    onChange={(e) => setBatchQty(e.target.value)}
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="fs-cp-form">
+                <p className="fs-cp-batch-hint fs-cp-span2">
+                  Un mismo código para varias clientas. Pueden usarlo las veces que quieran hasta la caducidad.
+                </p>
+                <label>
+                  Código
+                  <input
+                    value={batchCode}
+                    onChange={(e) => setBatchCode(e.target.value.toUpperCase())}
+                    placeholder="DIASINIVA"
+                  />
+                </label>
+                <label>
+                  Nombre interno
+                  <input value={batchName} onChange={(e) => setBatchName(e.target.value)} placeholder="Día sin IVA" />
+                </label>
+                <label>
+                  Tipo
+                  <select
+                    value={batchType}
+                    onChange={(e) => setBatchType(e.target.value as typeof batchType)}
+                  >
+                    <option value="PERCENT">Porcentaje</option>
+                    <option value="FIXED">Monto fijo (COP)</option>
+                    <option value="FREE_SHIPPING">Envío gratis</option>
+                  </select>
+                </label>
+                {batchType !== "FREE_SHIPPING" ? (
+                  <label>
+                    Valor
+                    <input
+                      type="number"
+                      value={batchValue}
+                      onChange={(e) => setBatchValue(e.target.value)}
+                    />
+                  </label>
+                ) : (
+                  <div />
+                )}
+                <label className="fs-cp-span2">
+                  Caducidad
+                  <input
+                    type="datetime-local"
+                    value={batchEndsAt}
+                    onChange={(e) => setBatchEndsAt(e.target.value)}
+                  />
+                </label>
+              </div>
+            )}
+
+            <div className="fs-cp-modal__foot">
+              <button type="button" className="fs-cp-btn" onClick={() => setBatchOpen(false)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="fs-cp-btn fs-cp-btn--primary"
+                disabled={batchBusy}
+                onClick={() => void submitBatch()}
+              >
+                {batchBusy ? "Creando…" : "Crear cupones"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {editorOpen ? (
         <div className="fs-cp-modal" role="dialog" aria-modal="true">

@@ -256,15 +256,29 @@ export async function createPendingOrderFromCheckout(
       let couponId: string | null = null;
       let couponCode: string | null = null;
 
+      if (wholesaleCheckout && input.couponCode?.trim()) {
+        throw new Error("Los pedidos mayorista no pueden redimir cupones.");
+      }
+
       if (!wholesaleCheckout && input.couponCode?.trim()) {
+        const productIds = lines.map((l) => l.productId).filter((id): id is string => Boolean(id));
+        const comboIds = input.items.map((l) => l.comboId).filter((id): id is string => Boolean(id));
         const quoted = await quoteCouponForCart(input.couponCode, {
           subtotal,
           shipping: shippingBase,
           customerEmail: input.customerEmail,
+          productIds,
+          comboIds,
+          isWholesale: false,
         });
         if (!quoted.ok) {
-          throw new Error(quoted.error);
+          const detail =
+            "blockedProducts" in quoted && quoted.blockedProducts?.length
+              ? ` ${quoted.blockedProducts.join(", ")}.`
+              : "";
+          throw new Error(`${quoted.error}${detail}`);
         }
+        // Descuento solo sobre subtotal; el envío permanece intacto (salvo FREE_SHIPPING).
         discount = quoted.discount;
         shipping = quoted.shippingAfter;
         couponId = quoted.couponId;

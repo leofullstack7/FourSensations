@@ -1056,13 +1056,20 @@
 
 /* —— Cupones atelier (admin) —— */
 .fs-cp { --fs-cp-ink:#2a1c1a; --fs-cp-muted:#7a6460; --fs-cp-line:rgba(90,40,50,.12); color:var(--fs-cp-ink); }
-.fs-cp-hero { position:relative; display:flex; gap:20px; align-items:flex-end; justify-content:space-between; padding:28px 26px; border-radius:24px; overflow:hidden; background:linear-gradient(135deg,#1a0f18 0%,#4a1d36 45%,#8a3d5a 100%); color:#fff; margin-bottom:18px; }
-.fs-cp-hero__glow { position:absolute; inset:-30% auto auto 40%; width:420px; height:420px; background:radial-gradient(circle,rgba(255,180,200,.35),transparent 65%); pointer-events:none; }
+.fs-cp-hero { position:relative; display:flex; gap:20px; align-items:flex-end; justify-content:space-between; padding:28px 26px; border-radius:24px; overflow:hidden; background:linear-gradient(135deg,#fff7f9 0%,#f8e4ec 42%,#f0c9d8 100%); color:#4a2a38; margin-bottom:18px; border:1px solid rgba(200,120,140,.22); }
+.fs-cp-hero__glow { position:absolute; inset:-30% auto auto 40%; width:420px; height:420px; background:radial-gradient(circle,rgba(232,160,180,.45),transparent 65%); pointer-events:none; }
+.fs-cp-hero .fs-cp-kicker { color:#c4547a; }
+.fs-cp-hero .fs-cp-title { color:#4a2a38; }
+.fs-cp-hero .fs-cp-sub { color:#7a5564; }
 .fs-cp-hero__copy { position:relative; z-index:1; max-width:640px; }
+.fs-cp-hero__actions { position:relative; z-index:1; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+.fs-cp-batch-kinds { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 14px; }
+.fs-cp-batch-hint { margin:0 0 12px; font-size:13px; line-height:1.5; color:#7a5564; }
+.fs-cp-stat em { display:block; margin-top:4px; font-size:11px; font-style:normal; color:var(--fs-cp-muted); line-height:1.35; }
 .fs-cp-kicker { margin:0 0 6px; font-size:11px; letter-spacing:.2em; text-transform:uppercase; opacity:.75; }
 .fs-cp-title { margin:0 0 8px; font-size:clamp(22px,3vw,32px); line-height:1.15; font-weight:700; }
 .fs-cp-sub { margin:0; max-width:52ch; opacity:.86; line-height:1.55; font-size:14px; }
-.fs-cp-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+.fs-cp-stats { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
 .fs-cp-stat { padding:14px 16px; border-radius:16px; background:linear-gradient(180deg,#fffdfb,#f8eef2); border:1px solid var(--fs-cp-line); }
 .fs-cp-stat span { display:block; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--fs-cp-muted); }
 .fs-cp-stat strong { font-size:26px; }
@@ -1096,7 +1103,7 @@
 .fs-cp-card__actions .is-danger { background:rgba(0,0,0,.28); }
 .fs-cp-btn { border:1px solid var(--fs-cp-line); background:#fff; border-radius:999px; padding:10px 16px; cursor:pointer; font:inherit; }
 .fs-cp-btn--primary { border:0; background:linear-gradient(135deg,#c4547a,#8a3d5a); color:#fff; box-shadow:0 10px 24px rgba(160,50,90,.28); }
-.fs-cp-hero .fs-cp-btn--primary { position:relative; z-index:1; background:#fff; color:#4a1d36; }
+.fs-cp-hero .fs-cp-btn--primary { position:relative; z-index:1; background:#c4547a; color:#fff; }
 .fs-cp-empty,.fs-cp-empty-card { text-align:center; color:var(--fs-cp-muted); padding:28px; }
 .fs-cp-empty-card { border:1px dashed var(--fs-cp-line); border-radius:18px; background:#fffafb; }
 .fs-cp-modal { position:fixed; inset:0; z-index:80000; background:rgba(20,10,16,.55); display:grid; place-items:center; padding:18px; }

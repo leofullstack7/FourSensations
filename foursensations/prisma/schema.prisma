@@ -498,6 +498,11 @@ model Coupon {
   status       CouponStatus @default(DRAFT)
   /// Tema visual del ticket/email: rose | gold | violet | emerald | midnight
   theme        String       @default("rose")
+  /// WELCOME = bolsa de cupones iniciales únicos · CLASSIC = código compartido.
+  kind         String       @default("CLASSIC")
+  /// Correo al que se asignó (solo WELCOME). Null = libre en la bolsa.
+  assignedEmail String?
+  assignedAt   DateTime?
   createdBy    String?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
@@ -508,6 +513,8 @@ model Coupon {
   @@index([status])
   @@index([endsAt])
   @@index([createdAt])
+  @@index([kind])
+  @@index([assignedEmail])
 }
 
 model CouponRedemption {

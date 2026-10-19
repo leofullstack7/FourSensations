@@ -22,10 +22,19 @@ export async function POST(req: Request) {
     subtotal: parsed.data.subtotal,
     shipping: parsed.data.shipping,
     customerEmail: parsed.data.customerEmail,
+    productIds: parsed.data.productIds,
+    comboIds: parsed.data.comboIds,
+    isWholesale: parsed.data.isWholesale,
   });
 
   if (!result.ok) {
-    return noStoreJson({ error: result.error }, { status: 400 });
+    return noStoreJson(
+      {
+        error: result.error,
+        blockedProducts: "blockedProducts" in result ? result.blockedProducts : undefined,
+      },
+      { status: 400 },
+    );
   }
 
   return noStoreJson({
@@ -35,5 +44,7 @@ export async function POST(req: Request) {
     label: result.label,
     discount: result.discount,
     shippingAfter: result.shippingAfter,
+    /** El descuento aplica solo al subtotal del pedido; el envío queda intacto. */
+    appliesTo: "subtotal",
   });
 }

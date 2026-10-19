@@ -4,6 +4,7 @@ import { noStoreJson } from "@/lib/server/no-store-json";
 import { prisma } from "@/lib/prisma";
 import { normalizeCouponCode, couponTypeLabel, effectiveCouponStatus } from "@/lib/coupons";
 import { couponUpsertSchema } from "@/lib/validation/coupons";
+import { ensureStoreSchemaExtras } from "@/lib/server/ensure-schema";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -11,9 +12,14 @@ export const revalidate = 0;
 function serializeCoupon(
   c: Awaited<ReturnType<typeof prisma.coupon.findMany>>[number] & {
     _count: { redemptions: number; emailSends: number };
+    kind?: string | null;
+    assignedEmail?: string | null;
+    assignedAt?: Date | null;
   },
 ) {
   const status = effectiveCouponStatus(c);
+  const kind = (c.kind || "CLASSIC").toUpperCase();
+  const assigned = Boolean(c.assignedEmail);
   return {
     id: c.id,
     code: c.code,
@@ -31,6 +37,10 @@ function serializeCoupon(
     status: c.status,
     effectiveStatus: status,
     theme: c.theme,
+    kind,
+    assignedEmail: c.assignedEmail ?? null,
+    assignedAt: c.assignedAt?.toISOString() ?? null,
+    poolState: kind === "WELCOME" ? (assigned ? "activo" : "libre") : "clasico",
     createdBy: c.createdBy,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
@@ -45,14 +55,22 @@ export async function GET() {
   const denied = await requireAdminApi();
   if (denied) return denied;
 
+  await ensureStoreSchemaExtras();
+
   const rows = await prisma.coupon.findMany({
     orderBy: { createdAt: "desc" },
     include: { _count: { select: { redemptions: true, emailSends: true } } },
   });
 
+  const welcome = rows.filter((r) => ((r as { kind?: string }).kind || "CLASSIC").toUpperCase() === "WELCOME");
+  const free = welcome.filter((r) => !(r as { assignedEmail?: string | null }).assignedEmail).length;
+  const associated = welcome.filter((r) => Boolean((r as { assignedEmail?: string | null }).assignedEmail)).length;
+
   const stats = {
     total: rows.length,
-    active: rows.filter((r) => effectiveCouponStatus(r) === CouponStatus.ACTIVE).length,
+    active: associated,
+    free,
+    classic: rows.filter((r) => ((r as { kind?: string }).kind || "CLASSIC").toUpperCase() === "CLASSIC").length,
     redemptions: rows.reduce((s, r) => s + r._count.redemptions, 0),
     emails: rows.reduce((s, r) => s + r._count.emailSends, 0),
   };
@@ -87,6 +105,7 @@ export async function POST(req: Request) {
     return noStoreJson({ error: `Ya existe un cupón con el código ${code}` }, { status: 409 });
   }
 
+  await ensureStoreSchemaExtras();
   const coupon = await prisma.coupon.create({
     data: {
       code,
@@ -102,10 +121,19 @@ export async function POST(req: Request) {
       perUserLimit: data.perUserLimit ?? null,
       status: data.status as CouponStatus,
       theme: data.theme,
+      kind: "CLASSIC",
       createdBy: actor,
     },
     include: { _count: { select: { redemptions: true, emailSends: true } } },
   });
 
-  return noStoreJson({ coupon: serializeCoupon(coupon) }, { status: 201 });
+  return noStoreJson(
+    {
+      coupon: serializeCoupon({
+        ...coupon,
+        _count: coupon._count,
+      }),
+    },
+    { status: 201 },
+  );
 }

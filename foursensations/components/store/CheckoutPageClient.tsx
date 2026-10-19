@@ -134,6 +134,7 @@ export function CheckoutPageClient() {
   } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponBusy, setCouponBusy] = useState(false);
+  const [couponBlockModal, setCouponBlockModal] = useState<string[] | null>(null);
 
   const [phase, setPhase] = useState<PayPhase>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -287,9 +288,28 @@ export function CheckoutPageClient() {
       setCouponError("Escribe un código");
       return;
     }
+    if (buyingAsWholesale) {
+      setCouponError("Los pedidos mayorista no pueden redimir cupones.");
+      return;
+    }
+    const localBlocked = cart
+      .filter((line) => {
+        if (line.comboId && line.originalPrice != null && line.originalPrice > line.price) return true;
+        if (line.discountPercent != null && line.discountPercent > 0) return true;
+        if (line.originalPrice != null && line.originalPrice > line.price) return true;
+        return false;
+      })
+      .map((line) => line.name);
+    if (localBlocked.length > 0) {
+      setCouponApplied(null);
+      setCouponBlockModal([...new Set(localBlocked)]);
+      return;
+    }
     setCouponBusy(true);
     setCouponError(null);
     try {
+      const productIds = cart.filter((x) => !x.comboId).map((x) => x.id);
+      const comboIds = cart.map((x) => x.comboId).filter((id): id is string => Boolean(id));
       const res = await fetch("/api/store/coupons/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -297,6 +317,9 @@ export function CheckoutPageClient() {
           code,
           subtotal,
           shipping: shippingAmount,
+          productIds,
+          comboIds,
+          isWholesale: false,
           ...(email.trim() ? { customerEmail: email.trim() } : {}),
         }),
       });
@@ -306,10 +329,15 @@ export function CheckoutPageClient() {
         label?: string;
         discount?: number;
         shippingAfter?: number;
+        blockedProducts?: string[];
       };
       if (!res.ok || data.discount == null || !data.code) {
         setCouponApplied(null);
-        setCouponError(data.error || "Cupón no válido");
+        if (data.blockedProducts?.length) {
+          setCouponBlockModal(data.blockedProducts);
+        } else {
+          setCouponError(data.error || "Cupón no válido");
+        }
         return;
       }
       setCouponApplied({
@@ -323,7 +351,7 @@ export function CheckoutPageClient() {
     } finally {
       setCouponBusy(false);
     }
-  }, [couponInput, email, shippingAmount, subtotal]);
+  }, [buyingAsWholesale, cart, couponInput, email, shippingAmount, subtotal]);
 
   const changeQty = (id: string, delta: number) => {
     const item = cart.find((i) => i.id === id);
@@ -1317,7 +1345,7 @@ export function CheckoutPageClient() {
             )}
             {couponDiscount > 0 ? (
               <div className="gb-co-total-row">
-                <span>Descuento cupón</span>
+                <span>Descuento cupón <em className="gb-co-coupon-hint">(sobre productos, sin envío)</em></span>
                 <strong>−{formatPrice(couponDiscount)}</strong>
               </div>
             ) : null}
@@ -1446,6 +1474,32 @@ export function CheckoutPageClient() {
           <div className="gb-co-toast-modal__card">
             <strong>{infoModal}</strong>
             {errorMsg ? <p>{errorMsg}</p> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {couponBlockModal ? (
+        <div
+          className="gb-co-coupon-block"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="gb-co-coupon-block-title"
+          onClick={() => setCouponBlockModal(null)}
+        >
+          <div className="gb-co-coupon-block__card" onClick={(e) => e.stopPropagation()}>
+            <p className="gb-co-coupon-block__kicker">Cupón no disponible</p>
+            <h3 id="gb-co-coupon-block-title">Ya tienen descuento aplicado</h3>
+            <p className="gb-co-coupon-block__lead">
+              Estos productos o kits ya incluyen un precio con descuento y no pueden comprarse con cupón:
+            </p>
+            <ul className="gb-co-coupon-block__list">
+              {couponBlockModal.map((name) => (
+                <li key={name}>{name}</li>
+              ))}
+            </ul>
+            <button type="button" className="gb-co-coupon-block__btn" onClick={() => setCouponBlockModal(null)}>
+              Entendido
+            </button>
           </div>
         </div>
       ) : null}
