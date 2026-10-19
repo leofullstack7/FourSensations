@@ -11,6 +11,15 @@ import { describeEmailProvider, sendTransactionalEmail } from "@/lib/server/emai
 
 export const dynamic = "force-dynamic";
 
+/** Admin JWT o Bearer AUTH_SECRET (bootstrap desde CI/local). */
+async function requireEmailAdmin(req: NextRequest) {
+  const auth = req.headers.get("authorization") || "";
+  const token = auth.replace(/^Bearer\s+/i, "").trim();
+  const expected = process.env.AUTH_SECRET?.trim();
+  if (expected && token && token === expected) return null;
+  return requireAdminApi();
+}
+
 function publicEmailConfig(cfg: SiteEmailConfig | null) {
   return {
     hasBrevoApiKey: Boolean(cfg?.brevoApiKey),
@@ -24,8 +33,8 @@ function publicEmailConfig(cfg: SiteEmailConfig | null) {
   };
 }
 
-export async function GET() {
-  const denied = await requireAdminApi();
+export async function GET(req: NextRequest) {
+  const denied = await requireEmailAdmin(req);
   if (denied) return denied;
 
   const runtime = await getEmailRuntimeConfig(true);
@@ -47,7 +56,7 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
-  const denied = await requireAdminApi();
+  const denied = await requireEmailAdmin(req);
   if (denied) return denied;
 
   let body: unknown;
@@ -92,7 +101,7 @@ export async function PUT(req: NextRequest) {
 
 /** Prueba de envío (admin). Body: { to?: string } */
 export async function POST(req: NextRequest) {
-  const denied = await requireAdminApi();
+  const denied = await requireEmailAdmin(req);
   if (denied) return denied;
 
   let to = "";

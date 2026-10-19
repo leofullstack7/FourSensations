@@ -47,6 +47,16 @@ export async function middleware(req: NextRequest) {
     (token as { role?: string }).role === "ADMIN";
 
   if (path.startsWith("/api/admin")) {
+    // Bootstrap correos: Bearer AUTH_SECRET (mismo secret del servidor)
+    const authHeader = req.headers.get("authorization") || "";
+    const bearer = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const emailBootstrap =
+      path === "/api/admin/email-config" &&
+      !!secret &&
+      !!bearer &&
+      bearer === secret;
+    if (emailBootstrap) return NextResponse.next();
+
     if (!token) return adminJsonError(401, "No autorizado");
     if (!isAdmin) return adminJsonError(403, "Prohibido");
     return NextResponse.next();

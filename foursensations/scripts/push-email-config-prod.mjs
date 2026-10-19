@@ -41,19 +41,55 @@ const payload = {
   sendTestTo: env.RESEND_NOTIFY_EMAIL || env.GMAIL_USER || "pedidosfoursensations@gmail.com",
 };
 
-console.log("POST", `${base}/api/setup/email`);
-console.log("notify=", payload.notifyEmail, "hasBrevo=", Boolean(payload.brevoApiKey));
+const endpoints = [
+  `${base}/api/admin/email-config`,
+  `${base}/api/email-setup`,
+  `${base}/api/setup/email`,
+];
 
-const res = await fetch(`${base}/api/setup/email`, {
-  method: "POST",
-  headers: {
-    "content-type": "application/json",
-    authorization: `Bearer ${secret}`,
-  },
-  body: JSON.stringify(payload),
-});
+let ok = false;
+for (const url of endpoints) {
+  const method = url.includes("email-config") ? "PUT" : "POST";
+  console.log(method, url);
+  const body =
+    method === "PUT"
+      ? {
+          brevoApiKey: payload.brevoApiKey,
+          smtpUser: payload.smtpUser,
+          smtpPass: payload.smtpPass,
+          smtpHost: payload.smtpHost,
+          emailFrom: payload.emailFrom,
+          emailFromName: payload.emailFromName,
+          notifyEmail: payload.notifyEmail,
+        }
+      : payload;
 
-const text = await res.text();
-console.log("status=", res.status);
-console.log(text.slice(0, 800));
-process.exit(res.ok ? 0 : 1);
+  const res = await fetch(url, {
+    method,
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${secret}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  console.log("status=", res.status);
+  console.log(text.slice(0, 500));
+  if (res.ok) {
+    ok = true;
+    if (method === "PUT") {
+      const test = await fetch(`${base}/api/admin/email-config`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${secret}`,
+        },
+        body: JSON.stringify({ to: payload.sendTestTo }),
+      });
+      console.log("test status=", test.status, (await test.text()).slice(0, 400));
+    }
+    break;
+  }
+}
+
+process.exit(ok ? 0 : 1);
