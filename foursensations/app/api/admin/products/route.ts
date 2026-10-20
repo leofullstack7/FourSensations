@@ -18,6 +18,7 @@ import {
   adminProductCreateSchema,
   formatZodError,
 } from "@/lib/validation/admin-product";
+import { ensureStoreSchemaExtras } from "@/lib/server/ensure-schema";
 
 /** Siempre datos frescos de la DB (evita caché de Route Handler / CDN con lista vacía del build). */
 export const dynamic = "force-dynamic";
@@ -75,6 +76,7 @@ export async function POST(req: NextRequest) {
   const denied = await requireAdminApi();
   if (denied) return denied;
   try {
+    await ensureStoreSchemaExtras();
     let json: unknown;
     try {
       json = await req.json();
@@ -148,6 +150,10 @@ export async function POST(req: NextRequest) {
         rating: data.rating,
         reviews: data.reviews,
         badge: data.badge ?? null,
+        badgeMessage:
+          data.badge === "presale"
+            ? data.badgeMessage?.trim() || null
+            : null,
         emoji: data.emoji ?? null,
         imageUrl: mainUrl,
         externalRef,

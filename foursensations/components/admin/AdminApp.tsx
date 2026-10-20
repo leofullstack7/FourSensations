@@ -3083,6 +3083,7 @@ function AdminAddProductForm({
   const [emoji, setEmoji] = useState("");
   const [description, setDescription] = useState("");
   const [badge, setBadge] = useState<string>("");
+  const [badgeMessage, setBadgeMessage] = useState("");
   const [mainImageUrl, setMainImageUrl] = useState<string | null>(null);
   const [galleryUrls, setGalleryUrls] = useState<string[]>([]);
   const [uploadingMain, setUploadingMain] = useState(false);
@@ -3327,14 +3328,43 @@ function AdminAddProductForm({
               ["hot", "🔥 Hot"],
               ["sale", "Oferta"],
               ["best", "⭐ Top"],
+              ["presale", "Preventa"],
               ["", "Sin badge"],
             ].map(([v, l]) => (
               <label key={v || "none"} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13 }}>
-                <input type="radio" name="new-badge" value={v} checked={badge === v} onChange={() => setBadge(v)} />
+                <input
+                  type="radio"
+                  name="new-badge"
+                  value={v}
+                  checked={badge === v}
+                  onChange={() => {
+                    setBadge(v);
+                    if (v !== "presale") setBadgeMessage("");
+                  }}
+                />
                 {l}
               </label>
             ))}
           </div>
+          {badge === "presale" ? (
+            <div style={{ marginTop: 10 }}>
+              <label className="form-label" htmlFor="new-badge-message">
+                Mensaje de preventa
+              </label>
+              <input
+                id="new-badge-message"
+                type="text"
+                className="form-input"
+                value={badgeMessage}
+                maxLength={160}
+                placeholder="Ej. Envíos a partir del 15 de mayo"
+                onChange={(e) => setBadgeMessage(e.target.value)}
+              />
+              <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--text-muted)" }}>
+                Se muestra justo debajo de la burbuja Preventa en la tarjeta del producto.
+              </p>
+            </div>
+          ) : null}
         </div>
       </div>
       <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
@@ -3513,6 +3543,7 @@ function AdminAddProductForm({
                   rating: 5,
                   reviews: 0,
                   badge: badge || null,
+                  badgeMessage: badge === "presale" ? badgeMessage.trim() || null : null,
                   description: desc,
                   emoji: emoji || "💜",
                   imageUrl: mainImageUrl,
@@ -3540,6 +3571,7 @@ function AdminAddProductForm({
                     rating: 5,
                     reviews: 0,
                     badge: badge || null,
+                    badgeMessage: badge === "presale" ? badgeMessage.trim() || null : null,
                     description: desc,
                     emoji: emoji || "💜",
                     imageUrl: mainImageUrl,
@@ -9855,6 +9887,7 @@ function AdminProductDetailModal({
   const [editDescription, setEditDescription] = useState("");
   const [editFicha, setEditFicha] = useState<ProductFichaCopy>(() => seedProductFicha("", "", ""));
   const [editBadge, setEditBadge] = useState("");
+  const [editBadgeMessage, setEditBadgeMessage] = useState("");
   const [editActive, setEditActive] = useState(true);
   const [editFeatured, setEditFeatured] = useState(false);
   const [descriptionGenerating, setDescriptionGenerating] = useState(false);
@@ -9874,6 +9907,7 @@ function AdminProductDetailModal({
     setEditDescription(seeded.description);
     setEditFicha(seeded);
     setEditBadge(p.badge || "");
+    setEditBadgeMessage(p.badgeMessage || "");
     setEditActive(p.active);
     setEditFeatured(p.featuredInHome === true);
   }, []);
@@ -10296,7 +10330,10 @@ function AdminProductDetailModal({
                     <strong>Subcategoría:</strong> {product.subcategory || "—"}
                   </div>
                   <div className="admin-card" style={{ padding: 12 }}>
-                    <strong>Badge:</strong> {product.badge || "—"}
+                    <strong>Badge:</strong>{" "}
+                    {product.badge === "presale"
+                      ? `Preventa${product.badgeMessage ? ` — ${product.badgeMessage}` : ""}`
+                      : product.badge || "—"}
                   </div>
                   <div className="admin-card" style={{ padding: 12 }}>
                     <strong>Etiqueta menú:</strong> {productMenuTag ?? "—"}
@@ -10584,6 +10621,7 @@ function AdminProductDetailModal({
                       ["hot", "🔥 Hot"],
                       ["sale", "Oferta"],
                       ["best", "⭐ Top"],
+                      ["presale", "Preventa"],
                       ["", "Sin badge"],
                     ].map(([v, l]) => (
                       <label key={v || "none"} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13 }}>
@@ -10592,12 +10630,35 @@ function AdminProductDetailModal({
                           name={`detail-badge-${product.id}`}
                           checked={editBadge === v}
                           disabled={editBusy}
-                          onChange={() => setEditBadge(v)}
+                          onChange={() => {
+                            setEditBadge(v);
+                            if (v !== "presale") setEditBadgeMessage("");
+                          }}
                         />
                         {l}
                       </label>
                     ))}
                   </div>
+                  {editBadge === "presale" ? (
+                    <div style={{ marginTop: 10 }}>
+                      <label className="form-label" htmlFor={`edit-badge-message-${product.id}`}>
+                        Mensaje de preventa
+                      </label>
+                      <input
+                        id={`edit-badge-message-${product.id}`}
+                        type="text"
+                        className="form-input"
+                        value={editBadgeMessage}
+                        disabled={editBusy}
+                        maxLength={160}
+                        placeholder="Ej. Envíos a partir del 15 de mayo"
+                        onChange={(e) => setEditBadgeMessage(e.target.value)}
+                      />
+                      <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--text-muted)" }}>
+                        Se muestra justo debajo de la burbuja Preventa en la tarjeta del producto.
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="form-group full-width">
                   <label className="form-label">Descripción</label>
@@ -10846,6 +10907,7 @@ function AdminProductDetailModal({
                         emoji: editEmoji.trim() || null,
                         description: editDescription.trim(),
                         badge: editBadge || null,
+                        badgeMessage: editBadge === "presale" ? editBadgeMessage.trim() || null : null,
                         active: editActive,
                         featuredInHome: editFeatured,
                         storefrontCopy: {

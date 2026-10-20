@@ -42,6 +42,7 @@ type ProductRow = {
   rating: number;
   reviews: number;
   badge: string | null;
+  badgeMessage?: string | null;
   description: string;
   emoji: string | null;
   imageUrl: string | null;
@@ -95,6 +96,7 @@ function rowToStore(p: ProductRow, galleryRows: { url: string }[] = []): StorePr
     rating: p.rating,
     reviews: p.reviews,
     badge: (p.badge as StoreProduct["badge"]) ?? null,
+    badgeMessage: p.badgeMessage?.trim() || null,
     description: p.description,
     img: primary,
     imgHover: hover || null,
@@ -116,6 +118,8 @@ function rowToStore(p: ProductRow, galleryRows: { url: string }[] = []): StorePr
 /** Catálogo tienda pública: una query con imágenes; caché Next 5 min (no aplica a admin). */
 const getCachedStorefrontProducts = unstable_cache(
   async (): Promise<StoreProduct[]> => {
+    const { ensureStoreSchemaExtras } = await import("@/lib/server/ensure-schema");
+    await ensureStoreSchemaExtras();
     const rows = await prisma.product.findMany({
       where: { active: true },
       orderBy: [{ featuredInHome: "desc" }, { name: "asc" }],
@@ -125,7 +129,7 @@ const getCachedStorefrontProducts = unstable_cache(
     const mapped = rows.map((r) => rowToStore(r, r.images));
     return enrichStorefrontDisplayProducts(mapped, mapped);
   },
-  ["storefront-products-v8-variant-colors"],
+  ["storefront-products-v9-presale-badge"],
   { revalidate: 300, tags: [STOREFRONT_PRODUCTS_CACHE_TAG] }
 );
 

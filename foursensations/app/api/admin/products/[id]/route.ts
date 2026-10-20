@@ -23,6 +23,7 @@ import {
   adminProductUpdateSchema,
   formatZodError,
 } from "@/lib/validation/admin-product";
+import { ensureStoreSchemaExtras } from "@/lib/server/ensure-schema";
 
 type RouteCtx = { params: { id: string } };
 
@@ -51,6 +52,7 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
   if (denied) return denied;
   const { id } = params;
   try {
+    await ensureStoreSchemaExtras();
     const existing = await prisma.product.findUnique({
       where: { id },
       include: { images: true },
@@ -159,6 +161,17 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
         ...(d.rating !== undefined && { rating: d.rating }),
         ...(d.reviews !== undefined && { reviews: d.reviews }),
         ...(d.badge !== undefined && { badge: d.badge }),
+        ...(() => {
+          const nextBadge = d.badge !== undefined ? d.badge : existing.badge;
+          const isPresale = nextBadge === "presale";
+          if (d.badgeMessage !== undefined) {
+            return { badgeMessage: isPresale ? (d.badgeMessage?.trim() || null) : null };
+          }
+          if (d.badge !== undefined && !isPresale) {
+            return { badgeMessage: null };
+          }
+          return {};
+        })(),
         ...(d.emoji !== undefined && { emoji: d.emoji }),
         ...(d.imageUrl !== undefined && { imageUrl: d.imageUrl }),
         ...(d.externalRef !== undefined && { externalRef: nextExternalRef }),

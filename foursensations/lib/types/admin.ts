@@ -44,6 +44,8 @@ export type AdminProduct = {
   rating: number;
   reviews: number;
   badge: string | null;
+  /** Texto bajo la burbuja Preventa (u otras). */
+  badgeMessage?: string | null;
   description: string;
   emoji: string;
   active: boolean;

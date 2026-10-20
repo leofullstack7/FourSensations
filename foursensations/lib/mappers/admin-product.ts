@@ -29,6 +29,7 @@ export function prismaProductToAdmin(p: ProductWithImages): AdminProduct {
     rating: p.rating,
     reviews: p.reviews,
     badge: p.badge,
+    badgeMessage: (p as { badgeMessage?: string | null }).badgeMessage ?? null,
     description: p.description,
     emoji: p.emoji ?? "📦",
     active: p.active,

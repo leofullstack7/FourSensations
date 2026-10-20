@@ -1,11 +1,27 @@
 "use client";
 
 import Image from "next/image";
-import type { StoreProduct } from "@/lib/types/product";
+import type { StoreBadge, StoreProduct } from "@/lib/types/product";
 import { isDisplayableImageUrl } from "@/lib/util/image-url";
 import { normalizeColorHex } from "@/lib/product-color";
 import { StoreDiscountBadge, StoreProductPrice } from "@/components/store/StoreProductPrice";
 import { getProductDisplayName } from "@/lib/product-display-names";
+
+const BADGE_CLASS: Record<Exclude<StoreBadge, null>, string> = {
+  new: "badge-new",
+  sale: "badge-sale",
+  hot: "badge-hot",
+  best: "badge-best",
+  presale: "badge-presale",
+};
+
+const BADGE_LABEL: Record<Exclude<StoreBadge, null>, string> = {
+  new: "Nuevo",
+  sale: "Oferta",
+  hot: "Hot",
+  best: "Top",
+  presale: "Preventa",
+};
 
 export function StoreProductCard({
   product,
@@ -24,8 +40,6 @@ export function StoreProductCard({
   imagePriority?: boolean;
   compact?: boolean;
 }) {
-  const badgeMap = { new: "badge-new", sale: "badge-sale", hot: "badge-hot", best: "badge-best" } as const;
-  const badgeLbl = { new: "Nuevo", sale: "Oferta", hot: "🔥 Hot", best: "⭐ Top" } as const;
   const variantColors =
     product.variantColors && product.variantColors.length > 0
       ? product.variantColors
@@ -41,6 +55,8 @@ export function StoreProductCard({
     isDisplayableImageUrl(product.imgHover)
       ? product.imgHover
       : null;
+  const badge = product.badge;
+  const badgeMessage = product.badgeMessage?.trim() || "";
 
   return (
     <div
@@ -83,12 +99,15 @@ export function StoreProductCard({
             product.emoji
           )}
         </div>
-        <div className="product-badges">
-          <StoreDiscountBadge product={product} />
-          {product.badge ? (
-            <span className={`badge-tag ${badgeMap[product.badge]}`}>{badgeLbl[product.badge]}</span>
-          ) : null}
-        </div>
+        <StoreDiscountBadge product={product} />
+        {badge ? (
+          <div className={`product-badges product-badges--corner${badge === "presale" ? " product-badges--presale" : ""}`}>
+            <span className={`badge-tag ${BADGE_CLASS[badge]}`}>{BADGE_LABEL[badge]}</span>
+            {badge === "presale" && badgeMessage ? (
+              <span className="badge-presale-msg">{badgeMessage}</span>
+            ) : null}
+          </div>
+        ) : null}
         <div className="product-actions">
           <button
             type="button"

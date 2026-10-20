@@ -1,5 +1,5 @@
 /** Producto en tienda pública (paridad con main.js / tarjetas). */
-export type StoreBadge = "new" | "sale" | "hot" | "best" | null;
+export type StoreBadge = "new" | "sale" | "hot" | "best" | "presale" | null;
 
 export type StoreProduct = {
   /** Cuid/UUID en DB; string en mocks. Nunca derivar de un hash (colisiona). */
@@ -20,6 +20,8 @@ export type StoreProduct = {
   rating: number;
   reviews: number;
   badge: StoreBadge;
+  /** Mensaje bajo la burbuja (p. ej. Preventa). */
+  badgeMessage?: string | null;
   description: string;
   /** URL principal (CDN); si está vacía, la tienda usa `emoji`. */
   img: string;

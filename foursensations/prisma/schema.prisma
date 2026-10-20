@@ -88,6 +88,8 @@ model Product {
   rating        Float          @default(5)
   reviews       Int            @default(0)
   badge         String?
+  /// Texto libre bajo la burbuja (p. ej. Preventa: “Envíos desde el 15 de mayo”).
+  badgeMessage  String?
   emoji         String?
   /// URL pública (CDN) de la imagen principal.
   imageUrl      String?

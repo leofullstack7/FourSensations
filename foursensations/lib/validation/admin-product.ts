@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const badgeValues = ["new", "hot", "sale", "best"] as const;
+const badgeValues = ["new", "hot", "sale", "best", "presale"] as const;
 
 const optionalUrlOrEmpty = z
   .union([z.string().trim().max(500), z.literal(""), z.null()])
@@ -37,6 +37,7 @@ export const adminProductCreateSchema = z.object({
   rating: z.coerce.number().min(0).max(5).default(5),
   reviews: z.coerce.number().int().min(0).default(0),
   badge: z.enum(badgeValues).nullable().optional(),
+  badgeMessage: z.string().trim().max(160).nullable().optional(),
   emoji: z.string().trim().max(8).nullable().optional(),
   imageUrl: optionalUrlOrEmpty,
   isNew: z.boolean().optional().default(false),
@@ -84,6 +85,7 @@ export const adminProductUpdateSchema = z
     rating: z.coerce.number().min(0).max(5).optional(),
     reviews: z.coerce.number().int().min(0).optional(),
     badge: z.enum(badgeValues).nullable().optional(),
+    badgeMessage: z.string().trim().max(160).nullable().optional(),
     emoji: z.string().trim().max(8).nullable().optional(),
     imageUrl: optionalUrlOrEmptyForUpdate,
     isNew: z.boolean().optional(),
