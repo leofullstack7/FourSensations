@@ -308,6 +308,10 @@ model Order {
   fulfillmentStage      Int           @default(1)
   /// Momento en que entró a la fase actual (filtra el Kanban por día).
   fulfillmentStageAt    DateTime      @default(now())
+  /// Idempotencia: aviso interno a la tienda (una sola vez).
+  storeEmailSentAt      DateTime?
+  /// Idempotencia: confirmación al cliente (una sola vez).
+  customerEmailSentAt   DateTime?
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
 

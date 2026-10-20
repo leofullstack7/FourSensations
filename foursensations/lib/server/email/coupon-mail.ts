@@ -51,7 +51,7 @@ export async function sendWelcomeCouponEmail(input: {
           <img src="${escapeHtml(bannerUrl)}" alt="Four Sensations" width="528" style="display:block;width:100%;max-width:528px;height:auto;border-radius:12px;"/>
         </td></tr>
         <tr><td style="padding:18px 28px 6px;text-align:center;">
-          <p style="margin:0 0 10px;font-family:Georgia,serif;font-size:26px;line-height:1.25;color:#8b5a9e;font-weight:700;">
+          <p style="margin:0 0 10px;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:1.3;color:#8b5a9e;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">
             Girl, ¡bienvenida al club! 🎀
           </p>
           <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;color:#a07aa8;">
@@ -64,7 +64,7 @@ export async function sendWelcomeCouponEmail(input: {
               <p style="margin:0 0 8px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#9b6b9e;font-weight:700;">
                 UN REGALITO SOLO PARA TI
               </p>
-              <p style="margin:0 0 4px;font-family:Georgia,serif;font-size:36px;line-height:1;color:#8b5a9e;font-weight:700;">
+              <p style="margin:0 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:34px;line-height:1;color:#8b5a9e;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">
                 ${pct}% OFF
               </p>
               <p style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#a07aa8;">

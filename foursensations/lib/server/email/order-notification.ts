@@ -1,20 +1,18 @@
 import type { Prisma } from "@prisma/client";
 import { resolveStoreNotifyEmail, sendTransactionalEmail } from "@/lib/server/email/send";
-import {
-  emailShell,
-  escapeHtml,
-  goldDivider,
-  itemsTable,
-  sectionTitle,
-  softCard,
-  statusPill,
-  totalsBlock,
-} from "@/lib/server/email/templates";
+import { escapeHtml } from "@/lib/server/email/templates";
 
 function parseShippingFromJson(shippingAddress: Prisma.JsonValue): {
   shippingZoneLabel: string;
   shippingAddressLine: string;
   shippingCarrierLabel: string;
+  neighborhood: string;
+  documentNumber: string;
+  city: string;
+  region: string;
+  fulfillment: string;
+  couponCode: string;
+  couponDiscount: number;
 } {
   try {
     const addr =
@@ -38,12 +36,31 @@ function parseShippingFromJson(shippingAddress: Prisma.JsonValue): {
       shippingZoneLabel: label,
       shippingAddressLine: parts.length ? parts.join(", ") : "No especificada",
       shippingCarrierLabel: carrier,
+      neighborhood:
+        typeof addr.neighborhood === "string"
+          ? addr.neighborhood
+          : typeof addr.line2 === "string"
+            ? addr.line2
+            : "",
+      documentNumber: typeof addr.documentNumber === "string" ? addr.documentNumber : "",
+      city: typeof addr.city === "string" ? addr.city : "",
+      region: typeof addr.region === "string" ? addr.region : "",
+      fulfillment: typeof addr.fulfillment === "string" ? addr.fulfillment : "",
+      couponCode: typeof addr.couponCode === "string" ? addr.couponCode : "",
+      couponDiscount: typeof addr.couponDiscount === "number" ? addr.couponDiscount : 0,
     };
   } catch {
     return {
       shippingZoneLabel: "No especificada",
       shippingAddressLine: "No especificada",
       shippingCarrierLabel: "Envía",
+      neighborhood: "",
+      documentNumber: "",
+      city: "",
+      region: "",
+      fulfillment: "",
+      couponCode: "",
+      couponDiscount: 0,
     };
   }
 }
@@ -53,7 +70,13 @@ function paymentLabel(provider: string): string {
   if (p === "MERCADOPAGO" || p === "MERCADO PAGO") return "Mercado Pago";
   if (p === "EPAYCO") return "ePayco";
   if (p === "BOLD") return "Bold";
+  if (p === "ADDI") return "Addi";
+  if (p === "CONTRAENTREGA") return "Contraentrega";
   return provider || "Mercado Pago";
+}
+
+function money(n: number): string {
+  return `$${Math.max(0, Math.floor(n)).toLocaleString("es-CO")} COP`;
 }
 
 export async function sendOrderNotification(order: {
@@ -64,6 +87,8 @@ export async function sendOrderNotification(order: {
   total: number;
   subtotal: number;
   shipping: number;
+  discount?: number;
+  couponCode?: string | null;
   shippingZoneLabel: string;
   shippingCarrierLabel?: string;
   paymentProvider: string;
@@ -71,8 +96,14 @@ export async function sendOrderNotification(order: {
     productName: string;
     quantity: number;
     unitPrice: number;
+    imageUrl?: string | null;
   }>;
   shippingAddress: string;
+  neighborhood?: string;
+  documentNumber?: string;
+  city?: string;
+  region?: string;
+  createdAt?: Date | string | null;
 }): Promise<void> {
   const to = await resolveStoreNotifyEmail();
   if (!to) {
@@ -80,61 +111,197 @@ export async function sendOrderNotification(order: {
     return;
   }
 
-  const zoneEsc = escapeHtml(order.shippingZoneLabel);
-  const carrierEsc = escapeHtml(order.shippingCarrierLabel || "Envía");
-  const addrEsc = escapeHtml(order.shippingAddress);
+  const refEsc = escapeHtml(order.reference);
   const nameEsc = escapeHtml(order.customerName);
   const emailEsc = escapeHtml(order.customerEmail);
   const phoneEsc = escapeHtml(order.customerPhone || "—");
+  const addrEsc = escapeHtml(order.shippingAddress);
+  const barrioEsc = escapeHtml(order.neighborhood || "—");
+  const docEsc = escapeHtml(order.documentNumber || "—");
+  const cityEsc = escapeHtml(
+    [order.city, order.region].filter(Boolean).join(", ") || order.shippingZoneLabel,
+  );
   const payEsc = escapeHtml(paymentLabel(order.paymentProvider));
-  const refEsc = escapeHtml(order.reference);
+  const isPickup = /recoger/i.test(order.shippingZoneLabel) || /tienda/i.test(order.shippingCarrierLabel || "");
+  const methodEsc = escapeHtml(isPickup ? "Recoger en tienda" : order.shippingCarrierLabel || order.shippingZoneLabel);
+  const discount = Math.max(0, order.discount ?? 0);
+  const couponLabel = order.couponCode?.trim()
+    ? `Cupón ${order.couponCode.trim()}`
+    : discount > 0
+      ? "Cupón de bienvenida"
+      : "";
 
-  const bodyHtml = `
-    <div style="text-align:center;margin:0 0 22px;">
-      ${statusPill("Pago aprobado · nuevo pedido")}
-    </div>
-    <p style="margin:0 0 8px;text-align:center;font-size:15px;line-height:1.6;color:#f0c9d4;">
-      Acaba de entrar una compra real a la casa. Preparación desde Manizales.
-    </p>
-    <p style="margin:0 0 22px;text-align:center;font-size:13px;color:#d4af7a;letter-spacing:0.14em;text-transform:uppercase;">
-      Ref. ${refEsc}
-    </p>
+  const dateLabel = order.createdAt
+    ? new Date(order.createdAt).toLocaleString("es-CO", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : new Date().toLocaleString("es-CO", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
 
-    ${sectionTitle("Cliente")}
-    ${softCard(`
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px;">
-        <tr><td style="padding:6px 0;color:#c9a8b4;width:38%;">Nombre</td><td style="padding:6px 0;color:#fff8f2;font-weight:600;">${nameEsc}</td></tr>
-        <tr><td style="padding:6px 0;color:#c9a8b4;">Correo</td><td style="padding:6px 0;color:#fff8f2;">${emailEsc}</td></tr>
-        <tr><td style="padding:6px 0;color:#c9a8b4;">Teléfono</td><td style="padding:6px 0;color:#fff8f2;">${phoneEsc}</td></tr>
-        <tr><td style="padding:6px 0;color:#c9a8b4;">Dirección</td><td style="padding:6px 0;color:#fff8f2;">${addrEsc}</td></tr>
-        <tr><td style="padding:6px 0;color:#c9a8b4;">Zona</td><td style="padding:6px 0;color:#fff8f2;">${zoneEsc}</td></tr>
-        <tr><td style="padding:6px 0;color:#c9a8b4;">Transportadora</td><td style="padding:6px 0;color:#fff8f2;">${carrierEsc}</td></tr>
-        <tr><td style="padding:6px 0;color:#c9a8b4;">Pago</td><td style="padding:6px 0;color:#fff8f2;">${payEsc}</td></tr>
+  const itemRows = order.items
+    .map((item) => {
+      const img = item.imageUrl?.trim()
+        ? `<img src="${escapeHtml(item.imageUrl)}" alt="" width="44" height="44" style="display:block;width:44px;height:44px;object-fit:cover;border-radius:10px;border:1px solid #f0d4e0;"/>`
+        : `<div style="width:44px;height:44px;border-radius:10px;background:#fce8f1;"></div>`;
+      const line = item.unitPrice * item.quantity;
+      return `<tr>
+        <td style="padding:10px 8px;border-bottom:1px solid #f7e4ec;">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+            <td style="padding-right:10px;">${img}</td>
+            <td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#5a245f;font-weight:600;">${escapeHtml(item.productName)}</td>
+          </tr></table>
+        </td>
+        <td style="padding:10px 8px;border-bottom:1px solid #f7e4ec;text-align:center;font-size:13px;color:#7a5564;">${item.quantity}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #f7e4ec;text-align:right;font-size:12px;color:#7a5564;">${money(item.unitPrice)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #f7e4ec;text-align:right;font-size:13px;color:#5a245f;font-weight:700;">${money(line)}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#fdeff4;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fdeff4;padding:24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;">
+        <tr><td style="padding:8px 8px 16px;text-align:center;">
+          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:26px;color:#5a245f;font-weight:700;">Four Sensations</p>
+          <p style="margin:6px 0 0;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:#b08ab0;">EL CLUB DE LOS CABELLOS PERFECTOS</p>
+        </td></tr>
+
+        <tr><td style="padding:0 0 14px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;border:1px solid #f0d4e0;">
+            <tr><td style="padding:22px 20px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="vertical-align:middle;">
+                    <p style="margin:0 0 6px;font-size:18px;">🎀</p>
+                    <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#c4547a;font-weight:700;">NUEVA ORDEN</p>
+                    <p style="margin:0;font-family:Georgia,serif;font-size:26px;line-height:1.25;color:#5a245f;">
+                      ¡Tenemos un <span style="font-family:Georgia,serif;font-style:italic;color:#c4547a;">nuevo pedido!</span>
+                    </p>
+                  </td>
+                  <td style="vertical-align:top;width:42%;padding-left:12px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fdf0f5;border-radius:14px;">
+                      <tr><td style="padding:12px 14px;font-size:12px;color:#7a5564;line-height:1.55;">
+                        <p style="margin:0 0 6px;">📅 <strong style="color:#5a245f;">Fecha y hora</strong><br/>${escapeHtml(dateLabel)}</p>
+                        <p style="margin:0;">🧾 <strong style="color:#5a245f;">Número de pedido</strong><br/><span style="font-size:15px;font-weight:800;color:#5a245f;">${refEsc}</span></p>
+                      </td></tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td></tr>
+          </table>
+        </td></tr>
+
+        <tr><td style="padding:0 0 14px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;border:1px solid #f0d4e0;">
+            <tr><td style="padding:18px 20px 6px;">
+              <p style="margin:0;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#5a245f;font-weight:800;">👤 DATOS DE LA CLIENTE</p>
+            </td></tr>
+            <tr><td style="padding:8px 20px 18px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;line-height:1.75;">
+                <tr>
+                  <td style="width:50%;vertical-align:top;padding-right:10px;color:#5a245f;">
+                    <span style="color:#c4547a;font-size:11px;">Nombre completo</span><br/><strong>${nameEsc}</strong><br/>
+                    <span style="color:#c4547a;font-size:11px;">Cédula</span><br/>${docEsc}<br/>
+                    <span style="color:#c4547a;font-size:11px;">Celular</span><br/>${phoneEsc}<br/>
+                    <span style="color:#c4547a;font-size:11px;">Correo electrónico</span><br/>${emailEsc}
+                  </td>
+                  <td style="width:50%;vertical-align:top;color:#5a245f;">
+                    <span style="color:#c4547a;font-size:11px;">Dirección</span><br/>${addrEsc}<br/>
+                    <span style="color:#c4547a;font-size:11px;">Barrio</span><br/>${barrioEsc}<br/>
+                    <span style="color:#c4547a;font-size:11px;">Ciudad</span><br/>${cityEsc}<br/>
+                    <span style="color:#c4547a;font-size:11px;">Método</span><br/>${methodEsc}<br/>
+                    <span style="color:#c4547a;font-size:11px;">Pago</span><br/>${payEsc}
+                  </td>
+                </tr>
+              </table>
+            </td></tr>
+          </table>
+        </td></tr>
+
+        <tr><td style="padding:0 0 14px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;border:1px solid #f0d4e0;">
+            <tr><td style="padding:18px 20px 6px;">
+              <p style="margin:0;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#5a245f;font-weight:800;">🛍️ PRODUCTOS DEL PEDIDO</p>
+            </td></tr>
+            <tr><td style="padding:4px 12px 16px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr style="background:#fdf0f5;">
+                  <th align="left" style="padding:8px;font-size:10px;letter-spacing:0.1em;color:#9b6b9e;">PRODUCTO</th>
+                  <th align="center" style="padding:8px;font-size:10px;letter-spacing:0.1em;color:#9b6b9e;">CANT.</th>
+                  <th align="right" style="padding:8px;font-size:10px;letter-spacing:0.1em;color:#9b6b9e;">PRECIO UNITARIO</th>
+                  <th align="right" style="padding:8px;font-size:10px;letter-spacing:0.1em;color:#9b6b9e;">TOTAL</th>
+                </tr>
+                ${itemRows}
+              </table>
+            </td></tr>
+          </table>
+        </td></tr>
+
+        <tr><td style="padding:0 0 14px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="width:52%;vertical-align:top;padding-right:8px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;border:1px solid #f0d4e0;">
+                  <tr><td style="padding:16px 18px;">
+                    <p style="margin:0 0 12px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#5a245f;font-weight:800;">💳 DETALLE DE PAGO</p>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#7a5564;">
+                      <tr><td style="padding:4px 0;">Subtotal</td><td align="right">${money(order.subtotal)}</td></tr>
+                      ${
+                        discount > 0
+                          ? `<tr><td style="padding:4px 0;">Descuento${couponLabel ? ` (${escapeHtml(couponLabel)})` : ""}</td><td align="right" style="color:#c4547a;">−${money(discount)}</td></tr>`
+                          : ""
+                      }
+                      <tr><td style="padding:4px 0;">Envío</td><td align="right">${money(order.shipping)}</td></tr>
+                    </table>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;background:#fce8f1;border-radius:12px;">
+                      <tr><td style="padding:12px 14px;font-size:13px;color:#5a245f;font-weight:700;">Total</td>
+                      <td align="right" style="padding:12px 14px;font-size:18px;color:#5a245f;font-weight:800;">${money(order.total)}</td></tr>
+                    </table>
+                  </td></tr>
+                </table>
+              </td>
+              <td style="width:48%;vertical-align:top;padding-left:8px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;border:1px solid #f0d4e0;">
+                  <tr><td style="padding:16px 18px;">
+                    <p style="margin:0 0 10px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#5a245f;font-weight:800;">📦 MÉTODO DE ENTREGA</p>
+                    <p style="margin:0 0 8px;font-size:13px;color:#5a245f;"><strong>${methodEsc}</strong></p>
+                    <p style="margin:0 0 8px;font-size:13px;color:#7a5564;">📍 ${addrEsc}</p>
+                    <p style="margin:0;font-size:13px;color:#7a5564;">💳 ${payEsc}</p>
+                  </td></tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+
+        <tr><td style="padding:10px;text-align:center;">
+          <p style="margin:0;font-size:18px;">🎀</p>
+          <p style="margin:6px 0 0;font-family:Georgia,serif;font-size:16px;color:#5a245f;">Four Sensations</p>
+          <p style="margin:4px 0 0;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#b08ab0;">EL CLUB DE LOS CABELLOS PERFECTOS</p>
+        </td></tr>
       </table>
-    `)}
-
-    ${sectionTitle("Productos")}
-    ${itemsTable(order.items)}
-    ${goldDivider()}
-    ${totalsBlock({
-      subtotal: order.subtotal,
-      shipping: order.shipping,
-      shippingLabel: `${order.shippingZoneLabel} · ${order.shippingCarrierLabel || "Envía"}`,
-      total: order.total,
-    })}
-  `;
-
-  const html = emailShell({
-    preheader: `Nueva compra ${order.reference} — $${order.total.toLocaleString("es-CO")} COP`,
-    heroTitle: "Una nueva sensación acaba de pedirse",
-    heroSubtitle: "Aviso interno · pedidos",
-    bodyHtml,
-    footerNote: "Four Sensations — pedidosfoursensations@gmail.com · aviso automático de pago aprobado",
-  });
+    </td></tr>
+  </table>
+</body>
+</html>`;
 
   const result = await sendTransactionalEmail({
     to,
-    subject: `✦ Nueva compra — ${order.reference} — $${order.total.toLocaleString("es-CO")} COP`,
+    subject: `Nueva orden ${order.reference} — ${money(order.total)}`,
     html,
   });
   if (!result.ok) {
@@ -151,14 +318,15 @@ export function orderPayloadForEmail(order: {
   customerPhone: string | null;
   subtotal: number;
   shipping: number;
+  discount?: number;
   total: number;
   shippingAddress: Prisma.JsonValue;
   paymentProvider: string | null;
-  items: Array<{ name: string; quantity: number; unitPrice: number }>;
+  couponCode?: string | null;
+  createdAt?: Date;
+  items: Array<{ name: string; quantity: number; unitPrice: number; imageUrl?: string | null }>;
 }): Parameters<typeof sendOrderNotification>[0] {
-  const { shippingZoneLabel, shippingAddressLine, shippingCarrierLabel } = parseShippingFromJson(
-    order.shippingAddress,
-  );
+  const parsed = parseShippingFromJson(order.shippingAddress);
   return {
     reference: order.reference,
     customerName: order.customerName?.trim() || "Cliente",
@@ -167,14 +335,22 @@ export function orderPayloadForEmail(order: {
     total: order.total,
     subtotal: order.subtotal,
     shipping: order.shipping,
-    shippingZoneLabel,
-    shippingCarrierLabel,
+    discount: order.discount ?? parsed.couponDiscount ?? 0,
+    couponCode: order.couponCode ?? parsed.couponCode ?? null,
+    shippingZoneLabel: parsed.shippingZoneLabel,
+    shippingCarrierLabel: parsed.shippingCarrierLabel,
     paymentProvider: order.paymentProvider?.trim() || "MERCADOPAGO",
     items: order.items.map((item) => ({
       productName: item.name,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
+      imageUrl: item.imageUrl ?? null,
     })),
-    shippingAddress: shippingAddressLine,
+    shippingAddress: parsed.shippingAddressLine,
+    neighborhood: parsed.neighborhood,
+    documentNumber: parsed.documentNumber,
+    city: parsed.city,
+    region: parsed.region,
+    createdAt: order.createdAt ?? null,
   };
 }

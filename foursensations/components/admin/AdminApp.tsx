@@ -21,6 +21,7 @@ import {
 } from "@/lib/api/admin-families";
 import { AdminFamiliesPanel } from "@/components/admin/AdminFamiliesPanel";
 import { AdminLandingContentPanel } from "@/components/admin/AdminLandingContentPanel";
+import { AdminImageBankModal } from "@/components/admin/AdminImageBankModal";
 import { AdminProductFichaEditor } from "@/components/admin/AdminProductFichaEditor";
 import { seedProductFicha, type ProductFichaCopy } from "@/lib/product-ficha";
 import {
@@ -3077,6 +3078,7 @@ function AdminAddProductForm({
   const [tagsText, setTagsText] = useState("");
   const [price, setPrice] = useState("");
   const [originalPrice, setOriginalPrice] = useState("");
+  const [wholesalePrice, setWholesalePrice] = useState("");
   const [stock, setStock] = useState("10");
   const [emoji, setEmoji] = useState("");
   const [description, setDescription] = useState("");
@@ -3085,6 +3087,7 @@ function AdminAddProductForm({
   const [galleryUrls, setGalleryUrls] = useState<string[]>([]);
   const [uploadingMain, setUploadingMain] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
+  const [bankOpenFor, setBankOpenFor] = useState<"main" | "gallery" | null>(null);
   const [variantDrafts, setVariantDrafts] = useState<
     Array<{ id: string; colorName: string; colorHex: string; openMore: boolean; name: string; price: string; stock: string }>
   >([]);
@@ -3180,6 +3183,16 @@ function AdminAddProductForm({
           <input type="number" className="form-input" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Precio de venta" />
         </div>
         <div className="form-group">
+          <label className="form-label">Precio mayorista</label>
+          <input
+            type="number"
+            className="form-input"
+            value={wholesalePrice}
+            onChange={(e) => setWholesalePrice(e.target.value)}
+            placeholder="Opcional — precio en sección mayorista"
+          />
+        </div>
+        <div className="form-group">
           <label className="form-label">Stock inicial *</label>
           <input type="number" className="form-input" value={stock} onChange={(e) => setStock(e.target.value)} />
         </div>
@@ -3191,7 +3204,7 @@ function AdminAddProductForm({
           <label className="form-label">Imagen principal (Bunny CDN)</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
             <label className="btn btn-outline btn-sm" style={{ cursor: uploadingMain ? "wait" : "pointer" }}>
-              {uploadingMain ? "Subiendo…" : "📤 Elegir imagen"}
+              {uploadingMain ? "Subiendo…" : "📤 Subir imagen"}
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
@@ -3216,6 +3229,14 @@ function AdminAddProductForm({
                 }}
               />
             </label>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              disabled={saving}
+              onClick={() => setBankOpenFor("main")}
+            >
+              🗂️ Banco de imágenes
+            </button>
             {mainImageUrl && (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -3226,13 +3247,13 @@ function AdminAddProductForm({
               </>
             )}
           </div>
-          <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>JPEG, PNG, WebP o GIF. Máx. 8 MB. Requiere variables Bunny en el servidor.</p>
+          <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>JPEG, PNG, WebP o GIF. Máx. 8 MB. Puedes subir o elegir del banco.</p>
         </div>
         <div className="form-group full-width">
           <label className="form-label">Más imágenes (galería)</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
             <label className="btn btn-outline btn-sm" style={{ cursor: uploadingGallery ? "wait" : "pointer" }}>
-              {uploadingGallery ? "Subiendo…" : "➕ Añadir foto"}
+              {uploadingGallery ? "Subiendo…" : "➕ Subir foto"}
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
@@ -3257,6 +3278,14 @@ function AdminAddProductForm({
                 }}
               />
             </label>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              disabled={saving || galleryUrls.length >= 24}
+              onClick={() => setBankOpenFor("gallery")}
+            >
+              🗂️ Banco
+            </button>
             {galleryUrls.map((u) => (
               <span key={u} style={{ position: "relative", display: "inline-block" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -3443,62 +3472,88 @@ function AdminAddProductForm({
           disabled={saving}
           onClick={() => {
             void (async () => {
-              const pr = Number(price);
-              if (!name.trim() || !pr || !category || !subcategory.trim()) return;
-              if (!description.trim()) return;
+              const pr = Math.round(Number(price));
+              if (!name.trim()) {
+                showToast("Escribe el nombre del producto", "danger", "⚠️");
+                return;
+              }
+              if (!pr || pr < 1) {
+                showToast("Indica un precio de venta válido (entero)", "danger", "⚠️");
+                return;
+              }
+              if (!category) {
+                showToast("Selecciona una categoría", "danger", "⚠️");
+                return;
+              }
+              if (!subcategory.trim()) {
+                showToast("Selecciona una subcategoría", "danger", "⚠️");
+                return;
+              }
+              const desc = description.trim() || name.trim();
+              const wholesaleNum = wholesalePrice.trim() ? Math.round(Number(wholesalePrice)) : null;
+              if (wholesalePrice.trim() && (!wholesaleNum || wholesaleNum < 1)) {
+                showToast("Precio mayorista inválido", "danger", "⚠️");
+                return;
+              }
               const groupCode =
                 variantDrafts.length > 0
                   ? `vg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
                   : undefined;
-              await onSubmit({
-                name: name.trim(),
-                brand: brand || "Four Sensations",
-                category,
-                subcategory: subcategory.trim(),
-                tags: parseTagsInput(tagsText),
-                price: pr,
-                originalPrice: originalPrice ? Number(originalPrice) : null,
-                stock: Number(stock) || 0,
-                rating: 5,
-                reviews: 0,
-                badge: badge || null,
-                description: description.trim(),
-                emoji: emoji || "💜",
-                imageUrl: mainImageUrl,
-                extraImageUrls: galleryUrls.length ? galleryUrls : undefined,
-                active: true,
-                isNew: false,
-                ...(groupCode
-                  ? { variantGroupCode: groupCode, variantGroupOrder: 0 }
-                  : {}),
-              });
-              for (let i = 0; i < variantDrafts.length; i++) {
-                const v = variantDrafts[i]!;
-                const colorLabel = v.colorName.trim() || `Color ${i + 1}`;
-                const vPrice = Number(v.price) || pr;
+              try {
                 await onSubmit({
-                  name: (v.name.trim() || `${name.trim()} — ${colorLabel}`).slice(0, 160),
+                  name: name.trim(),
                   brand: brand || "Four Sensations",
                   category,
                   subcategory: subcategory.trim(),
                   tags: parseTagsInput(tagsText),
-                  price: vPrice,
-                  originalPrice: originalPrice ? Number(originalPrice) : null,
-                  stock: Number(v.stock) || 0,
+                  price: pr,
+                  originalPrice: originalPrice ? Math.round(Number(originalPrice)) : null,
+                  wholesalePrice: wholesaleNum,
+                  stock: Number(stock) || 0,
                   rating: 5,
                   reviews: 0,
                   badge: badge || null,
-                  description: description.trim(),
+                  description: desc,
                   emoji: emoji || "💜",
                   imageUrl: mainImageUrl,
                   extraImageUrls: galleryUrls.length ? galleryUrls : undefined,
                   active: true,
                   isNew: false,
-                  colorHex: v.colorHex,
-                  colorName: colorLabel,
-                  variantGroupCode: groupCode,
-                  variantGroupOrder: i + 1,
+                  ...(groupCode
+                    ? { variantGroupCode: groupCode, variantGroupOrder: 0 }
+                    : {}),
                 });
+                for (let i = 0; i < variantDrafts.length; i++) {
+                  const v = variantDrafts[i]!;
+                  const colorLabel = v.colorName.trim() || `Color ${i + 1}`;
+                  const vPrice = Math.round(Number(v.price)) || pr;
+                  await onSubmit({
+                    name: (v.name.trim() || `${name.trim()} — ${colorLabel}`).slice(0, 160),
+                    brand: brand || "Four Sensations",
+                    category,
+                    subcategory: subcategory.trim(),
+                    tags: parseTagsInput(tagsText),
+                    price: vPrice,
+                    originalPrice: originalPrice ? Math.round(Number(originalPrice)) : null,
+                    wholesalePrice: wholesaleNum,
+                    stock: Number(v.stock) || 0,
+                    rating: 5,
+                    reviews: 0,
+                    badge: badge || null,
+                    description: desc,
+                    emoji: emoji || "💜",
+                    imageUrl: mainImageUrl,
+                    extraImageUrls: galleryUrls.length ? galleryUrls : undefined,
+                    active: true,
+                    isNew: false,
+                    colorHex: v.colorHex,
+                    colorName: colorLabel,
+                    variantGroupCode: groupCode,
+                    variantGroupOrder: i + 1,
+                  });
+                }
+              } catch (err) {
+                showToast(err instanceof Error ? err.message : "No se pudo guardar", "danger", "⚠️");
               }
             })();
           }}
@@ -3506,6 +3561,16 @@ function AdminAddProductForm({
           {saving ? "Guardando…" : "✅ Guardar producto"}
         </button>
       </div>
+      {bankOpenFor ? (
+        <AdminImageBankModal
+          onClose={() => setBankOpenFor(null)}
+          onPick={(url) => {
+            if (bankOpenFor === "main") setMainImageUrl(url);
+            else setGalleryUrls((g) => (g.includes(url) ? g : [...g, url].slice(0, 24)));
+            setBankOpenFor(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -9773,6 +9838,7 @@ function AdminProductDetailModal({
   const [uploadingMain, setUploadingMain] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const [mainImagePickerOpen, setMainImagePickerOpen] = useState(false);
+  const [editBankOpen, setEditBankOpen] = useState(false);
   const [settingMainImage, setSettingMainImage] = useState(false);
   const [skuLibraryUrls, setSkuLibraryUrls] = useState<string[]>([]);
 
@@ -10092,7 +10158,32 @@ function AdminProductDetailModal({
                       }}
                     />
                   </label>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    disabled={!canMutateImages || uploadingMain || settingMainImage}
+                    onClick={() => setEditBankOpen(true)}
+                  >
+                    🗂️ Banco
+                  </button>
                 </div>
+                {editBankOpen ? (
+                  <AdminImageBankModal
+                    onClose={() => setEditBankOpen(false)}
+                    onPick={(url) => {
+                      setEditBankOpen(false);
+                      void (async () => {
+                        try {
+                          const updated = await addProductGalleryImage(product.id, url);
+                          showToast("Imagen añadida a la galería", "success", "🖼️");
+                          onProductRefresh?.(updated);
+                        } catch (e) {
+                          showToast(e instanceof Error ? e.message : "No se pudo añadir", "danger", "⚠️");
+                        }
+                      })();
+                    }}
+                  />
+                ) : null}
 
                 {mainImagePickerOpen ? (
                   <div

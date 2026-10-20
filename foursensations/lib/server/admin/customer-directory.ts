@@ -25,7 +25,13 @@ export async function listAdminCustomers(): Promise<AdminCustomersResponse> {
   if (!process.env.DATABASE_URL) {
     return {
       customers: [],
-      stats: { totalCustomers: 0, registeredCount: 0, guestCount: 0, wholesaleEligibleCount: 0 },
+      stats: {
+        totalCustomers: 0,
+        registeredCount: 0,
+        guestCount: 0,
+        wholesaleEligibleCount: 0,
+        couponLeadCount: 0,
+      },
     };
   }
 
@@ -135,13 +141,23 @@ export async function listAdminCustomers(): Promise<AdminCustomersResponse> {
 
     const totalSpent = orders.reduce((s, o) => s + o.total, 0);
     const isWholesaleEligible = orders.some((o) => o.total >= WHOLESALE_THRESHOLD_COP);
+    const hasRealName = Boolean(linkedUser?.name?.trim()) || bucket.names.some((n) => n.trim().length > 2);
+    const hasAddress = Boolean(linkedUser?.address?.trim() || linkedUser?.city?.trim());
+    /** Lead de cupón: correo+WhatsApp sin ficha completa (aún no pasó por checkout enriquecido). */
+    const isCouponLead =
+      Boolean(linkedUser) &&
+      orders.length === 0 &&
+      (!hasRealName || !hasAddress);
 
     customers.push({
       id: email,
       email,
-      name,
+      name: isCouponLead && !linkedUser?.name?.trim() ? "Lead cupón" : name,
       phone,
+      city: linkedUser?.city ?? null,
+      address: linkedUser?.address ?? null,
       isRegistered,
+      isCouponLead,
       userId,
       registeredAt: linkedUser?.emailVerified?.toISOString() ?? null,
       orderCount: orders.length,
@@ -153,25 +169,31 @@ export async function listAdminCustomers(): Promise<AdminCustomersResponse> {
   }
 
   customers.sort((a, b) => {
-    const ta = a.lastOrderAt ?? "";
-    const tb = b.lastOrderAt ?? "";
+    const ta = a.lastOrderAt ?? a.registeredAt ?? "";
+    const tb = b.lastOrderAt ?? b.registeredAt ?? "";
     return tb.localeCompare(ta);
   });
 
   let registeredCount = 0;
   let wholesaleEligibleCount = 0;
+  let couponLeadCount = 0;
   for (const c of customers) {
-    if (c.isRegistered) registeredCount++;
+    if (c.isCouponLead) couponLeadCount++;
+    else if (c.isRegistered) registeredCount++;
     if (c.isWholesaleEligible) wholesaleEligibleCount++;
   }
 
+  const mainCustomers = customers.filter((c) => !c.isCouponLead);
+  const couponLeads = customers.filter((c) => c.isCouponLead);
+
   return {
-    customers,
+    customers: [...mainCustomers, ...couponLeads],
     stats: {
-      totalCustomers: customers.length,
+      totalCustomers: mainCustomers.length,
       registeredCount,
-      guestCount: customers.length - registeredCount,
+      guestCount: mainCustomers.length - registeredCount,
       wholesaleEligibleCount,
+      couponLeadCount,
     },
   };
 }

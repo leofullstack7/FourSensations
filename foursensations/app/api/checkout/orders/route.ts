@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { buildCustomerOrderConfirmationPayload, sendOrderConfirmationToCustomer } from "@/lib/server/email/order-confirmation-customer";
-import { orderPayloadForEmail, sendOrderNotification } from "@/lib/server/email/order-notification";
+import { sendOrderEmailsOnce } from "@/lib/server/email/order-email-once";
 import { createPendingOrderFromCheckout } from "@/lib/server/checkout/create-order";
-import { prisma } from "@/lib/prisma";
 import { createCheckoutOrderSchema } from "@/lib/validation/checkout-order";
 
 export async function POST(req: Request) {
@@ -31,26 +29,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }
 
-  // Aviso a la tienda en todo pedido nuevo (incluye Mercado Pago / Addi pendientes de pago).
-  // Confirmación a la clienta: contraentrega ya; pasarelas al confirmar el pago (webhook).
-  {
-    const order = await prisma.order.findUnique({
-      where: { id: result.orderId },
-      include: { items: true },
-    });
-    if (order) {
-      void sendOrderNotification(orderPayloadForEmail(order)).catch((err) =>
-        console.error("[email] aviso tienda pedido nuevo", err),
-      );
-      if (result.paymentProvider === "CONTRAENTREGA") {
-        const customerPayload = buildCustomerOrderConfirmationPayload(order);
-        if (customerPayload) {
-          void sendOrderConfirmationToCustomer(customerPayload).catch((err) =>
-            console.error("[email] contraentrega cliente", err),
-          );
-        }
-      }
-    }
+  // Solo contraentrega confirma aquí. Pasarelas: un único correo al aprobar el pago.
+  if (result.paymentProvider === "CONTRAENTREGA") {
+    void sendOrderEmailsOnce(result.orderId).catch((err) =>
+      console.error("[email] contraentrega once", err),
+    );
   }
 
   return NextResponse.json({

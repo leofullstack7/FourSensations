@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AdminImageBankModal } from "@/components/admin/AdminImageBankModal";
 import { adminFetch } from "@/lib/api/admin-fetch";
 import { uploadAdminImage, type AdminUploadResult } from "@/lib/api/admin-upload";
 import { CATEGORY_SHOWCASE_ITEMS } from "@/lib/category-showcase";
@@ -89,14 +90,17 @@ function ImageSlot({
   url,
   busy,
   onPick,
+  onPickUrl,
   aspect = "4 / 5",
 }: {
   label: string;
   url: string;
   busy: boolean;
   onPick: (file: File) => void;
+  onPickUrl?: (url: string) => void;
   aspect?: string;
 }) {
+  const [bankOpen, setBankOpen] = useState(false);
   return (
     <div
       style={{
@@ -118,21 +122,43 @@ function ImageSlot({
       </div>
       <div style={{ padding: 10 }}>
         <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{label}</div>
-        <label className="btn btn-outline btn-sm" style={{ width: "100%", cursor: busy ? "wait" : "pointer" }}>
-          {busy ? "Optimizando a WebP…" : url ? "Cambiar foto" : "Subir foto"}
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp"
-            disabled={busy}
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (file) onPick(file);
-            }}
-          />
-        </label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label className="btn btn-outline btn-sm" style={{ width: "100%", cursor: busy ? "wait" : "pointer" }}>
+            {busy ? "Optimizando a WebP…" : url ? "Subir nueva" : "Subir foto"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp"
+              disabled={busy}
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) onPick(file);
+              }}
+            />
+          </label>
+          {onPickUrl ? (
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              disabled={busy}
+              style={{ width: "100%" }}
+              onClick={() => setBankOpen(true)}
+            >
+              🗂️ Banco de imágenes
+            </button>
+          ) : null}
+        </div>
       </div>
+      {bankOpen && onPickUrl ? (
+        <AdminImageBankModal
+          onClose={() => setBankOpen(false)}
+          onPick={(picked) => {
+            onPickUrl(picked);
+            setBankOpen(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -143,6 +169,7 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
   const [collages, setCollages] = useState<LandingCollages | null>(null);
   const [homeContent, setHomeContent] = useState<HomeContentSettings | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [collageBankIndex, setCollageBankIndex] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     const res = await adminFetch("/api/admin/site-settings", { cache: "no-store", credentials: "include" });
@@ -223,14 +250,13 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
     }
   };
 
-  const saveCollageSlot = async (index: number, file: File) => {
+  const applyCollageUrl = async (index: number, url: string, uploadMeta?: AdminUploadResult) => {
     if (!collages) return;
     setBusyKey(`collage:${section}:${index}`);
     try {
-      const uploaded = await uploadAdminImage(file);
       const next = normalizeLandingCollages({
         ...collages,
-        [section]: collages[section].map((current, i) => (i === index ? uploaded.url : current)),
+        [section]: collages[section].map((current, i) => (i === index ? url : current)),
       });
       const res = await adminFetch("/api/admin/site-settings", {
         method: "PUT",
@@ -241,12 +267,48 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
       const data = (await res.json()) as { landingCollages?: unknown; error?: string };
       if (!res.ok) throw new Error(data.error || "No se pudo guardar");
       setCollages(normalizeLandingCollages(data.landingCollages));
-      showToast(toastForUpload(uploaded), "success");
+      showToast(uploadMeta ? toastForUpload(uploadMeta) : "Imagen actualizada", "success");
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "No se pudo subir la foto", "danger");
+      showToast(e instanceof Error ? e.message : "No se pudo guardar la foto", "danger");
     } finally {
       setBusyKey(null);
     }
+  };
+
+  const saveCollageSlot = async (index: number, file: File) => {
+    if (!collages) return;
+    setBusyKey(`collage:${section}:${index}`);
+    try {
+      const uploaded = await uploadAdminImage(file);
+      await applyCollageUrl(index, uploaded.url, uploaded);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "No se pudo subir la foto", "danger");
+      setBusyKey(null);
+    }
+  };
+
+  const applyShowcaseUrl = async (label: string, url: string, uploadMeta?: AdminUploadResult) => {
+    if (!homeContent) return;
+    await saveHomeContent(
+      {
+        ...homeContent,
+        showcaseImages: { ...homeContent.showcaseImages, [label]: url },
+      },
+      `showcase:${label}`,
+      uploadMeta,
+    );
+  };
+
+  const applyPromoUrl = async (key: HomePromoWidgetKey, url: string, uploadMeta?: AdminUploadResult) => {
+    if (!homeContent) return;
+    await saveHomeContent(
+      {
+        ...homeContent,
+        promoWidgets: { ...homeContent.promoWidgets, [key]: url },
+      },
+      `promo:${key}`,
+      uploadMeta,
+    );
   };
 
   const tabs: { id: TabId; label: string }[] = [
@@ -306,6 +368,7 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
                   url={homeContent.showcaseImages[item.label] || item.image}
                   busy={busyKey === `showcase:${item.label}`}
                   onPick={(file) => void uploadShowcase(item.label, file)}
+                  onPickUrl={(url) => void applyShowcaseUrl(item.label, url)}
                   aspect="4 / 5"
                 />
               ))}
@@ -333,6 +396,7 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
                     url={homeContent.promoWidgets[key] || ""}
                     busy={busyKey === `promo:${key}`}
                     onPick={(file) => void uploadPromo(key, file)}
+                    onPickUrl={(url) => void applyPromoUrl(key, url)}
                     aspect={isDiagonal ? "3 / 4" : "16 / 9"}
                   />
                 );
@@ -372,23 +436,49 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
                   ) : (
                     <span className="admin-landing-collage__empty">Foto {index + 1}</span>
                   )}
-                  <label className="admin-landing-collage__change">
-                    {busyKey === `collage:${section}:${index}` ? "Optimizando…" : "Cambiar"}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp"
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "center", marginTop: 4 }}>
+                    <label className="admin-landing-collage__change">
+                      {busyKey === `collage:${section}:${index}` ? "Optimizando…" : "Subir"}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp"
+                        disabled={busyKey != null}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (file) void saveCollageSlot(index, file);
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
                       disabled={busyKey != null}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        e.target.value = "";
-                        if (file) void saveCollageSlot(index, file);
-                      }}
-                    />
-                  </label>
+                      onClick={() => setCollageBankIndex(index)}
+                    >
+                      Banco
+                    </button>
+                  </div>
                 </figure>
               ))}
             </div>
+            {section === "accesorios" ? (
+              <p style={{ marginTop: 12, fontSize: 12, color: "var(--text-muted)" }}>
+                Estas tres fotos alimentan el collage de la landing <strong>Accesorios</strong>. También puedes
+                cambiar el widget «Accesorios capilares» en la pestaña Widgets Home.
+              </p>
+            ) : null}
           </div>
+          {collageBankIndex != null ? (
+            <AdminImageBankModal
+              onClose={() => setCollageBankIndex(null)}
+              onPick={(url) => {
+                const idx = collageBankIndex;
+                setCollageBankIndex(null);
+                void applyCollageUrl(idx, url);
+              }}
+            />
+          ) : null}
         </>
       ) : null}
     </div>

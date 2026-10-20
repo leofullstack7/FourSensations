@@ -16,8 +16,15 @@ export type AdminCustomerRecord = {
   email: string;
   name: string;
   phone: string | null;
+  city?: string | null;
+  address?: string | null;
   /** Cuenta en la tienda (registro / Google / email). */
   isRegistered: boolean;
+  /**
+   * Lead de cupón inicial: solo correo + WhatsApp, ficha incompleta.
+   * Al completar datos en checkout pasa a la lista principal.
+   */
+  isCouponLead: boolean;
   userId: string | null;
   registeredAt: string | null;
   orderCount: number;
@@ -35,6 +42,7 @@ export type AdminCustomersResponse = {
     registeredCount: number;
     guestCount: number;
     wholesaleEligibleCount: number;
+    couponLeadCount: number;
   };
 };
 

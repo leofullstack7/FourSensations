@@ -1,14 +1,21 @@
-import { randomBytes } from "node:crypto";
+import { randomInt } from "node:crypto";
+import { prisma } from "@/lib/prisma";
 
-/** Referencia única legible para `invoice` ePayco y trazas. */
-export function generateOrderReference(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const h = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  const s = String(d.getSeconds()).padStart(2, "0");
-  const rnd = randomBytes(4).toString("hex");
-  return `GB-${y}${m}${day}-${h}${min}${s}-${rnd}`;
+/**
+ * Referencia corta tipo FS940121 (FS + 6 dígitos).
+ * Reintenta ante colisión con la BD.
+ */
+export async function generateOrderReference(): Promise<string> {
+  for (let attempt = 0; attempt < 24; attempt++) {
+    const n = randomInt(100_000, 1_000_000);
+    const reference = `FS${n}`;
+    const exists = await prisma.order.findUnique({
+      where: { reference },
+      select: { id: true },
+    });
+    if (!exists) return reference;
+  }
+  // Fallback ultra-raro: FS + timestamp compacto
+  const fallback = `FS${String(Date.now()).slice(-6)}`;
+  return fallback;
 }

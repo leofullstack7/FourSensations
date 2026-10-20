@@ -144,6 +144,7 @@ export async function createPendingOrderFromCheckout(
   }
 
   const wholesaleCheckout = wholesaleMin != null;
+  const reference = await generateOrderReference();
 
   try {
     const data = await prisma.$transaction(async (tx) => {
@@ -296,7 +297,6 @@ export async function createPendingOrderFromCheckout(
         throw new Error("Total inválido tras aplicar el cupón");
       }
 
-      const reference = generateOrderReference();
       const zoneMeta = SHIPPING_ZONES[zoneId];
       const shippingJson = {
         ...addr,

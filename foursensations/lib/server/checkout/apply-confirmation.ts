@@ -1,10 +1,6 @@
 import { OrderStatus, PaymentStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import {
-  buildCustomerOrderConfirmationPayload,
-  sendOrderConfirmationToCustomer,
-} from "@/lib/server/email/order-confirmation-customer";
-import { orderPayloadForEmail, sendOrderNotification } from "@/lib/server/email/order-notification";
+import { sendOrderEmailsOnce } from "@/lib/server/email/order-email-once";
 import { recordCouponRedemptionForPaidOrder } from "@/lib/server/coupons";
 
 export type FlatConfirmationPayload = Record<string, string>;
@@ -173,15 +169,16 @@ export async function applyEpaycoConfirmation(
   const nextOrder = mapXResponseToOrderStatus(xResponse);
 
   if (xResponse === "Aceptada") {
+    let firstApproval = false;
     try {
-      await prisma.$transaction(async (tx) => {
+      firstApproval = await prisma.$transaction(async (tx) => {
         const current = await tx.order.findUnique({
           where: { id: order!.id },
           include: { items: true },
         });
         if (!current) throw new Error("Pedido desapareció");
         if (current.paymentStatus === PaymentStatus.APPROVED && current.status === OrderStatus.PAID) {
-          return;
+          return false;
         }
         for (const line of current.items) {
           if (!line.productId) continue;
@@ -202,21 +199,17 @@ export async function applyEpaycoConfirmation(
             confirmationData: jsonPayload,
           },
         });
+        return true;
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error en transacción";
       console.error("[epayco] webhook: error aprobando pedido", msg);
       return { ok: false, error: msg };
     }
-    void sendOrderNotification(orderPayloadForEmail(order)).catch((err) =>
-      console.error("[email] error silencioso:", err),
-    );
-    const customerMail = buildCustomerOrderConfirmationPayload(order);
-    if (customerMail) {
-      void sendOrderConfirmationToCustomer(customerMail).catch((err) =>
-        console.error("[email] error correo cliente:", err),
-      );
+    if (!firstApproval) {
+      return { ok: true, duplicate: true, orderReference: order.reference };
     }
+    void sendOrderEmailsOnce(order.id).catch((err) => console.error("[email] epayco once", err));
     void recordCouponRedemptionForPaidOrder(order.id).catch((err) =>
       console.error("[coupons] error registrando canje:", err),
     );

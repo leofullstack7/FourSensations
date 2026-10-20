@@ -57,9 +57,10 @@ export function AdminCustomersPanel({
     registeredCount: 0,
     guestCount: 0,
     wholesaleEligibleCount: 0,
+    couponLeadCount: 0,
   });
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "registered" | "guest" | "wholesale">("all");
+  const [filter, setFilter] = useState<"all" | "registered" | "guest" | "wholesale" | "coupons">("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [emailTarget, setEmailTarget] = useState<AdminCustomerRecord | null>(null);
   const [emailSubject, setEmailSubject] = useState("");
@@ -88,9 +89,11 @@ export function AdminCustomersPanel({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return customers.filter((c) => {
-      if (filter === "registered" && !c.isRegistered) return false;
-      if (filter === "guest" && c.isRegistered) return false;
+      if (filter === "coupons") return c.isCouponLead;
+      if (filter === "registered" && (!c.isRegistered || c.isCouponLead)) return false;
+      if (filter === "guest" && (c.isRegistered || c.isCouponLead)) return false;
       if (filter === "wholesale" && !c.isWholesaleEligible) return false;
+      if (filter === "all" && c.isCouponLead) return false;
       if (!q) return true;
       return (
         c.name.toLowerCase().includes(q) ||
@@ -147,15 +150,15 @@ export function AdminCustomersPanel({
       <div className="admin-crm-stats">
         <div className="admin-crm-stat-card">
           <span className="admin-crm-stat-num">{stats.totalCustomers}</span>
-          <span className="admin-crm-stat-label">Clientes con compra</span>
+          <span className="admin-crm-stat-label">Clientes</span>
+        </div>
+        <div className="admin-crm-stat-card">
+          <span className="admin-crm-stat-num">{stats.couponLeadCount || 0}</span>
+          <span className="admin-crm-stat-label">Cupones</span>
         </div>
         <div className="admin-crm-stat-card">
           <span className="admin-crm-stat-num">{stats.registeredCount}</span>
           <span className="admin-crm-stat-label">Registrados</span>
-        </div>
-        <div className="admin-crm-stat-card">
-          <span className="admin-crm-stat-num">{stats.guestCount}</span>
-          <span className="admin-crm-stat-label">Solo compraron</span>
         </div>
         <div className="admin-crm-stat-card admin-crm-stat-card--accent">
           <span className="admin-crm-stat-num">{stats.wholesaleEligibleCount}</span>
@@ -179,7 +182,8 @@ export function AdminCustomersPanel({
         <div className="admin-crm-filters">
           {(
             [
-              ["all", "Todos"],
+              ["all", "Clientes"],
+              ["coupons", "Cupones"],
               ["registered", "Registrados"],
               ["guest", "Solo compraron"],
               ["wholesale", "Mayorista"],
