@@ -12,9 +12,15 @@ import {
 const SETTINGS_ID = 1;
 
 export async function getSiteSettingsData(): Promise<SiteSettingsData> {
-  const row = await prisma.siteSettings.findUnique({ where: { id: SETTINGS_ID } });
-  if (!row?.data || typeof row.data !== "object") return {};
-  return row.data as SiteSettingsData;
+  try {
+    const row = await prisma.siteSettings.findUnique({ where: { id: SETTINGS_ID } });
+    if (!row?.data || typeof row.data !== "object") return {};
+    return row.data as SiteSettingsData;
+  } catch (e) {
+    // Neon caído/cuota: no tumbar la tienda; devolver vacío (defaults).
+    console.warn("[site-settings] no se pudo leer SiteSettings:", e);
+    return {};
+  }
 }
 
 export async function getMegaPromoMap() {

@@ -9,9 +9,9 @@ export const revalidate = 300;
 
 export default async function StoreHomePage() {
   const [allProducts, combos, homeContent] = await Promise.all([
-    getStorefrontProducts(),
-    getActiveStoreCombos(),
-    getHomeContentSettings(),
+    getStorefrontProducts().catch(() => []),
+    getActiveStoreCombos().catch(() => []),
+    getHomeContentSettings().catch(() => null),
   ]);
 
   // Home solo necesita favoritos + featured: sembrar el catálogo completo duplicaba RAM/HTML.
