@@ -49,9 +49,10 @@ export async function enrichCustomerFromCheckout(input: {
   const email = input.email.trim().toLowerCase();
   if (!email) return;
 
+  // Por email único: no fallar si el correo ya existe (lead, intento previo, etc.).
   const existing = await prisma.user.findFirst({
-    where: { email: { equals: email, mode: "insensitive" }, role: "CUSTOMER" },
-    select: { id: true, name: true, phone: true, city: true, address: true },
+    where: { email: { equals: email, mode: "insensitive" } },
+    select: { id: true, name: true, phone: true, city: true, address: true, role: true },
   });
 
   const phone = input.phone ? digitsPhone(input.phone) : "";
@@ -72,6 +73,9 @@ export async function enrichCustomerFromCheckout(input: {
     });
     return;
   }
+
+  // No tocar cuentas ADMIN; sí enriquecer clientes/leads que ya interactuaron.
+  if (existing.role === "ADMIN") return;
 
   await prisma.user.update({
     where: { id: existing.id },

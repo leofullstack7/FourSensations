@@ -103,11 +103,13 @@ export async function quoteCouponForCart(
           where: { couponId: coupon.id, customerEmail: { equals: email, mode: "insensitive" } },
         })
       : Promise.resolve(0),
+    // Solo pedidos recientes cuentan como “uso pendiente”; intentos abandonados no agotan el cupón.
     prisma.order.count({
       where: {
         couponId: coupon.id,
         status: "PENDING_PAYMENT",
         paymentStatus: { in: ["PENDING", "PROCESSING"] },
+        createdAt: { gte: new Date(Date.now() - 2 * 60 * 60 * 1000) },
       },
     }),
   ]);
