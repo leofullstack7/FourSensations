@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import dynamic from "next/dynamic";
 import heroPc1 from "@/assets/foursensations/banners/pc1.webp";
 import heroPc2 from "@/assets/foursensations/banners/pc2.webp";
 import heroPc3 from "@/assets/foursensations/banners/3.webp";
@@ -16,6 +15,12 @@ import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreFooter } from "@/components/store/StoreFooter";
 import { StoreProductCard } from "@/components/store/store-product-card";
 import { CategoryShowcaseStrip } from "@/components/store/CategoryShowcaseStrip";
+import { BeautyAiAdvisor } from "@/components/store/BeautyAiAdvisor";
+import { TintHomePreview } from "@/components/store/tints/TintHomePreview";
+import { HomeCombosPromo } from "@/components/store/CombosPromo";
+import { HomeTestimonials } from "@/components/store/HomeTestimonials";
+import { PromoDiagonalTrio } from "@/components/store/PromoDiagonalTrio";
+import { TechAmbient } from "@/components/ui/TechAmbient";
 import { homeClubFavoriteRank, isHomeClubFavoriteProduct } from "@/lib/home-club-favorites";
 import { sortProductsForHomeDisplay } from "@/lib/storefront-product-order";
 import {
@@ -39,31 +44,6 @@ import {
 } from "@/lib/home-content";
 import { useStoreNavigation } from "@/components/store/StoreNavigationProvider";
 import { resolveStoreMenuGroupHref } from "@/lib/store/menu-item-href";
-
-const BeautyAiAdvisor = dynamic(
-  () => import("@/components/store/BeautyAiAdvisor").then((m) => m.BeautyAiAdvisor),
-  { ssr: false, loading: () => null },
-);
-const TintHomePreview = dynamic(
-  () => import("@/components/store/tints/TintHomePreview").then((m) => m.TintHomePreview),
-  { ssr: false, loading: () => null },
-);
-const HomeCombosPromo = dynamic(
-  () => import("@/components/store/CombosPromo").then((m) => m.HomeCombosPromo),
-  { ssr: false, loading: () => null },
-);
-const HomeTestimonials = dynamic(
-  () => import("@/components/store/HomeTestimonials").then((m) => m.HomeTestimonials),
-  { ssr: false, loading: () => null },
-);
-const PromoDiagonalTrio = dynamic(
-  () => import("@/components/store/PromoDiagonalTrio").then((m) => m.PromoDiagonalTrio),
-  { ssr: false, loading: () => null },
-);
-const TechAmbient = dynamic(
-  () => import("@/components/ui/TechAmbient").then((m) => m.TechAmbient),
-  { ssr: false, loading: () => null },
-);
 
 const HERO_SLIDES: readonly {
   desktop: StaticImageData;
@@ -134,21 +114,8 @@ export function StoreHomeClient({
   const [heroIsMobile, setHeroIsMobile] = useState(false);
   const [visibleCount, setVisibleCount] = useState(DESKTOP_INITIAL_VISIBLE_PRODUCTS);
   const [loadMoreStep, setLoadMoreStep] = useState(DESKTOP_LOAD_MORE_PRODUCTS);
-  /** Secciones pesadas solo tras first paint (meta ≤6s). */
-  const [deferHeavy, setDeferHeavy] = useState(false);
 
   useReveal();
-
-  useEffect(() => {
-    let cancelled = false;
-    const t = globalThis.setTimeout(() => {
-      if (!cancelled) setDeferHeavy(true);
-    }, 750);
-    return () => {
-      cancelled = true;
-      globalThis.clearTimeout(t);
-    };
-  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 768px)");
@@ -165,12 +132,11 @@ export function StoreHomeClient({
     return () => window.clearInterval(timer);
   }, []);
 
-  /** Solo el slide activo al inicio; el siguiente se monta cuando ya diferimos peso. */
+  /** Slide activo + siguiente (preload suave del carrusel). */
   const heroMountIndexes = useMemo(() => {
-    if (!deferHeavy) return [heroBannerIndex];
     const next = (heroBannerIndex + 1) % HERO_SLIDES.length;
     return next === heroBannerIndex ? [heroBannerIndex] : [heroBannerIndex, next];
-  }, [heroBannerIndex, deferHeavy]);
+  }, [heroBannerIndex]);
 
   const filteredProducts = useMemo(() => {
     let list: StoreProduct[];
@@ -275,9 +241,9 @@ export function StoreHomeClient({
         activeSubcategory={manualSub}
       />
 
-      {deferHeavy ? <BeautyAiAdvisor /> : null}
+      <BeautyAiAdvisor />
 
-      {deferHeavy && tintItems.length > 0 ? <TintHomePreview items={tintItems} /> : null}
+      {tintItems.length > 0 ? <TintHomePreview items={tintItems} /> : null}
 
       <div className="marquee-strip marquee-strip--brand">
         <div className="marquee-track">
@@ -289,7 +255,7 @@ export function StoreHomeClient({
         </div>
       </div>
 
-      {deferHeavy ? <HomeCombosPromo combos={initialCombos} /> : null}
+      <HomeCombosPromo combos={initialCombos} />
 
       <section className="section-pad" style={{ background: "var(--ivory)" }}>
         <div className="container reveal">
@@ -357,7 +323,7 @@ export function StoreHomeClient({
               </Link>
               <div className="promo-deco">✨</div>
             </div>
-            {deferHeavy ? <PromoDiagonalTrio images={homeContent?.promoWidgets} /> : null}
+            <PromoDiagonalTrio images={homeContent?.promoWidgets} />
             <div className="promo-card wide" style={{ background: "linear-gradient(135deg, var(--dark) 0%, var(--dark-mid) 100%)", color: "white" }}>
               <div>
                 <div className="promo-label" style={{ color: "rgba(255,255,255,0.6)" }}>
@@ -451,10 +417,10 @@ export function StoreHomeClient({
         </div>
       </section>
 
-      {deferHeavy ? <HomeTestimonials /> : null}
+      <HomeTestimonials />
 
       <section className="newsletter-section">
-        {deferHeavy ? <TechAmbient variant="subtle" /> : null}
+        <TechAmbient variant="subtle" />
         <div className="container newsletter-content reveal">
           <div className="section-eyebrow" style={{ color: "var(--blush)" }}>
             ¿Todavía no estás en el Club? 👀💗

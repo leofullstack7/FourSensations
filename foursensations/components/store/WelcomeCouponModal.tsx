@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 import couponArt from "@/assets/foursensations/cupondescuento.webp";
 
 const STORAGE_KEY = "fs_welcome_coupon_v1";
-/** Después del first paint; no compite con hero/productos. */
-const SHOW_DELAY_MS = 9000;
+/** Espera mínima tras precargar el arte (no mostrar a medias). */
+const SHOW_AFTER_READY_MS = 400;
 
 type ClaimOk = {
   ok: true;
@@ -49,6 +49,13 @@ function WhatsAppIcon() {
   );
 }
 
+function couponArtSrc(): string {
+  if (typeof couponArt === "object" && couponArt && "src" in couponArt) {
+    return String(couponArt.src);
+  }
+  return "";
+}
+
 export function WelcomeCouponModal() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -56,10 +63,9 @@ export function WelcomeCouponModal() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<ClaimOk | null>(null);
-  const [imageReady, setImageReady] = useState(false);
-  const [delayDone, setDelayDone] = useState(false);
+  const [ready, setReady] = useState(false);
 
-  // Espera al first paint; luego precarga el arte del cupón (no compite con hero).
+  // Precarga el arte YA; solo abre el modal cuando está listo (sin flash en blanco).
   useEffect(() => {
     try {
       if (window.localStorage.getItem(STORAGE_KEY)) return;
@@ -68,35 +74,53 @@ export function WelcomeCouponModal() {
     }
 
     let cancelled = false;
-    const timer = window.setTimeout(() => {
-      if (cancelled) return;
-      setDelayDone(true);
-      const src = typeof couponArt === "object" && couponArt && "src" in couponArt ? String(couponArt.src) : "";
-      if (!src) {
-        setImageReady(true);
-        return;
+    let finished = false;
+    let showTimer: number | undefined;
+    const src = couponArtSrc();
+
+    const markReadyAndSchedule = () => {
+      if (cancelled || finished) return;
+      finished = true;
+      setReady(true);
+      showTimer = window.setTimeout(() => {
+        if (!cancelled) setOpen(true);
+      }, SHOW_AFTER_READY_MS);
+    };
+
+    if (!src) {
+      markReadyAndSchedule();
+      return () => {
+        cancelled = true;
+        if (showTimer) window.clearTimeout(showTimer);
+      };
+    }
+
+    const img = new window.Image();
+    img.decoding = "async";
+    img.onload = () => {
+      const finish = () => {
+        if (!cancelled) markReadyAndSchedule();
+      };
+      if (typeof img.decode === "function") {
+        img.decode().then(finish).catch(finish);
+      } else {
+        finish();
       }
-      const img = new window.Image();
-      img.decoding = "async";
-      img.onload = () => {
-        if (!cancelled) setImageReady(true);
-      };
-      img.onerror = () => {
-        if (!cancelled) setImageReady(true);
-      };
-      img.src = src;
-      if (img.complete) setImageReady(true);
-    }, SHOW_DELAY_MS);
+    };
+    img.onerror = () => {
+      if (!cancelled) markReadyAndSchedule();
+    };
+    img.src = src;
+    if (img.complete) {
+      img.onload?.(new Event("load"));
+    }
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      if (showTimer) window.clearTimeout(showTimer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar
   }, []);
-
-  useEffect(() => {
-    if (imageReady && delayDone) setOpen(true);
-  }, [imageReady, delayDone]);
 
   const dismiss = (permanent: boolean) => {
     setOpen(false);
@@ -137,7 +161,7 @@ export function WelcomeCouponModal() {
     }
   };
 
-  if (!open) return null;
+  if (!open || !ready) return null;
 
   return (
     <div
