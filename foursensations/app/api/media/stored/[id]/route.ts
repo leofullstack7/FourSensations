@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
 type RouteCtx = { params: { id: string } };
 
 const BODY_CACHE = "public, max-age=604800, stale-while-revalidate=2592000";
-const MAX_BYTES = 1_500_000;
+/** Con Neon Launch se pueden servir fotos un poco más grandes sin tumbar el request. */
+const MAX_BYTES = 3_000_000;
 
 function publicOrigin(req: Request): string {
   const xfHost = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim();

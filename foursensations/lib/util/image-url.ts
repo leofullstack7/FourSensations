@@ -54,7 +54,7 @@ export function productMediaPublicUrl(sku: string, fileName: string): string {
   return `/media/productos/${sku}/${fileName}`;
 }
 
-/** Reescribe URLs lentas (API/DB) → rutas estáticas publicadas en build. */
+/** Reescribe solo SKU a estático (siempre en disco). Stored: estático + API fallback. */
 export function toFastProductMediaUrl(url: string): string {
   const u = url.trim();
   const prod = u.match(/^\/api\/media\/productos\/(FS\d{3})\/(FS\d{3}-\d+\.webp)$/i);
@@ -64,7 +64,12 @@ export function toFastProductMediaUrl(url: string): string {
   return u;
 }
 
-/** Prioriza estáticos de SKU, luego stored estático, luego API. */
+function storedApiFromStatic(url: string): string | null {
+  const m = url.trim().match(/^\/media\/stored\/([a-z0-9]+)\.(webp|jpe?g|png|gif)$/i);
+  return m ? `/api/media/stored/${m[1]}` : null;
+}
+
+/** Prioriza SKU estático; stored estático; API stored como respaldo. */
 export function preferFastStorefrontUrls(urls: string[]): string[] {
   const score = (u: string) => {
     if (/^\/media\/productos\//i.test(u)) return 0;
@@ -76,11 +81,18 @@ export function preferFastStorefrontUrls(urls: string[]): string[] {
   };
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const raw of [...urls].sort((a, b) => score(a) - score(b))) {
-    const u = toFastProductMediaUrl(raw);
-    if (!u || seen.has(u)) continue;
+  const push = (u: string) => {
+    if (!u || seen.has(u)) return;
     seen.add(u);
     out.push(u);
+  };
+  for (const raw of [...urls].sort((a, b) => score(a) - score(b))) {
+    const u = toFastProductMediaUrl(raw);
+    push(u);
+    // Si el estático de build no existe (404), el card debe caer al API al instante.
+    const api = storedApiFromStatic(u);
+    if (api) push(api);
+    if (/^\/api\/media\/stored\/[a-z0-9]+$/i.test(raw.trim())) push(raw.trim());
   }
   return out;
 }

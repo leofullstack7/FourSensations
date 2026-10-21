@@ -129,7 +129,7 @@ const getCachedStorefrontProducts = unstable_cache(
     const mapped = rows.map((r) => rowToStore(r, r.images));
     return enrichStorefrontDisplayProducts(mapped, mapped);
   },
-  ["storefront-products-v12-prefer-static"],
+  ["storefront-products-v13-stored-api-fallback"],
   { revalidate: 300, tags: [STOREFRONT_PRODUCTS_CACHE_TAG] }
 );
 
