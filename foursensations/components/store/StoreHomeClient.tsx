@@ -1,15 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
-import heroPc1 from "@/assets/foursensations/banners/pc1.webp";
-import heroPc2 from "@/assets/foursensations/banners/pc2.webp";
-import heroPc3 from "@/assets/foursensations/banners/3.webp";
-import heroPc4 from "@/assets/foursensations/banners/pc4.webp";
-import heroMobile1 from "@/assets/foursensations/banners/movil1.webp";
-import heroMobile2 from "@/assets/foursensations/banners/movil2.webp";
-import heroMobile3 from "@/assets/foursensations/banners/movil3.webp";
-import heroMobile4 from "@/assets/foursensations/banners/movil4.webp";
 import { useReveal } from "@/hooks/useReveal";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreFooter } from "@/components/store/StoreFooter";
@@ -21,6 +12,7 @@ import { HomeCombosPromo } from "@/components/store/CombosPromo";
 import { HomeTestimonials } from "@/components/store/HomeTestimonials";
 import { PromoDiagonalTrio } from "@/components/store/PromoDiagonalTrio";
 import { TechAmbient } from "@/components/ui/TechAmbient";
+import { StoreHomeHero } from "@/components/store/StoreHomeHero";
 import { homeClubFavoriteRank, isHomeClubFavoriteProduct } from "@/lib/home-club-favorites";
 import { sortProductsForHomeDisplay } from "@/lib/storefront-product-order";
 import {
@@ -35,7 +27,6 @@ import type { TintBubbleItem } from "@/lib/tints";
 import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
 import { formatPrice } from "@/lib/format";
 import { useEffect, useMemo, useState } from "react";
-import type { StaticImageData } from "next/image";
 import dulceRenacerCover from "@/assets/productos/FS002 Dulce Renacer/FS002-1.webp";
 import accesoriosCover from "@/assets/productos/FS027 Accesorios/FS027-1.webp";
 import {
@@ -45,37 +36,6 @@ import {
 import { useStoreNavigation } from "@/components/store/StoreNavigationProvider";
 import { resolveStoreMenuGroupHref } from "@/lib/store/menu-item-href";
 
-const HERO_SLIDES: readonly {
-  desktop: StaticImageData;
-  mobile: StaticImageData;
-  alt: string;
-  href: string;
-}[] = [
-  {
-    desktop: heroPc1,
-    mobile: heroMobile1,
-    alt: "Un solo spray y todo cambia. Cuatro fragancias Hair Mist.",
-    href: "/categoria/cuidado-capilar?grupo=Hair%20Mist",
-  },
-  {
-    desktop: heroPc2,
-    mobile: heroMobile2,
-    alt: "Rise and Shine. El toque final para un cabello ultrabrillante.",
-    href: `/categoria/cuidado-capilar?grupo=${encodeURIComponent("Finalizadores y Protección")}`,
-  },
-  {
-    desktop: heroPc3,
-    mobile: heroMobile3,
-    alt: "Una bomba: el pre-shampoo para los días en que tu cabello pide más.",
-    href: `/categoria/cuidado-capilar?grupo=${encodeURIComponent("Pre - Shampoo")}`,
-  },
-  {
-    desktop: heroPc4,
-    mobile: heroMobile4,
-    alt: "Tu nueva obsesión capilar empieza aquí.",
-    href: "/categoria/cuidado-capilar",
-  },
-];
 const DESKTOP_INITIAL_VISIBLE_PRODUCTS = 12;
 const MOBILE_INITIAL_VISIBLE_PRODUCTS = 6;
 const DESKTOP_LOAD_MORE_PRODUCTS = 12;
@@ -110,33 +70,10 @@ export function StoreHomeClient({
 
   const [sortValue, setSortValue] = useState<string>("default");
   const [manualSub, setManualSub] = useState<string | null>(null);
-  const [heroBannerIndex, setHeroBannerIndex] = useState(0);
-  const [heroIsMobile, setHeroIsMobile] = useState(false);
   const [visibleCount, setVisibleCount] = useState(DESKTOP_INITIAL_VISIBLE_PRODUCTS);
   const [loadMoreStep, setLoadMoreStep] = useState(DESKTOP_LOAD_MORE_PRODUCTS);
 
   useReveal();
-
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 768px)");
-    const sync = () => setHeroIsMobile(mq.matches);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setHeroBannerIndex((prev) => (prev + 1) % HERO_SLIDES.length);
-    }, 7000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  /** Slide activo + siguiente (preload suave del carrusel). */
-  const heroMountIndexes = useMemo(() => {
-    const next = (heroBannerIndex + 1) % HERO_SLIDES.length;
-    return next === heroBannerIndex ? [heroBannerIndex] : [heroBannerIndex, next];
-  }, [heroBannerIndex]);
 
   const filteredProducts = useMemo(() => {
     let list: StoreProduct[];
@@ -192,35 +129,7 @@ export function StoreHomeClient({
 
   return (
     <>
-      <section className="hero-section" aria-label="Destacados Four Sensations">
-        <div className="banner-placeholder-wrapper" id="hero-banner">
-          {heroMountIndexes.map((index) => {
-            const slide = HERO_SLIDES[index]!;
-            const isActive = heroBannerIndex === index;
-            const src = heroIsMobile ? slide.mobile : slide.desktop;
-            return (
-              <div
-                key={`${slide.desktop.src}-${heroIsMobile ? "m" : "d"}`}
-                className={`hero-banner-layer${isActive ? " active" : ""}`}
-              >
-                <Image
-                  src={src}
-                  alt=""
-                  className={`hero-banner-kenburns${heroIsMobile ? " hero-banner-kenburns--mobile" : " hero-banner-kenburns--desktop"}`}
-                  sizes="100vw"
-                  fill
-                  priority={index === 0}
-                  quality={index === 0 ? 70 : 60}
-                  placeholder="blur"
-                />
-                {isActive ? (
-                  <Link href={slide.href} className="hero-banner-hit" prefetch aria-label={slide.alt} />
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </section>
+      <StoreHomeHero />
 
       <div className="marquee-strip">
         <div className="marquee-track" id="marquee-track">

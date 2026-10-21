@@ -1,4 +1,5 @@
 import { StoreHomeClient } from "@/components/store/StoreHomeClient";
+import { StoreHomeHeroPreload } from "@/components/store/StoreHomeHero";
 import { isHomeClubFavoriteProduct } from "@/lib/home-club-favorites";
 import { getStorefrontProducts } from "@/lib/products";
 import { getActiveStoreCombos } from "@/lib/server/store-combos";
@@ -19,6 +20,9 @@ export default async function StoreHomePage() {
   );
 
   return (
-    <StoreHomeClient initialProducts={products} initialCombos={combos} homeContent={homeContent} />
+    <>
+      <StoreHomeHeroPreload />
+      <StoreHomeClient initialProducts={products} initialCombos={combos} homeContent={homeContent} />
+    </>
   );
 }
