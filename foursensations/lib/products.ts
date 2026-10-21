@@ -19,7 +19,6 @@ import { slugify } from "@/lib/slugify";
 import { normalizeMenuLookup } from "@/lib/store/menu-item-href";
 import { enrichStorefrontDisplayProducts } from "@/lib/store/variant-groups";
 import { preferFastStorefrontUrls, toFastProductMediaUrl } from "@/lib/util/image-url";
-import { mergeLocalProductPhotoUrls } from "@/lib/server/product-photo-files";
 
 /** Solo portada + hover: cargar 80 fotos por producto reventaba Render free (512Mi). */
 const productStoreInclude = {
