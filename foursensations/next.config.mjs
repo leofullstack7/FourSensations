@@ -47,7 +47,11 @@ const nextConfig = {
       },
       {
         source: "/media/:path*",
-        headers: [{ key: "Cache-Control", value: week }],
+        headers: [
+          { key: "Cache-Control", value: week },
+          { key: "CDN-Cache-Control", value: week },
+          { key: "Cloudflare-CDN-Cache-Control", value: week },
+        ],
       },
     ];
   },
