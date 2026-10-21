@@ -529,6 +529,7 @@ footer::before {
 .gb-co-brand-wrap {
   display: flex;
   justify-content: center;
+  min-width: 0;
 }
 .gb-co-brand-logo.gb-auth-brand {
   margin-bottom: 0;
@@ -543,6 +544,17 @@ footer::before {
 }
 .gb-co-brand-logo .gb-auth-brand-tagline {
   display: none;
+}
+
+@media (max-width: 767px) {
+  .gb-co-brand-logo .gb-auth-brand-icon {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 2px;
+  }
+  .gb-co-brand-logo .gb-auth-brand-name {
+    font-size: 14px;
+  }
 }
 
 /* —— Checkout extra —— */

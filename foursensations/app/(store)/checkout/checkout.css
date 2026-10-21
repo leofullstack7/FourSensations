@@ -79,11 +79,24 @@
   font-weight: 500;
   color: var(--text-light);
   transition: color 0.25s ease, transform 0.25s ease;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.gb-co-back__short {
+  display: none;
 }
 
 .gb-co-back:hover {
   color: var(--dusty-rose);
   transform: translateX(-3px);
+}
+
+.gb-co-continue {
+  font-size: 13px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .gb-co-logo {
@@ -303,13 +316,37 @@
 
 .gb-co-line-item {
   display: grid;
-  grid-template-columns: 88px 1fr auto;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
   gap: 14px;
   align-items: center;
   padding: 10px 0;
   border-bottom: 1px solid rgba(245, 237, 227, 0.95);
   transition: background 0.25s ease;
   border-radius: var(--radius-md);
+  min-width: 0;
+  width: 100%;
+}
+
+.gb-co-line-meta {
+  min-width: 0;
+}
+
+.gb-co-line-name {
+  font-weight: 600;
+  color: var(--dark);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.gb-co-line-price {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.gb-co-line-price__val {
+  font-weight: 600;
+  color: var(--dusty-rose);
+  white-space: nowrap;
 }
 
 .gb-co-line-item:last-child {
@@ -1183,4 +1220,218 @@
 .gb-co-city-list button.is-active,
 .gb-co-city-list button:hover {
   background: #f8eef8;
+}
+
+/* —— Checkout móvil: evita corte a la derecha y reduce tamaños —— */
+@media (max-width: 767px) {
+  .gb-co-page {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .gb-co-header-inner {
+    padding: 10px 12px;
+    gap: 8px;
+    max-width: 100%;
+  }
+
+  .gb-co-back__full {
+    display: none;
+  }
+
+  .gb-co-back__short {
+    display: inline;
+    font-size: 18px;
+    line-height: 1;
+    padding: 4px 2px;
+  }
+
+  .gb-co-continue {
+    display: none;
+  }
+
+  .gb-co-brand-wrap {
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .gb-co-main {
+    padding: 16px 12px 64px;
+    gap: 16px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .gb-co-main > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .gb-co-hero {
+    margin-bottom: 4px;
+    padding: 0 2px;
+  }
+
+  .gb-co-hero h1 {
+    font-size: 1.45rem;
+  }
+
+  .gb-co-hero p {
+    font-size: 13px;
+    max-width: 100%;
+  }
+
+  .gb-co-steps {
+    gap: 4px;
+    margin-bottom: 16px;
+  }
+
+  .gb-co-step {
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    padding: 5px 8px;
+  }
+
+  .gb-co-card,
+  .gb-co-card--compact {
+    padding: 14px 12px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .gb-co-card:hover {
+    transform: none;
+  }
+
+  .gb-co-section-title {
+    font-size: 1rem;
+    margin-bottom: 12px;
+  }
+
+  .gb-co-line-item {
+    grid-template-columns: 64px minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: start;
+    padding: 10px 0;
+  }
+
+  .gb-co-thumb,
+  .gb-co-thumb--photo {
+    width: 64px;
+    height: 64px;
+  }
+
+  .gb-co-qty {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .gb-co-qty button {
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+  }
+
+  .gb-co-input,
+  .gb-co-textarea {
+    padding: 12px 12px;
+    font-size: 16px; /* evita zoom iOS */
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .gb-co-grid2,
+  .gb-co-zone-grid,
+  .gb-co-fulfillment-grid,
+  .gb-co-carrier-grid,
+  .gb-co-pay-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .gb-co-zone-card,
+  .gb-co-carrier-card,
+  .gb-co-method-card {
+    padding: 12px;
+    min-width: 0;
+  }
+
+  .gb-co-method-logo img {
+    max-width: 112px;
+    height: auto;
+  }
+
+  .gb-co-method-desc {
+    font-size: 11px;
+  }
+
+  .gb-co-coupon__row {
+    flex-wrap: wrap;
+  }
+
+  .gb-co-coupon__row .gb-co-input {
+    flex: 1 1 100%;
+  }
+
+  .gb-co-coupon__btn,
+  .gb-co-coupon__clear {
+    flex: 1 1 auto;
+  }
+
+  .gb-co-pay {
+    padding: 14px 16px;
+    font-size: 15px;
+  }
+
+  .gb-co-trust {
+    font-size: 11.5px;
+    padding: 12px;
+  }
+
+  .gb-co-total-row {
+    font-size: 13px;
+    gap: 8px;
+  }
+
+  .gb-co-total-row strong {
+    white-space: nowrap;
+  }
+
+  .gb-co-aside,
+  .gb-co-aside-sticky,
+  .gb-co-aside-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .cart-channel-switch button {
+    font-size: 11px;
+    padding: 9px 6px;
+  }
+}
+
+@media (max-width: 380px) {
+  .gb-co-main {
+    padding: 12px 10px 56px;
+  }
+
+  .gb-co-line-item {
+    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+  }
+
+  .gb-co-line-price {
+    grid-column: 2;
+    text-align: left;
+    margin-top: 2px;
+  }
+
+  .gb-co-step {
+    padding: 4px 6px;
+  }
 }

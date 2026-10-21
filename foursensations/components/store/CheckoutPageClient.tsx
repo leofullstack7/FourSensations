@@ -789,12 +789,15 @@ export function CheckoutPageClient() {
       <header className="gb-co-header">
         <div className="gb-co-header-inner">
           <Link href="/" className="gb-co-back">
-            ← Volver a la tienda
+            <span className="gb-co-back__short" aria-hidden>
+              ←
+            </span>
+            <span className="gb-co-back__full">← Volver a la tienda</span>
           </Link>
           <div className="gb-co-brand-wrap">
             <BrandLogo variant="auth" className="gb-co-brand-logo" />
           </div>
-          <Link href="/" style={{ fontSize: 13, color: "var(--text-muted)" }}>
+          <Link href="/" className="gb-co-continue">
             Seguir comprando
           </Link>
         </div>
@@ -839,7 +842,7 @@ export function CheckoutPageClient() {
                         src={imgSrc}
                         alt={item.name}
                         fill
-                        sizes="88px"
+                        sizes="(max-width: 640px) 64px, 88px"
                         unoptimized={imgSrc.startsWith("/")}
                         className="gb-co-thumb__img"
                         style={{ objectFit: "cover" }}
@@ -848,8 +851,8 @@ export function CheckoutPageClient() {
                       <span aria-hidden>{item.emoji || "🛍️"}</span>
                     )}
                   </div>
-                  <div>
-                    <div style={{ fontWeight: 600, color: "var(--dark)" }}>{item.name}</div>
+                  <div className="gb-co-line-meta">
+                    <div className="gb-co-line-name">{item.name}</div>
                     <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
                       {item.comboId ? "Combo promocional" : item.brand}
                     </div>
@@ -912,8 +915,8 @@ export function CheckoutPageClient() {
                       </button>
                     </div>
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontWeight: 600, color: "var(--dusty-rose)" }}>{formatPrice(item.price * item.qty)}</div>
+                  <div className="gb-co-line-price">
+                    <div className="gb-co-line-price__val">{formatPrice(item.price * item.qty)}</div>
                     {item.discountPercent != null ? (
                       <div className="price-discount" style={{ marginTop: 4, display: "inline-block" }}>
                         {formatDiscountBadge(item.discountPercent)}
