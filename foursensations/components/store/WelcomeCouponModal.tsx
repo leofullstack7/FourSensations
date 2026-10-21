@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import couponArt from "@/assets/foursensations/cupondescuento.webp";
 
 const STORAGE_KEY = "fs_welcome_coupon_v1";
-const SHOW_DELAY_MS = 3000;
+/** Después del first paint; no compite con hero/productos. */
+const SHOW_DELAY_MS = 9000;
 
 type ClaimOk = {
   ok: true;
@@ -58,7 +59,7 @@ export function WelcomeCouponModal() {
   const [imageReady, setImageReady] = useState(false);
   const [delayDone, setDelayDone] = useState(false);
 
-  // Precarga la imagen de inmediato; el popup solo aparece cuando ya está lista + 3s de espera.
+  // Espera al first paint; luego precarga el arte del cupón (no compite con hero).
   useEffect(() => {
     try {
       if (window.localStorage.getItem(STORAGE_KEY)) return;
@@ -67,10 +68,14 @@ export function WelcomeCouponModal() {
     }
 
     let cancelled = false;
-    const src = typeof couponArt === "object" && couponArt && "src" in couponArt ? String(couponArt.src) : "";
-    if (!src) {
-      setImageReady(true);
-    } else {
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      setDelayDone(true);
+      const src = typeof couponArt === "object" && couponArt && "src" in couponArt ? String(couponArt.src) : "";
+      if (!src) {
+        setImageReady(true);
+        return;
+      }
       const img = new window.Image();
       img.decoding = "async";
       img.onload = () => {
@@ -81,10 +86,6 @@ export function WelcomeCouponModal() {
       };
       img.src = src;
       if (img.complete) setImageReady(true);
-    }
-
-    const timer = window.setTimeout(() => {
-      if (!cancelled) setDelayDone(true);
     }, SHOW_DELAY_MS);
 
     return () => {

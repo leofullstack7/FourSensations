@@ -29,10 +29,8 @@ type StoreNavigationContextValue = {
 
 const StoreNavigationContext = createContext<StoreNavigationContextValue | null>(null);
 
-const INTRO_MS = 700;
-const INTRO_OUT_MS = 280;
-const ROUTE_MIN_MS = 420;
-const ROUTE_OUT_MS = 220;
+const ROUTE_MIN_MS = 280;
+const ROUTE_OUT_MS = 180;
 
 export function useStoreNavigation(): StoreNavigationContextValue {
   const ctx = useContext(StoreNavigationContext);
@@ -108,8 +106,9 @@ export function StoreNavigationProvider({ children }: { children: ReactNode }) {
   const [isNavigating, setIsNavigating] = useState(false);
   const [navExiting, setNavExiting] = useState(false);
   const [navOverlayLabel, setNavOverlayLabel] = useState("Four Sensations");
-  const [introOpen, setIntroOpen] = useState(true);
-  const [introExiting, setIntroExiting] = useState(false);
+  /** Sin splash de intro: la home debe verse al instante (meta ≤6s). */
+  const [introOpen] = useState(false);
+  const introExiting = false;
   const [portalReady, setPortalReady] = useState(false);
   const navStartedAtRef = useRef(0);
   const pendingHrefRef = useRef<string | null>(null);
@@ -193,16 +192,6 @@ export function StoreNavigationProvider({ children }: { children: ReactNode }) {
       document.body.classList.remove("fs-heart-lock");
     };
   }, [isNavigating, introOpen]);
-
-  useEffect(() => {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const hold = reduce ? 500 : INTRO_MS;
-    const t = window.setTimeout(() => {
-      setIntroExiting(true);
-      window.setTimeout(() => setIntroOpen(false), INTRO_OUT_MS);
-    }, hold);
-    return () => window.clearTimeout(t);
-  }, []);
 
   useLayoutEffect(() => setPortalReady(true), []);
 

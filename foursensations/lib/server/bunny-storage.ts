@@ -72,6 +72,9 @@ export async function putImageToBunnyPath(
   return `${cfg.cdnBaseUrl}/${path}`;
 }
 
+/** Evita HEAD/PUT repetidos en el mismo proceso (Render caliente). */
+const bunnyReadyPaths = new Map<string, string>();
+
 /**
  * Si el archivo ya está en CDN lo reutiliza; si no, lo sube y devuelve la URL pública.
  * Usado por /api/media/* para dejar de servir megabytes desde Render.
@@ -81,14 +84,29 @@ export async function ensureBunnyPublicUrl(
   buffer: Buffer,
   contentType: string,
 ): Promise<string | null> {
-  if (!getBunnyStorageConfig()) return null;
-  const existing = await bunnyCdnUrlIfPresent(objectPath);
-  if (existing) return existing;
+  const cfg = getBunnyStorageConfig();
+  if (!cfg) return null;
+  const path = objectPath.replace(/^\/+/, "");
+  const memorized = bunnyReadyPaths.get(path);
+  if (memorized) return memorized;
+
+  const publicUrl = `${cfg.cdnBaseUrl}/${path}`;
+  // Asumimos CDN listo tras PUT; no hacemos HEAD (ahorra RTT en la 1ª carga).
   try {
-    return await putImageToBunnyPath(objectPath, buffer, contentType);
+    const url = await putImageToBunnyPath(path, buffer, contentType);
+    bunnyReadyPaths.set(path, url);
+    return url;
   } catch (e) {
-    console.error("[bunny] ensureBunnyPublicUrl", objectPath, e);
-    return null;
+    // Si ya existía (PUT conflict raro) o CDN ya lo tiene, devolver URL pública.
+    const existing = await bunnyCdnUrlIfPresent(path);
+    if (existing) {
+      bunnyReadyPaths.set(path, existing);
+      return existing;
+    }
+    console.error("[bunny] ensureBunnyPublicUrl", path, e);
+    // Último recurso: devolver URL CDN por si el objeto ya está y PUT falló por red.
+    bunnyReadyPaths.set(path, publicUrl);
+    return publicUrl;
   }
 }
 
