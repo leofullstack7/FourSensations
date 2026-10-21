@@ -103,6 +103,8 @@
   transform-origin: 50% 50%;
   will-change: transform;
   background: transparent;
+  /* Evita suavizado excesivo al escalar el kenburns en pantallas retina. */
+  image-rendering: -webkit-optimize-contrast;
 }
 .hero-banner-layer.active .hero-banner-kenburns {
   animation: hero-kenburns 12s cubic-bezier(0.16, 0.84, 0.44, 1) forwards;

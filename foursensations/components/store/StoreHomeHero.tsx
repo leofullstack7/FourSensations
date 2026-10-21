@@ -111,15 +111,21 @@ export function StoreHomeHero() {
             >
               {/* picture: el browser elige móvil/desktop sin esperar JS ni /_next/image. */}
               <picture>
-                <source media="(max-width: 768px)" srcSet={slide.mobile.src} type="image/webp" />
+                <source
+                  media="(max-width: 768px)"
+                  srcSet={`${slide.mobile.src} ${slide.mobile.width}w`}
+                  sizes="100vw"
+                  type="image/webp"
+                />
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={slide.desktop.src}
+                  srcSet={`${slide.desktop.src} ${slide.desktop.width}w`}
                   alt=""
                   className="hero-banner-kenburns"
                   width={slide.desktop.width}
                   height={slide.desktop.height}
-                  decoding={isLcp || isActive ? "sync" : "async"}
+                  decoding="async"
                   loading={isLcp ? "eager" : "lazy"}
                   fetchPriority={isLcp ? "high" : "low"}
                   sizes="100vw"
