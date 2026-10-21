@@ -394,10 +394,6 @@
   }
 }
 
-.gb-co-pay--incomplete {
-  opacity: 0.72;
-}
-
 .gb-co-pay-hint {
   margin: 8px 0 0;
   font-size: 12px;
@@ -655,6 +651,7 @@
   background: linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, 0.18) 50%, transparent 60%);
   transform: translateX(-100%);
   animation: gb-co-shimmer 2.8s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .gb-co-pay:hover:not(:disabled) {

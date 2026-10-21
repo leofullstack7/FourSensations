@@ -517,6 +517,8 @@ export function CheckoutPageClient() {
       }
       if (!data.initPoint) throw new Error("Mercado Pago no devolvió el enlace de pago");
       window.location.assign(data.initPoint);
+      // Si el navegador no navega (bloqueo, error), reactivar el botón.
+      window.setTimeout(() => setPhase((p) => (p === "session" ? "idle" : p)), 12000);
     } catch (e) {
       setPhase("error");
       setErrorMsg(e instanceof Error ? e.message : "Error al abrir Mercado Pago");
@@ -562,6 +564,7 @@ export function CheckoutPageClient() {
       if (!res.ok) throw new Error(data.error || "No se pudo iniciar Addi");
       if (!data.initPoint) throw new Error("Addi no devolvió el enlace de pago");
       window.location.assign(data.initPoint);
+      window.setTimeout(() => setPhase((p) => (p === "session" ? "idle" : p)), 12000);
     } catch (e) {
       setPhase("error");
       setErrorMsg(e instanceof Error ? e.message : "Error al abrir Addi");
@@ -694,36 +697,49 @@ export function CheckoutPageClient() {
     }
   }, [createPendingOrder, router, validateForm]);
 
+  // Solo bloquear mientras hay trabajo en curso (nunca por formulario incompleto).
+  const payBusy = phase === "order" || phase === "session" || phase === "widget" || phase === "integrity";
+
   const handlePay = () => {
+    if (phase === "order" || phase === "session" || phase === "widget" || phase === "integrity") return;
+    setErrorMsg(null);
+    const method = paymentMethod || "mercadopago";
+    if (!paymentMethod) setPaymentMethod("mercadopago");
     const v = validateForm();
     if (v) {
       setInfoModal("Completa la información");
       setErrorMsg(v);
+      setPhase("idle");
       return;
     }
-    if (paymentMethod === "contraentrega") void runContraentrega();
-    else if (paymentMethod === "bold" && BOLD_CHECKOUT_ENABLED) void runBoldPayment();
-    else if (paymentMethod === "addi") void runAddiPayment();
-    else if (paymentMethod === "mercadopago") void runMercadoPagoPayment();
+    if (method === "contraentrega") void runContraentrega();
+    else if (method === "bold" && BOLD_CHECKOUT_ENABLED) void runBoldPayment();
+    else if (method === "addi") void runAddiPayment();
+    else void runMercadoPagoPayment();
   };
 
-  const payBusy = phase === "order" || phase === "session" || phase === "widget" || phase === "integrity";
   const payLabel = (() => {
     if (phase === "order") return "Creando pedido…";
     if (phase === "integrity") return "Firmando pago…";
     if (phase === "session" && paymentMethod === "mercadopago") return "Conectando con Mercado Pago…";
     if (phase === "session" && paymentMethod === "addi") return "Conectando con Addi…";
     if (phase === "widget" && paymentMethod === "bold") return "Completa el pago arriba ↑";
-    if (!formComplete) {
-      if (formError && formError.length <= 56) return formError;
-      return "Completa tus datos para pagar";
-    }
-    if (phase === "error") return "Reintentar";
+    if (phase === "error") return "Reintentar pago";
     if (paymentMethod === "contraentrega") return "Confirmar pedido contraentrega";
     if (paymentMethod === "bold") return "Preparar pago con Bold";
     if (paymentMethod === "addi") return "Pagar con Addi";
-    return "Ir a Mercado Pago";
+    return "Pagar ahora";
   })();
+
+  // Failsafe: si el flujo se queda colgado, reactivar el botón.
+  useEffect(() => {
+    if (!payBusy) return;
+    const t = window.setTimeout(() => {
+      setPhase((p) => (p === "order" || p === "session" || p === "integrity" ? "idle" : p));
+      setErrorMsg((msg) => msg || "El pago tardó demasiado. Puedes intentar de nuevo.");
+    }, 45000);
+    return () => window.clearTimeout(t);
+  }, [payBusy, phase]);
 
   if (!hydrated) {
     return (
@@ -1437,10 +1453,10 @@ export function CheckoutPageClient() {
 
             <button
               type="button"
-              className={`gb-co-pay${!formComplete && !payBusy ? " gb-co-pay--incomplete" : ""}`}
+              className="gb-co-pay"
               onClick={handlePay}
-              disabled={payBusy || !paymentMethod}
-              aria-disabled={!formComplete || payBusy}
+              disabled={payBusy}
+              aria-busy={payBusy}
             >
               {payBusy && <span className="gb-co-spinner" aria-hidden />}
               {payLabel}

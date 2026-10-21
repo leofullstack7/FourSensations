@@ -54,12 +54,30 @@ function splitPayerName(fullName: string): { name: string; surname: string } {
   return { name: parts[0]!, surname: parts.slice(1).join(" ") };
 }
 
+/** Celular CO: area_code = 3 dígitos (300/310…), number = resto. No usar "57" como área. */
 function normalizePhone(phone?: string | null): { area_code: string; number: string } | undefined {
   const digits = (phone ?? "").replace(/\D/g, "");
   if (digits.length < 10) return undefined;
-  // Celular CO: 10 dígitos (3XX…) o 12 con 57.
   const local = digits.startsWith("57") && digits.length >= 12 ? digits.slice(-10) : digits.slice(-10);
-  return { area_code: "57", number: local };
+  if (local.length < 10) return undefined;
+  return { area_code: local.slice(0, 3), number: local.slice(3) };
+}
+
+function normalizePayerAddress(addr?: {
+  line1?: string | null;
+  city?: string | null;
+  postalCode?: string | null;
+} | null): { zip_code: string; street_name: string; street_number: number } | undefined {
+  const street = (addr?.line1 ?? "").trim();
+  if (street.length < 3) return undefined;
+  const zip = (addr?.postalCode ?? "").replace(/\D/g, "").slice(0, 6);
+  const numMatch = street.match(/(\d{1,5})\s*$/);
+  const streetNumber = numMatch ? Number(numMatch[1]) : 0;
+  return {
+    zip_code: zip.length >= 4 ? zip : "110111",
+    street_name: street.slice(0, 120),
+    street_number: Number.isFinite(streetNumber) ? streetNumber : 0,
+  };
 }
 
 export async function createMercadoPagoPreference(opts: {
@@ -72,6 +90,7 @@ export async function createMercadoPagoPreference(opts: {
   name: string;
   phone?: string | null;
   documentNumber?: string | null;
+  address?: { line1?: string | null; city?: string | null; postalCode?: string | null } | null;
   backUrl: string;
   notificationUrl: string;
 }): Promise<MercadoPagoPreferenceResult> {
@@ -83,6 +102,13 @@ export async function createMercadoPagoPreference(opts: {
   const { name, surname } = splitPayerName(opts.name);
   const phone = normalizePhone(opts.phone);
   const documentNumber = (opts.documentNumber ?? "").replace(/\D/g, "");
+  if (documentNumber.length < 5) {
+    throw new Error("La cédula del comprador es obligatoria para pagar con Mercado Pago");
+  }
+  if (!phone) {
+    throw new Error("El celular del comprador es obligatorio para pagar con Mercado Pago");
+  }
+  const address = normalizePayerAddress(opts.address);
   // Máx. 13 caracteres en el extracto de tarjeta.
   const statementDescriptor = "FOURSENSATION";
 
@@ -90,7 +116,7 @@ export async function createMercadoPagoPreference(opts: {
     items: [
       {
         id: opts.reference.slice(0, 60),
-        title: opts.title.slice(0, 120),
+        title: (opts.title.trim() || `Pedido ${opts.reference}`).slice(0, 120),
         description: `Pedido ${opts.reference}`.slice(0, 200),
         category_id: "others",
         quantity: 1,
@@ -102,10 +128,9 @@ export async function createMercadoPagoPreference(opts: {
       email: opts.email.trim().toLowerCase(),
       name,
       surname,
-      ...(phone ? { phone } : {}),
-      ...(documentNumber.length >= 5
-        ? { identification: { type: "CC", number: documentNumber } }
-        : {}),
+      phone,
+      identification: { type: "CC", number: documentNumber },
+      ...(address ? { address } : {}),
     },
     external_reference: opts.reference,
     metadata: {
@@ -121,8 +146,10 @@ export async function createMercadoPagoPreference(opts: {
     notification_url: opts.notificationUrl,
     statement_descriptor: statementDescriptor,
     binary_mode: false,
+    marketplace: "NONE",
     payment_methods: {
       installments: 12,
+      default_installments: 1,
     },
   };
 

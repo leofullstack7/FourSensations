@@ -67,6 +67,9 @@ export async function POST(req: Request) {
       : {};
   const documentNumber =
     typeof addr.documentNumber === "string" ? addr.documentNumber.replace(/\D/g, "") : "";
+  const line1 = typeof addr.line1 === "string" ? addr.line1 : "";
+  const city = typeof addr.city === "string" ? addr.city : "";
+  const postalCode = typeof addr.postalCode === "string" ? addr.postalCode : "";
 
   try {
     const pref = await createMercadoPagoPreference({
@@ -79,6 +82,7 @@ export async function POST(req: Request) {
       name: order.customerName,
       phone: order.customerPhone,
       documentNumber,
+      address: { line1, city, postalCode },
       backUrl,
       notificationUrl,
     });
