@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { toFastProductMediaUrl } from "@/lib/util/image-url";
 
 const SKU_RE = /^FS\d{3}$/i;
 const FILE_RE = /^FS\d{3}-\d+\.webp$/i;
@@ -31,7 +32,7 @@ export function listProductPhotoFiles(sku: string): string[] {
 }
 
 function skuFromMediaUrl(url: string): string | null {
-  const match = url.trim().match(/\/api\/media\/productos\/(FS\d{3})\//i);
+  const match = url.trim().match(/\/(?:api\/media|media)\/productos\/(FS\d{3})\//i);
   return match ? match[1]!.toUpperCase() : null;
 }
 
@@ -67,11 +68,12 @@ export function mergeLocalProductPhotoUrls(productName: string, urls: string[]):
   const sku = urls.map(skuFromMediaUrl).find(Boolean) || findSkuByProductName(productName);
   if (!sku) return urls;
   const extras = listProductPhotoFiles(sku).map(
-    (file) => `/api/media/productos/${sku}/${file}`,
+    (file) => `/media/productos/${sku}/${file}`,
   );
-  if (extras.length === 0) return urls;
-  const seen = new Set(urls.map((u) => u.trim()).filter(Boolean));
-  const merged = [...urls.filter((u) => u.trim())];
+  const normalized = urls.map((u) => toFastProductMediaUrl(u.trim())).filter(Boolean);
+  if (extras.length === 0) return normalized;
+  const seen = new Set(normalized);
+  const merged = [...normalized];
   for (const url of extras) {
     if (seen.has(url)) continue;
     seen.add(url);
@@ -82,7 +84,7 @@ export function mergeLocalProductPhotoUrls(productName: string, urls: string[]):
 
 export function listSkuMediaUrls(sku: string): string[] {
   const code = sku.trim().toUpperCase();
-  return listProductPhotoFiles(code).map((file) => `/api/media/productos/${code}/${file}`);
+  return listProductPhotoFiles(code).map((file) => `/media/productos/${code}/${file}`);
 }
 
 export function resolveProductPhotoFile(sku: string, fileName: string): string | null {

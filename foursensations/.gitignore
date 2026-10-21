@@ -11,6 +11,9 @@
 /.next/
 /out/
 
+# generado en build (copia estática de assets/productos)
+/public/media/
+
 # production
 /build
 

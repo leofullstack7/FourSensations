@@ -45,6 +45,10 @@ const nextConfig = {
         source: "/api/media/:path*",
         headers: [{ key: "Cache-Control", value: week }],
       },
+      {
+        source: "/media/:path*",
+        headers: [{ key: "Cache-Control", value: week }],
+      },
     ];
   },
   /**

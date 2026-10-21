@@ -25,7 +25,7 @@ function listProductPhotoFiles(sku) {
 }
 
 function productMediaPublicUrl(sku, fileName) {
-  return `/api/media/productos/${sku}/${fileName}`;
+  return `/media/productos/${sku}/${fileName}`;
 }
 
 function slugify(text) {

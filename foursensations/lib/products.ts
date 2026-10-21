@@ -18,6 +18,7 @@ import { mergeLocalProductPhotoUrls } from "@/lib/server/product-photo-files";
 import { slugify } from "@/lib/slugify";
 import { normalizeMenuLookup } from "@/lib/store/menu-item-href";
 import { enrichStorefrontDisplayProducts } from "@/lib/store/variant-groups";
+import { toFastProductMediaUrl } from "@/lib/util/image-url";
 
 /** Solo portada + hover: cargar 80 fotos por producto reventaba Render free (512Mi). */
 const productStoreInclude = {
@@ -63,7 +64,7 @@ function rowToStore(p: ProductRow, galleryRows: { url: string }[] = []): StorePr
   const seen = new Set<string>();
   const all: string[] = [];
   for (const raw of [p.imageUrl, ...galleryRows.map((g) => g.url)]) {
-    const url = raw?.trim() || "";
+    const url = toFastProductMediaUrl(raw?.trim() || "");
     if (!url || seen.has(url)) continue;
     seen.add(url);
     all.push(url);
@@ -130,7 +131,7 @@ const getCachedStorefrontProducts = unstable_cache(
     const mapped = rows.map((r) => rowToStore(r, r.images));
     return enrichStorefrontDisplayProducts(mapped, mapped);
   },
-  ["storefront-products-v10-images-take-2"],
+  ["storefront-products-v11-static-media"],
   { revalidate: 300, tags: [STOREFRONT_PRODUCTS_CACHE_TAG] }
 );
 
