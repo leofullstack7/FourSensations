@@ -1,12 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useState } from "react";
 import couponArt from "@/assets/foursensations/cupondescuento.webp";
 
 const STORAGE_KEY = "fs_welcome_coupon_v1";
-/** Espera mínima tras precargar el arte (no mostrar a medias). */
-const SHOW_AFTER_READY_MS = 400;
 
 type ClaimOk = {
   ok: true;
@@ -49,11 +46,38 @@ function WhatsAppIcon() {
   );
 }
 
-function couponArtSrc(): string {
-  if (typeof couponArt === "object" && couponArt && "src" in couponArt) {
-    return String(couponArt.src);
+const COUPON_SRC =
+  typeof couponArt === "object" && couponArt && "src" in couponArt ? String(couponArt.src) : "";
+
+function preloadCouponArt(): Promise<void> {
+  if (!COUPON_SRC || typeof window === "undefined") return Promise.resolve();
+
+  // <link rel=preload> lo antes posible (compite menos con el resto).
+  const existing = document.querySelector(`link[data-fs-coupon-preload="1"]`);
+  if (!existing) {
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = COUPON_SRC;
+    link.setAttribute("data-fs-coupon-preload", "1");
+    document.head.appendChild(link);
   }
-  return "";
+
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.decoding = "async";
+    const done = () => resolve();
+    img.onload = () => {
+      if (typeof img.decode === "function") {
+        img.decode().then(done).catch(done);
+      } else {
+        done();
+      }
+    };
+    img.onerror = done;
+    img.src = COUPON_SRC;
+    if (img.complete) done();
+  });
 }
 
 export function WelcomeCouponModal() {
@@ -63,9 +87,8 @@ export function WelcomeCouponModal() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<ClaimOk | null>(null);
-  const [ready, setReady] = useState(false);
 
-  // Precarga el arte YA; solo abre el modal cuando está listo (sin flash en blanco).
+  // Precarga el arte completo → abre el modal de golpe (sin fondo vacío ni blur).
   useEffect(() => {
     try {
       if (window.localStorage.getItem(STORAGE_KEY)) return;
@@ -74,52 +97,13 @@ export function WelcomeCouponModal() {
     }
 
     let cancelled = false;
-    let finished = false;
-    let showTimer: number | undefined;
-    const src = couponArtSrc();
-
-    const markReadyAndSchedule = () => {
-      if (cancelled || finished) return;
-      finished = true;
-      setReady(true);
-      showTimer = window.setTimeout(() => {
-        if (!cancelled) setOpen(true);
-      }, SHOW_AFTER_READY_MS);
-    };
-
-    if (!src) {
-      markReadyAndSchedule();
-      return () => {
-        cancelled = true;
-        if (showTimer) window.clearTimeout(showTimer);
-      };
-    }
-
-    const img = new window.Image();
-    img.decoding = "async";
-    img.onload = () => {
-      const finish = () => {
-        if (!cancelled) markReadyAndSchedule();
-      };
-      if (typeof img.decode === "function") {
-        img.decode().then(finish).catch(finish);
-      } else {
-        finish();
-      }
-    };
-    img.onerror = () => {
-      if (!cancelled) markReadyAndSchedule();
-    };
-    img.src = src;
-    if (img.complete) {
-      img.onload?.(new Event("load"));
-    }
+    preloadCouponArt().then(() => {
+      if (!cancelled) setOpen(true);
+    });
 
     return () => {
       cancelled = true;
-      if (showTimer) window.clearTimeout(showTimer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar
   }, []);
 
   const dismiss = (permanent: boolean) => {
@@ -161,11 +145,11 @@ export function WelcomeCouponModal() {
     }
   };
 
-  if (!open || !ready) return null;
+  if (!open) return null;
 
   return (
     <div
-      className="fs-welcome-coupon"
+      className="fs-welcome-coupon fs-welcome-coupon--ready"
       role="dialog"
       aria-modal="true"
       aria-labelledby="fs-welcome-coupon-title"
@@ -187,13 +171,16 @@ export function WelcomeCouponModal() {
           ✕
         </button>
         <div className="fs-welcome-coupon__art">
-          <Image
-            src={couponArt}
+          {/* img nativo: misma URL precargada → pinta al instante desde caché (sin blur de next/image). */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={COUPON_SRC}
             alt="Cupón de descuento Four Sensations"
             className="fs-welcome-coupon__img"
-            sizes="(max-width: 640px) 88vw, 420px"
-            priority
-            placeholder="blur"
+            width={typeof couponArt === "object" && "width" in couponArt ? couponArt.width : undefined}
+            height={typeof couponArt === "object" && "height" in couponArt ? couponArt.height : undefined}
+            decoding="sync"
+            fetchPriority="high"
             style={{ width: "100%", height: "auto", background: "transparent" }}
           />
           <div className={`fs-welcome-coupon__form-slot${done ? " is-done" : ""}`}>
