@@ -4,6 +4,15 @@ export function isHttpImageUrl(s: string | null | undefined): boolean {
   return s.startsWith("https://") || s.startsWith("http://");
 }
 
+/**
+ * Solo evita el optimizador de next/image en data/blob.
+ * /api/media y rutas públicas SÍ deben pasar por el optimizador (tamaños móviles).
+ */
+export function shouldBypassNextImageOptimizer(src: string | null | undefined): boolean {
+  if (!src) return true;
+  return src.startsWith("data:") || src.startsWith("blob:");
+}
+
 /** Fotos locales servidas desde `assets/productos` (SKU WebP). */
 export function isLocalProductMediaUrl(s: string | null | undefined): boolean {
   if (!s || typeof s !== "string") return false;

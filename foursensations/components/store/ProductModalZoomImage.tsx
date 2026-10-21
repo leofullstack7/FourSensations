@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
+import { shouldBypassNextImageOptimizer } from "@/lib/util/image-url";
 
 const ZOOM_SCALE = 2.75;
 
@@ -46,7 +47,7 @@ export function ProductModalZoomImage({
         fill
         sizes={sizes}
         priority
-        unoptimized={src.startsWith("/") || src.startsWith("http")}
+        unoptimized={shouldBypassNextImageOptimizer(src)}
         className="modal-gallery-zoom-img"
         style={{
           objectFit,

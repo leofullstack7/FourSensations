@@ -149,7 +149,7 @@ export function ProductModalGallery({ product }: { product: StoreProduct }) {
                       fill
                       sizes="108px"
                       loading="lazy"
-                      unoptimized
+                      unoptimized={false}
                       style={{ objectFit: "cover" }}
                     />
                   </button>

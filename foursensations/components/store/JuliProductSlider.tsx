@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { StoreProductPrice } from "@/components/store/StoreProductPrice";
 import type { StoreProduct } from "@/lib/types/product";
-import { isDisplayableImageUrl } from "@/lib/util/image-url";
+import { isDisplayableImageUrl, shouldBypassNextImageOptimizer } from "@/lib/util/image-url";
 
 type JuliProductSliderProps = {
   products: StoreProduct[];
@@ -112,7 +112,7 @@ export function JuliProductSlider({
                     fill
                     sizes="108px"
                     className="juli-slide__img"
-                    unoptimized={product.img.startsWith("/") || product.img.startsWith("http")}
+                    unoptimized={shouldBypassNextImageOptimizer(product.img)}
                   />
                 ) : (
                   <span className="juli-slide__emoji" aria-hidden>

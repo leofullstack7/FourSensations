@@ -31,7 +31,7 @@ import { useSession } from "next-auth/react";
 import { formatDiscountBadge } from "@/lib/product-discount";
 import Image from "next/image";
 import type { CartLine, StoreProduct } from "@/lib/types/product";
-import { isDisplayableImageUrl } from "@/lib/util/image-url";
+import { isDisplayableImageUrl, shouldBypassNextImageOptimizer } from "@/lib/util/image-url";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { TechAmbient } from "@/components/ui/TechAmbient";
 import { createCheckoutOrderSchema } from "@/lib/validation/checkout-order";
@@ -843,7 +843,7 @@ export function CheckoutPageClient() {
                         alt={item.name}
                         fill
                         sizes="(max-width: 640px) 64px, 88px"
-                        unoptimized={imgSrc.startsWith("/")}
+                        unoptimized={shouldBypassNextImageOptimizer(imgSrc)}
                         className="gb-co-thumb__img"
                         style={{ objectFit: "cover" }}
                       />

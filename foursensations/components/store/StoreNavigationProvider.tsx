@@ -29,10 +29,10 @@ type StoreNavigationContextValue = {
 
 const StoreNavigationContext = createContext<StoreNavigationContextValue | null>(null);
 
-const INTRO_MS = 2000;
-const INTRO_OUT_MS = 400;
-const ROUTE_MIN_MS = 900;
-const ROUTE_OUT_MS = 350;
+const INTRO_MS = 700;
+const INTRO_OUT_MS = 280;
+const ROUTE_MIN_MS = 420;
+const ROUTE_OUT_MS = 220;
 
 export function useStoreNavigation(): StoreNavigationContextValue {
   const ctx = useContext(StoreNavigationContext);

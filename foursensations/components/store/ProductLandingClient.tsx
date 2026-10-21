@@ -8,7 +8,7 @@ import { ProductModalZoomImage } from "@/components/store/ProductModalZoomImage"
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreProductPrice } from "@/components/store/StoreProductPrice";
 import type { StoreProduct } from "@/lib/types/product";
-import { isDisplayableImageUrl } from "@/lib/util/image-url";
+import { isDisplayableImageUrl, shouldBypassNextImageOptimizer } from "@/lib/util/image-url";
 import { productHeroThemeFromSlug } from "@/lib/store/product-hero-theme";
 import { getCategoryLabel } from "@/lib/category-labels";
 import { getCatalogProductCopy } from "@/lib/catalog-product-copy";
@@ -191,7 +191,7 @@ export function ProductLandingClient({
                           width={i === 0 ? 640 : 280}
                           height={i === 0 ? 640 : 280}
                           className="product-mosaic__img"
-                          unoptimized={src.startsWith("/") || src.startsWith("http")}
+                          unoptimized={shouldBypassNextImageOptimizer(src)}
                         />
                       </button>
                       {selected ? (

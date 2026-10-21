@@ -9,6 +9,7 @@ import {
   CATEGORY_SHOWCASE_MOBILE_PAGE_SIZE,
   type CategoryShowcaseItem,
 } from "@/lib/category-showcase";
+import { shouldBypassNextImageOptimizer } from "@/lib/util/image-url";
 
 type CategoryShowcaseStripProps = {
   onSelectSubcategory: (subcategory: string) => void;
@@ -130,7 +131,7 @@ export function CategoryShowcaseStrip({
                     className="cat-showcase-card__img"
                     sizes="(max-width: 767px) 33vw, 12vw"
                     priority={index < 3}
-                    unoptimized={item.image.startsWith("/api/") || item.image.startsWith("http")}
+                    unoptimized={shouldBypassNextImageOptimizer(item.image)}
                   />
                   <span className="cat-showcase-card__shade" aria-hidden />
                   <span className="cat-showcase-card__label">{item.displayName.toUpperCase()}</span>

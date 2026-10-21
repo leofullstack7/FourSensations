@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import type { StoreBadge, StoreProduct } from "@/lib/types/product";
-import { isDisplayableImageUrl } from "@/lib/util/image-url";
+import { isDisplayableImageUrl, shouldBypassNextImageOptimizer } from "@/lib/util/image-url";
 import { normalizeColorHex } from "@/lib/product-color";
 import { StoreDiscountBadge, StoreProductPrice } from "@/components/store/StoreProductPrice";
 import { getProductDisplayName } from "@/lib/product-display-names";
@@ -78,7 +78,7 @@ export function StoreProductCard({
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px"
                 priority={imagePriority}
                 loading={imagePriority ? undefined : "lazy"}
-                unoptimized={product.img.startsWith("/")}
+                unoptimized={shouldBypassNextImageOptimizer(product.img)}
                 className="product-img product-img--main"
                 style={{ objectFit: "cover" }}
               />
@@ -89,7 +89,7 @@ export function StoreProductCard({
                   fill
                   sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px"
                   loading="lazy"
-                  unoptimized={hoverSrc.startsWith("/")}
+                  unoptimized={shouldBypassNextImageOptimizer(hoverSrc)}
                   className="product-img product-img--hover"
                   style={{ objectFit: "cover" }}
                 />

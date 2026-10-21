@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { shouldBypassNextImageOptimizer } from "@/lib/util/image-url";
 
 const PAN_MS = 20000;
 const FADE_MS = 1200;
@@ -96,7 +97,7 @@ export function ProductHeroPan({ urls, alt }: { urls: string[]; alt: string }) {
         priority
         sizes="100vw"
         className="product-hero__bg product-hero__bg--static"
-        unoptimized={src.startsWith("/")}
+        unoptimized={shouldBypassNextImageOptimizer(src)}
       />
     );
   }
@@ -115,7 +116,7 @@ export function ProductHeroPan({ urls, alt }: { urls: string[]; alt: string }) {
             priority={layer.id === 0}
             sizes="100vw"
             className={`product-hero__bg product-hero__bg--${layer.dir}`}
-            unoptimized={layer.src.startsWith("/")}
+            unoptimized={shouldBypassNextImageOptimizer(layer.src)}
           />
         </div>
       ))}
