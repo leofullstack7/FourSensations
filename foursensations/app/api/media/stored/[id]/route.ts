@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 type RouteCtx = { params: { id: string } };
 
 const BODY_CACHE = "public, max-age=86400, stale-while-revalidate=604800";
+const MAX_BYTES = 1_500_000;
 
 /**
  * Sirve bytes desde DB sin Sharp ni Bunny en el request.
@@ -18,15 +19,28 @@ export async function GET(_req: NextRequest, { params }: RouteCtx) {
     return NextResponse.json({ error: "Imagen no encontrada" }, { status: 404 });
   }
 
-  const row = await prisma.storedImage.findUnique({
-    where: { id },
-    select: { contentType: true, bytes: true },
-  });
+  // Primero solo el tamaño: no materializar BYTEA enormes en heap.
+  const meta = await prisma.$queryRaw<
+    Array<{ contentType: string; len: number }>
+  >`SELECT "contentType", octet_length(bytes)::int AS len FROM "StoredImage" WHERE id = ${id} LIMIT 1`;
+
+  const row = meta[0];
   if (!row) {
     return NextResponse.json({ error: "Imagen no encontrada" }, { status: 404 });
   }
+  if (row.len > MAX_BYTES) {
+    return NextResponse.json({ error: "Imagen demasiado grande" }, { status: 413 });
+  }
 
-  return new NextResponse(new Uint8Array(row.bytes), {
+  const full = await prisma.storedImage.findUnique({
+    where: { id },
+    select: { bytes: true },
+  });
+  if (!full) {
+    return NextResponse.json({ error: "Imagen no encontrada" }, { status: 404 });
+  }
+
+  return new NextResponse(new Uint8Array(full.bytes), {
     headers: {
       "Content-Type": row.contentType || "application/octet-stream",
       "Cache-Control": BODY_CACHE,

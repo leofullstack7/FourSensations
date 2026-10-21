@@ -19,8 +19,9 @@ import { slugify } from "@/lib/slugify";
 import { normalizeMenuLookup } from "@/lib/store/menu-item-href";
 import { enrichStorefrontDisplayProducts } from "@/lib/store/variant-groups";
 
+/** Solo portada + hover: cargar 80 fotos por producto reventaba Render free (512Mi). */
 const productStoreInclude = {
-  images: { orderBy: { sortOrder: "asc" as const } },
+  images: { orderBy: { sortOrder: "asc" as const }, take: 2 },
   tintFamily: { select: { name: true } },
   tintType: { select: { name: true } },
 };
@@ -129,7 +130,7 @@ const getCachedStorefrontProducts = unstable_cache(
     const mapped = rows.map((r) => rowToStore(r, r.images));
     return enrichStorefrontDisplayProducts(mapped, mapped);
   },
-  ["storefront-products-v9-presale-badge"],
+  ["storefront-products-v10-images-take-2"],
   { revalidate: 300, tags: [STOREFRONT_PRODUCTS_CACHE_TAG] }
 );
 
