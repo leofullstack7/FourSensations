@@ -1500,6 +1500,22 @@ input, select, textarea { font-family: inherit; }
   font-size: 40px;
   opacity: 1;
 }
+/* next/image fill: el span debe ocupar todo el hueco (evita el cuadrito roto arriba-izquierda). */
+.product-img-placeholder > span {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+.product-img-placeholder > span img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+.product-img-emoji {
+  font-size: 40px;
+  line-height: 1;
+}
 
 .product-discount-flag {
   display: inline-flex;

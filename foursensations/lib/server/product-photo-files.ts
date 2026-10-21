@@ -1,9 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import { toFastProductMediaUrl } from "@/lib/util/image-url";
+import productSkus from "@/lib/product-skus.json";
+import { preferFastStorefrontUrls, toFastProductMediaUrl } from "@/lib/util/image-url";
 
 const SKU_RE = /^FS\d{3}$/i;
 const FILE_RE = /^FS\d{3}-\d+\.webp$/i;
+
+type SkuEntry = { sku: string; name: string; aliases?: string[] };
 
 export function productPhotosRoot(): string {
   return path.join(process.cwd(), "assets", "productos");
@@ -36,50 +39,59 @@ function skuFromMediaUrl(url: string): string | null {
   return match ? match[1]!.toUpperCase() : null;
 }
 
-function findSkuByProductName(name: string): string | null {
-  const root = productPhotosRoot();
-  if (!fs.existsSync(root)) return null;
-  const key = name
+function normalizeKey(value: string): string {
+  return value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
+}
+
+function findSkuByProductName(name: string): string | null {
+  const key = normalizeKey(name);
   if (!key) return null;
+
+  let best: { sku: string; len: number } | null = null;
+  for (const entry of productSkus as SkuEntry[]) {
+    const names = [entry.name, ...(entry.aliases ?? [])];
+    for (const n of names) {
+      const listed = normalizeKey(n);
+      if (!listed) continue;
+      if (key === listed) return entry.sku.toUpperCase();
+      if (key.includes(listed) || listed.includes(key)) {
+        if (!best || listed.length > best.len) {
+          best = { sku: entry.sku.toUpperCase(), len: listed.length };
+        }
+      }
+    }
+  }
+  if (best) return best.sku;
+
+  const root = productPhotosRoot();
+  if (!fs.existsSync(root)) return null;
   const hit = fs.readdirSync(root, { withFileTypes: true }).find((entry) => {
     if (!entry.isDirectory()) return false;
     const rest = entry.name.replace(/^FS\d{3}\s+/i, "").trim();
     if (!rest) return false;
-    const folderKey = rest
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .toLowerCase();
-    return folderKey === key;
+    return normalizeKey(rest) === key;
   });
   if (!hit) return null;
   const sku = hit.name.match(/^(FS\d{3})/i);
   return sku ? sku[1]!.toUpperCase() : null;
 }
 
-/** Completa la galería con todos los WebP locales del SKU (sin duplicar lo que ya viene de DB). */
+/**
+ * Completa con WebP locales del SKU y prioriza estáticos sobre `/api/media/stored`
+ * (evita portadas lentas/rotas en categorías).
+ */
 export function mergeLocalProductPhotoUrls(productName: string, urls: string[]): string[] {
   const sku = urls.map(skuFromMediaUrl).find(Boolean) || findSkuByProductName(productName);
-  if (!sku) return urls;
-  const extras = listProductPhotoFiles(sku).map(
-    (file) => `/media/productos/${sku}/${file}`,
-  );
-  const normalized = urls.map((u) => toFastProductMediaUrl(u.trim())).filter(Boolean);
+  const normalized = preferFastStorefrontUrls(urls.map((u) => toFastProductMediaUrl(u.trim())).filter(Boolean));
+  if (!sku) return normalized;
+  const extras = listProductPhotoFiles(sku).map((file) => `/media/productos/${sku}/${file}`);
   if (extras.length === 0) return normalized;
-  const seen = new Set(normalized);
-  const merged = [...normalized];
-  for (const url of extras) {
-    if (seen.has(url)) continue;
-    seen.add(url);
-    merged.push(url);
-  }
-  return merged;
+  return preferFastStorefrontUrls([...extras, ...normalized]);
 }
 
 export function listSkuMediaUrls(sku: string): string[] {

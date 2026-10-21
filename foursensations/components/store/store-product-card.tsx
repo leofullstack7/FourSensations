@@ -1,10 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import type { StoreBadge, StoreProduct } from "@/lib/types/product";
-import { isDisplayableImageUrl, shouldBypassNextImageOptimizer } from "@/lib/util/image-url";
+import { isDisplayableImageUrl } from "@/lib/util/image-url";
 import { normalizeColorHex } from "@/lib/product-color";
 import { StoreDiscountBadge, StoreProductPrice } from "@/components/store/StoreProductPrice";
+import { StoreProductImage } from "@/components/store/StoreProductImage";
 import { getProductDisplayName } from "@/lib/product-display-names";
 
 const BADGE_CLASS: Record<Exclude<StoreBadge, null>, string> = {
@@ -57,6 +57,10 @@ export function StoreProductCard({
       : null;
   const badge = product.badge;
   const badgeMessage = product.badgeMessage?.trim() || "";
+  const imageFallbacks = [
+    product.imgHover,
+    ...(product.gallery ?? []),
+  ];
 
   return (
     <div
@@ -71,27 +75,19 @@ export function StoreProductCard({
         <div className="product-img-placeholder">
           {hasMain ? (
             <>
-              <Image
+              <StoreProductImage
                 src={product.img}
-                alt=""
-                fill
-                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px"
+                fallbacks={imageFallbacks}
+                emoji={product.emoji}
                 priority={imagePriority}
-                loading={imagePriority ? undefined : "lazy"}
-                unoptimized={shouldBypassNextImageOptimizer(product.img)}
                 className="product-img product-img--main"
-                style={{ objectFit: "cover" }}
               />
               {hoverSrc ? (
-                <Image
+                <StoreProductImage
                   src={hoverSrc}
-                  alt=""
-                  fill
-                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px"
-                  loading="lazy"
-                  unoptimized={shouldBypassNextImageOptimizer(hoverSrc)}
+                  fallbacks={[product.img, ...(product.gallery ?? [])]}
+                  emoji={product.emoji}
                   className="product-img product-img--hover"
-                  style={{ objectFit: "cover" }}
                 />
               ) : null}
             </>

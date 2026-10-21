@@ -11,7 +11,7 @@
 /.next/
 /out/
 
-# generado en build (copia estática de assets/productos)
+# generado en build (SKU + StoredImage exportados a estáticos)
 /public/media/
 
 # production

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -6,20 +8,39 @@ export const dynamic = "force-dynamic";
 
 type RouteCtx = { params: { id: string } };
 
-const BODY_CACHE = "public, max-age=86400, stale-while-revalidate=604800";
+const BODY_CACHE = "public, max-age=604800, stale-while-revalidate=2592000";
 const MAX_BYTES = 1_500_000;
 
+function publicOrigin(req: Request): string {
+  const xfHost = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const xfProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || "https";
+  if (xfHost) return `${xfProto}://${xfHost}`;
+  const site = (process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXTAUTH_URL || "")
+    .trim()
+    .replace(/\/$/, "");
+  if (site) return site;
+  try {
+    return new URL(req.url).origin;
+  } catch {
+    return "https://befoursensations.com";
+  }
+}
+
 /**
- * Sirve bytes desde DB sin Sharp ni Bunny en el request.
- * (Render free 512Mi: migraciones/PUT concurrentes provocaban OOM y tumaban el sitio.)
+ * Prefiere estático `/media/stored/{id}.webp` (publicado en build).
+ * Fallback: bytes desde DB (lento; evitar en hot path de categorías).
  */
-export async function GET(_req: NextRequest, { params }: RouteCtx) {
+export async function GET(req: NextRequest, { params }: RouteCtx) {
   const id = params.id?.trim() || "";
   if (!/^[a-z0-9]+$/i.test(id)) {
     return NextResponse.json({ error: "Imagen no encontrada" }, { status: 404 });
   }
 
-  // Primero solo el tamaño: no materializar BYTEA enormes en heap.
+  const staticPath = join(process.cwd(), "public", "media", "stored", `${id}.webp`);
+  if (existsSync(staticPath)) {
+    return NextResponse.redirect(`${publicOrigin(req)}/media/stored/${id}.webp`, 308);
+  }
+
   const meta = await prisma.$queryRaw<
     Array<{ contentType: string; len: number }>
   >`SELECT "contentType", octet_length(bytes)::int AS len FROM "StoredImage" WHERE id = ${id} LIMIT 1`;

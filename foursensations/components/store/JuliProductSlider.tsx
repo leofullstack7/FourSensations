@@ -1,10 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { StoreProductPrice } from "@/components/store/StoreProductPrice";
+import { StoreProductImage } from "@/components/store/StoreProductImage";
 import type { StoreProduct } from "@/lib/types/product";
-import { isDisplayableImageUrl, shouldBypassNextImageOptimizer } from "@/lib/util/image-url";
+import { isDisplayableImageUrl } from "@/lib/util/image-url";
 
 type JuliProductSliderProps = {
   products: StoreProduct[];
@@ -106,13 +106,13 @@ export function JuliProductSlider({
             <article key={product.id} className="juli-slide">
               <button type="button" className="juli-slide__media" onClick={() => onOpen(product.id)}>
                 {photo ? (
-                  <Image
+                  <StoreProductImage
                     src={product.img}
+                    fallbacks={[product.imgHover, ...(product.gallery ?? [])]}
                     alt={product.name}
-                    fill
+                    emoji={product.emoji || "✨"}
                     sizes="108px"
                     className="juli-slide__img"
-                    unoptimized={shouldBypassNextImageOptimizer(product.img)}
                   />
                 ) : (
                   <span className="juli-slide__emoji" aria-hidden>

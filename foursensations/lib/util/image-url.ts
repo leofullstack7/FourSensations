@@ -34,10 +34,14 @@ export function isLocalProductMediaUrl(s: string | null | undefined): boolean {
   );
 }
 
-/** Foto guardada en la base cuando Bunny no acepta la subida. */
+/** Foto de banco (BYTEA exportada a estático o vía API). */
 export function isStoredMediaUrl(s: string | null | undefined): boolean {
   if (!s || typeof s !== "string") return false;
-  return /^\/api\/media\/stored\/[a-z0-9]+$/i.test(s.trim());
+  const u = s.trim();
+  return (
+    /^\/media\/stored\/[a-z0-9]+\.(webp|jpe?g|png|gif)$/i.test(u) ||
+    /^\/api\/media\/stored\/[a-z0-9]+$/i.test(u)
+  );
 }
 
 /** URL que la tienda/admin pueden mostrar (CDN, archivo local del SKU o foto guardada). */
@@ -50,10 +54,33 @@ export function productMediaPublicUrl(sku: string, fileName: string): string {
   return `/media/productos/${sku}/${fileName}`;
 }
 
-/** Reescribe URLs legacy `/api/media/productos` → estático `/media/productos`. */
+/** Reescribe URLs lentas (API/DB) → rutas estáticas publicadas en build. */
 export function toFastProductMediaUrl(url: string): string {
   const u = url.trim();
-  const m = u.match(/^\/api\/media\/productos\/(FS\d{3})\/(FS\d{3}-\d+\.webp)$/i);
-  if (m) return `/media/productos/${m[1]!.toUpperCase()}/${m[2]}`;
+  const prod = u.match(/^\/api\/media\/productos\/(FS\d{3})\/(FS\d{3}-\d+\.webp)$/i);
+  if (prod) return `/media/productos/${prod[1]!.toUpperCase()}/${prod[2]}`;
+  const stored = u.match(/^\/api\/media\/stored\/([a-z0-9]+)$/i);
+  if (stored) return `/media/stored/${stored[1]}.webp`;
   return u;
+}
+
+/** Prioriza estáticos de SKU, luego stored estático, luego API. */
+export function preferFastStorefrontUrls(urls: string[]): string[] {
+  const score = (u: string) => {
+    if (/^\/media\/productos\//i.test(u)) return 0;
+    if (/^\/media\/stored\//i.test(u)) return 1;
+    if (/^\/api\/media\/productos\//i.test(u)) return 2;
+    if (/^\/api\/media\/stored\//i.test(u)) return 3;
+    if (isHttpImageUrl(u)) return 1;
+    return 4;
+  };
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of [...urls].sort((a, b) => score(a) - score(b))) {
+    const u = toFastProductMediaUrl(raw);
+    if (!u || seen.has(u)) continue;
+    seen.add(u);
+    out.push(u);
+  }
+  return out;
 }
