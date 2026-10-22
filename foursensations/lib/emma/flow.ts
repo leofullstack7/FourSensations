@@ -1,5 +1,10 @@
 /** Flujo + motor Emma (Matriz + Motor FINAL_P1 · oct 2026). */
 
+import {
+  defaultEmmaKnowledge,
+  type EmmaKnowledgeBundle,
+} from "@/lib/emma/knowledge";
+
 export type EmmaSelectionMode = "single" | "multi";
 
 export type EmmaOption = {
@@ -126,38 +131,37 @@ const Q5_REACT: Record<string, string> = {
   puntas: "Perfecto 💗 Esas puntas quedan oficialmente como prioridad. Una última pregunta y terminamos.",
 };
 
-export function emmaReactionForAnswer(questionId: number, selectedIds: string[]): string {
+export function emmaReactionForAnswer(
+  questionId: number,
+  selectedIds: string[],
+  kb: EmmaKnowledgeBundle = defaultEmmaKnowledge(),
+): string {
+  const rx = kb.reactions;
   if (questionId === 1) {
-    return Q1_REACT[selectedIds[0] ?? ""] ?? "Perfecto 💗 Sigamos.";
+    return rx.p1[selectedIds[0] ?? ""] ?? Q1_REACT[selectedIds[0] ?? ""] ?? "Perfecto 💗 Sigamos.";
   }
-  if (questionId === 2) {
-    if (selectedIds.includes("natural") && selectedIds.length === 1) {
-      return "Perfecto 💗 Ya tengo esa parte de la historia de tu cabello. Ahora cuéntame cómo lo sientes.";
-    }
-    if (selectedIds.length > 1) {
-      return "Perfecto 💗 Ya tengo esa parte de la historia de tu cabello. Ahora cuéntame cómo lo sientes.";
-    }
-    return "Perfecto 💗 Ya tengo esa parte de la historia de tu cabello. Ahora cuéntame cómo lo sientes.";
-  }
-  if (questionId === 3) {
-    return "Perfecto 💗 Guardé todo lo que marcaste. Ahora vamos a mirar la raíz.";
-  }
+  if (questionId === 2) return rx.p2;
+  if (questionId === 3) return rx.p3;
   if (questionId === 4) {
-    if (selectedIds.includes("ninguno") && selectedIds.length === 1) {
-      return "Perfecto 💗 Por ahora no identificas ninguna de esas situaciones en tu cuero cabelludo.";
-    }
-    return "Perfecto 💗 Ya entendí mejor tu cuero cabelludo. Ahora dime qué te gustaría mejorar primero.";
+    if (selectedIds.includes("ninguno") && selectedIds.length === 1) return rx.p4None;
+    return rx.p4Some;
   }
   if (questionId === 5) {
-    return Q5_REACT[selectedIds[0] ?? ""] ?? "Perfecto 💗 Esa será nuestra prioridad. Me falta una última cosita.";
+    return rx.p5[selectedIds[0] ?? ""] ?? Q5_REACT[selectedIds[0] ?? ""] ?? "Perfecto 💗 Esa será nuestra prioridad.";
   }
   if (questionId === 6) {
-    if (selectedIds.includes("ninguna") && selectedIds.length === 1) {
-      return "¡Listoooo! 💗 Con lo que me contaste ya puedo armar tu rutina.";
-    }
-    return "¡Listoooo! 💗 Ya tengo todo para armar tu rutina Four Sensations.";
+    if (selectedIds.includes("ninguna") && selectedIds.length === 1) return rx.p6None;
+    return rx.p6Some;
   }
   return "Perfecto 💗";
+}
+
+/** Aplica prompts del pack de conocimiento sobre las preguntas base. */
+export function questionsWithKnowledge(kb: EmmaKnowledgeBundle = defaultEmmaKnowledge()): EmmaQuestion[] {
+  return EMMA_QUESTIONS.map((q) => ({
+    ...q,
+    prompt: kb.questionPrompts[String(q.id)]?.trim() || q.prompt,
+  }));
 }
 
 /** Normaliza selección excluyente (Natural / Ninguno / Ninguna). */
@@ -195,31 +199,12 @@ export type EmmaRecommendation = {
   defaultWashKey: string;
 };
 
-const WASH_BY_P1: Record<string, { key: string; reason: string }> = {
-  seco: {
-    key: "Kit Tentación Nutrición",
-    reason: "Como me contaste que sientes tu cabello seco, esta es mi primera elección para tu lavado.",
-  },
-  graso: {
-    key: "Kit Tentación Equilibrio",
-    reason: "Como me contaste que tu cabello es graso, mi primera elección es Tentación Equilibrio.",
-  },
-  normal: {
-    key: "Botanical",
-    reason: "Como me contaste que tu cabello es normal, Botanical es mi recomendación de shampoo.",
-  },
-  caspa_acumulacion: {
-    key: "Kit Scalp Therapy",
-    reason: "Como mencionaste caspa o acumulación, Scalp Therapy es mi base de lavado para tu cuero cabelludo.",
-  },
-};
-
 function hasAny(ids: string[], set: string[]) {
   return set.some((x) => ids.includes(x));
 }
 
-function needsScalpAlternative(answers: EmmaAnswers, baseKey: string): boolean {
-  if (baseKey === "Kit Scalp Therapy") return false;
+function needsScalpAlternative(answers: EmmaAnswers, baseKey: string, scalpKey: string): boolean {
+  if (baseKey === scalpKey) return false;
   const scalpTrigger = hasAny(answers.scalp, ["grasa", "caspa", "descamacion", "acumulacion"]);
   const priorityTrigger = answers.priority === "grasa" || answers.priority === "caspa";
   return scalpTrigger || priorityTrigger;
@@ -236,112 +221,75 @@ function pushUnique(list: EmmaRoutineItem[], item: EmmaRoutineItem) {
   list.push(item);
 }
 
-/** Protagonistas P5 + desempates P3 (hoja Desempates). */
-function protagonistsFromP5(answers: EmmaAnswers): EmmaRoutineItem[] {
+/** Protagonistas P5 + desempates P3 (hoja Desempates). Pack puede sobreescribir listas P5. */
+function protagonistsFromP5(answers: EmmaAnswers, kb: EmmaKnowledgeBundle): EmmaRoutineItem[] {
   const out: EmmaRoutineItem[] = [];
   const f = answers.feelings;
-  switch (answers.priority) {
-    case "reparar":
-      if (f.includes("puntas")) {
-        pushUnique(out, {
-          productKey: "Luna Llena",
-          step: "Prioridad",
-          reason: "Tu prioridad es reparar y marcaste puntas maltratadas.",
-          evidence: "P5+P3",
-        });
-        pushUnique(out, {
-          productKey: "Suspiros",
-          step: "Prioridad",
-          reason: "Dupla de puntas junto a Luna Llena.",
-          evidence: "P5+P3",
-        });
-      } else if (hasAny(f, ["dano", "quiebre"])) {
-        pushUnique(out, {
-          productKey: "Sensación Primaveral",
-          step: "Prioridad",
-          reason: "Prioridad reparación con daño/porosidad o quiebre: Repolarizador.",
-          evidence: "P5+P3",
-        });
-      } else if (f.includes("resequedad")) {
-        pushUnique(out, {
-          productKey: "Dulce Renacer",
-          step: "Prioridad",
-          reason: "Prioridad reparación con resequedad predominante.",
-          evidence: "P5+P3",
-        });
-      } else {
-        pushUnique(out, {
-          productKey: "Proteína Capilar",
-          step: "Prioridad",
-          reason: "Prioridad reparación: Proteína Capilar 10 en 1.",
-          evidence: "P5",
-        });
-      }
-      break;
-    case "nutrir":
-      pushUnique(out, {
-        productKey: "Dulce Renacer",
-        step: "Prioridad",
-        reason: "Tu prioridad es nutrirlo o hidratarlo.",
-        evidence: "P5",
-      });
-      break;
-    case "grasa":
-    case "caspa":
-      // Cubierto por alternativa de lavado / Scrub; no displazar base P1.
-      break;
-    case "caida":
-    case "crecimiento":
-      pushUnique(out, {
-        productKey: "Secreto de Primavera",
-        step: "Prioridad",
-        reason: "Tu prioridad es fortalecer la caída o favorecer el crecimiento.",
-        evidence: "P5",
-      });
-      pushUnique(out, {
-        productKey: "Shots Capilares",
-        step: "Prioridad",
-        reason: "Dupla cosméticas con el tónico para esa prioridad.",
-        evidence: "P5",
-      });
-      break;
-    case "frizz":
-      pushUnique(out, {
-        productKey: "Shine Gloss",
-        step: "Prioridad",
-        reason: "Tu prioridad es controlar el frizz.",
-        evidence: "P5",
-      });
-      break;
-    case "brillo":
-      pushUnique(out, {
-        productKey: "Shine Gloss",
-        step: "Prioridad",
-        reason: "Tu prioridad es tener más brillo.",
-        evidence: "P5",
-      });
-      break;
-    case "puntas":
+  const mapped = kb.p5Products[answers.priority] ?? [];
+
+  if (answers.priority === "reparar") {
+    if (f.includes("puntas")) {
       pushUnique(out, {
         productKey: "Luna Llena",
         step: "Prioridad",
-        reason: "Tu prioridad es reparar las puntas.",
-        evidence: "P5",
+        reason: "Tu prioridad es reparar y marcaste puntas maltratadas.",
+        evidence: "P5+P3",
       });
       pushUnique(out, {
         productKey: "Suspiros",
         step: "Prioridad",
-        reason: "Dupla SOS de puntas.",
+        reason: "Dupla de puntas junto a Luna Llena.",
+        evidence: "P5+P3",
+      });
+    } else if (hasAny(f, ["dano", "quiebre"])) {
+      pushUnique(out, {
+        productKey: "Sensación Primaveral",
+        step: "Prioridad",
+        reason: "Prioridad reparación con daño/porosidad o quiebre: Repolarizador.",
+        evidence: "P5+P3",
+      });
+    } else if (f.includes("resequedad")) {
+      pushUnique(out, {
+        productKey: "Dulce Renacer",
+        step: "Prioridad",
+        reason: "Prioridad reparación con resequedad predominante.",
+        evidence: "P5+P3",
+      });
+    } else {
+      pushUnique(out, {
+        productKey: "Proteína Capilar",
+        step: "Prioridad",
+        reason: "Prioridad reparación: Proteína Capilar 10 en 1.",
         evidence: "P5",
       });
-      break;
-    default:
-      break;
+    }
+    return out;
   }
+
+  if (answers.priority === "grasa" || answers.priority === "caspa") {
+    return out; // lavado/scrub, no desplazar base
+  }
+
+  if (mapped.length > 0) {
+    for (const productKey of mapped) {
+      pushUnique(out, {
+        productKey,
+        step: "Prioridad",
+        reason: kb.explanations[productKey] || `Tu prioridad #1 activa ${productKey}.`,
+        evidence: "P5",
+      });
+    }
+    return out;
+  }
+
   return out;
 }
 
-function coverageFromP4(answers: EmmaAnswers, already: EmmaRoutineItem[]): EmmaRoutineItem[] {
+function coverageFromP4(
+  answers: EmmaAnswers,
+  already: EmmaRoutineItem[],
+  kb: EmmaKnowledgeBundle,
+): EmmaRoutineItem[] {
   const out: EmmaRoutineItem[] = [];
   const has = (k: string) => already.some((x) => x.productKey === k) || out.some((x) => x.productKey === k);
 
@@ -359,11 +307,14 @@ function coverageFromP4(answers: EmmaAnswers, already: EmmaRoutineItem[]): EmmaR
       evidence: "P4",
     });
   }
-  if (needsScrubGlow(answers) && !has("Scrub Glow")) {
+  const scrub = kb.scrubGlowKey || "Scrub Glow";
+  if (needsScrubGlow(answers) && !has(scrub)) {
     pushUnique(out, {
-      productKey: "Scrub Glow",
+      productKey: scrub,
       step: "Complemento",
-      reason: "Complemento por caspa, descamación o acumulación (no sustituye el shampoo).",
+      reason:
+        kb.explanations[scrub] ||
+        "Complemento por caspa, descamación o acumulación (no sustituye el shampoo).",
       evidence: "P4/P5",
     });
   }
@@ -488,9 +439,15 @@ export function emmaCartProductKeys(
 /**
  * Motor determinístico: base P1 inmutable, Scalp solo como alternativa,
  * P5 protagonista, sin rellenar hasta 5.
+ * `kb` = pack publicado (o draft en simulador admin).
  */
-export function buildEmmaRoutine(answers: EmmaAnswers): EmmaRecommendation {
-  const p1 = WASH_BY_P1[answers.hairType] ?? WASH_BY_P1.normal!;
+export function buildEmmaRoutine(
+  answers: EmmaAnswers,
+  kb: EmmaKnowledgeBundle = defaultEmmaKnowledge(),
+): EmmaRecommendation {
+  const washMap = kb.washByP1;
+  const p1 = washMap[answers.hairType as keyof typeof washMap] ?? washMap.normal;
+  const scalpKey = kb.scalpAlternativeKey || "Kit Scalp Therapy";
   const baseWash: EmmaRoutineItem = {
     productKey: p1.key,
     step: "Lavado base",
@@ -498,32 +455,34 @@ export function buildEmmaRoutine(answers: EmmaAnswers): EmmaRecommendation {
     evidence: "P1",
   };
 
-  const alternativeWash: EmmaRoutineItem | null = needsScalpAlternative(answers, p1.key)
+  const alternativeWash: EmmaRoutineItem | null = needsScalpAlternative(answers, p1.key, scalpKey)
     ? {
-        productKey: "Kit Scalp Therapy",
+        productKey: scalpKey,
         step: "Lavado alternativa",
         reason:
-          "Como también mencionaste grasa, caspa, descamación o acumulación, puedes elegir Scalp Therapy como alternativa de lavado. No sustituye automáticamente tu base.",
+          kb.explanations[scalpKey] ||
+          "Como también mencionaste grasa, caspa, descamación o acumulación, puedes elegir este kit como alternativa de lavado. No sustituye automáticamente tu base.",
         evidence: "P4/P5",
         optional: true,
       }
     : null;
 
   const modules: EmmaRoutineItem[] = [];
-  for (const item of protagonistsFromP5(answers)) pushUnique(modules, item);
-  for (const item of coverageFromP4(answers, modules)) pushUnique(modules, item);
+  for (const item of protagonistsFromP5(answers, kb)) pushUnique(modules, item);
+  for (const item of coverageFromP4(answers, modules, kb)) pushUnique(modules, item);
   for (const item of coverageFromP3(answers, modules)) pushUnique(modules, item);
   for (const item of coverageFromP6(answers, modules)) pushUnique(modules, item);
 
-  // Recorte por pertinencia: máx 4 módulos de tratamiento (lavado aparte). Nunca pad.
   const primary = modules.slice(0, 4);
 
+  const mistKey = kb.hairMistKeys[0] || "BloomShine";
   const extras: EmmaRoutineItem[] = [
     {
-      productKey: "BloomShine",
+      productKey: mistKey,
       step: "Hair Mist",
       reason:
-        "Y ahora la cerecita del helado 🍒💗: un Hair Mist Four Sensations para cerrar con ese toque que obsesiona. Es opcional y no es tratamiento de caspa ni caída.",
+        kb.explanations[mistKey] ||
+        "Y ahora la cerecita del helado 🍒💗: un Hair Mist Four Sensations. Es opcional y no es tratamiento de caspa ni caída.",
       optional: true,
       evidence: "upsell",
     },
@@ -552,9 +511,9 @@ export function buildEmmaRoutine(answers: EmmaAnswers): EmmaRecommendation {
   };
 }
 
-export const EMMA_LOADING_TEXT = "¡Listoooo! 💗 Voy a unir todo lo que me contaste para elegir tu rutina.";
+export const EMMA_LOADING_TEXT = defaultEmmaKnowledge().loadingText;
 
-export const EMMA_HAIR_MIST_KEYS = ["BloomShine", "Sweet Love", "Scarlette", "Golden Glow"] as const;
+export const EMMA_HAIR_MIST_KEYS = defaultEmmaKnowledge().hairMistKeys;
 
 export function matchCatalogProductId(
   catalog: { id: string; name: string }[],

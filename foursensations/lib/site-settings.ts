@@ -36,6 +36,8 @@ export type SiteSettingsData = {
   homeShowcaseImages?: HomeShowcaseImageMap;
   homePromoWidgets?: HomePromoWidgets;
   productFichas?: Record<string, ProductFichaCopy>;
+  /** Pack Emma versionado (borrador / publicado / historial). */
+  emmaKnowledge?: unknown;
   /** Credenciales de correo (Brevo) si no están en env de Render. */
   emailConfig?: {
     brevoApiKey?: string;

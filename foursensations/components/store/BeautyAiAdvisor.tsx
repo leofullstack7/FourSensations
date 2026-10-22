@@ -6,21 +6,18 @@ import { MotionDiv, MotionSpan } from "@/components/store/store-framer-motion";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { JuliProductSlider } from "@/components/store/JuliProductSlider";
 import {
-  EMMA_HAIR_MIST_KEYS,
-  EMMA_INTRO,
   EMMA_LEFT_COPY,
-  EMMA_LOADING_TEXT,
-  EMMA_QUESTIONS,
-  EMMA_START_BUTTON,
   buildEmmaRoutine,
   emmaReactionForAnswer,
   matchCatalogProductId,
   normalizeExclusiveSelection,
+  questionsWithKnowledge,
   validateEmmaAnswers,
   type EmmaAnswers,
   type EmmaRoutineItem,
 } from "@/lib/emma/flow";
 import { buildWhyForMeLines } from "@/lib/emma/explanations";
+import { defaultEmmaKnowledge, type EmmaKnowledgeBundle } from "@/lib/emma/knowledge";
 import { buildAdvisorReply, type AdvisorHistoryTurn, type AiAdvisorReply } from "@/lib/ai-advisor";
 import { ADVISOR_MAX_TURNS } from "@/lib/ai-advisor-context";
 import type { StoreProduct } from "@/lib/types/product";
@@ -85,7 +82,9 @@ export function BeautyAiAdvisor() {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
   const [answers, setAnswers] = useState<Partial<EmmaAnswers>>({});
-  const [lines, setLines] = useState<ChatLine[]>([{ id: "intro", role: "bot", text: EMMA_INTRO }]);
+  const [lines, setLines] = useState<ChatLine[]>([
+    { id: "intro", role: "bot", text: defaultEmmaKnowledge().intro },
+  ]);
   const [resultIds, setResultIds] = useState<string[]>([]);
   const [resultReasons, setResultReasons] = useState<Record<string, string>>({});
   const [washChoice, setWashChoice] = useState<"base" | "alternative">("base");
@@ -98,6 +97,35 @@ export function BeautyAiAdvisor() {
   const [moduleIds, setModuleIds] = useState<string[]>([]);
   const [routineItems, setRoutineItems] = useState<EmmaRoutineItem[]>([]);
   const [mistIds, setMistIds] = useState<string[]>([]);
+  const [kb, setKb] = useState<EmmaKnowledgeBundle>(() => defaultEmmaKnowledge());
+  const questions = useMemo(() => questionsWithKnowledge(kb), [kb]);
+  const introText = kb.intro;
+  const startButton = kb.startButton;
+  const loadingText = kb.loadingText;
+  const mistKeys = kb.hairMistKeys;
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/store/emma/knowledge", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { published?: EmmaKnowledgeBundle };
+        if (data.published) setKb(data.published);
+      } catch {
+        /* pack por defecto */
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "intro") return;
+    setLines((prev) => {
+      if (prev.length === 1 && prev[0]?.id === "intro") {
+        return [{ id: "intro", role: "bot", text: introText }];
+      }
+      return prev;
+    });
+  }, [introText, phase]);
   const [draft, setDraft] = useState("");
   const [typing, setTyping] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
@@ -116,7 +144,7 @@ export function BeautyAiAdvisor() {
     el.scrollTop = el.scrollHeight;
   }, [lines, phase, selected, typing]);
 
-  const question = EMMA_QUESTIONS[questionIndex];
+  const question = questions[questionIndex];
   const productMap = useMemo(() => new Map(catalogProducts.map((p) => [p.id, p])), [catalogProducts]);
   const composerLocked = typing || phase === "loading";
 
@@ -168,13 +196,13 @@ export function BeautyAiAdvisor() {
   const startQuiz = useCallback(() => {
     setLines((prev) => [
       ...prev,
-      { id: nid(), role: "user", text: EMMA_START_BUTTON },
-      { id: nid(), role: "bot", text: EMMA_QUESTIONS[0]!.prompt },
+      { id: nid(), role: "user", text: startButton },
+      { id: nid(), role: "bot", text: questions[0]!.prompt },
     ]);
     setPhase("question");
     setQuestionIndex(0);
     setSelected([]);
-  }, []);
+  }, [questions, startButton]);
 
   const finishAndRecommend = useCallback(
     (finalAnswers: EmmaAnswers) => {
@@ -184,10 +212,10 @@ export function BeautyAiAdvisor() {
         return;
       }
       setPhase("loading");
-      setLines((prev) => [...prev, { id: nid(), role: "bot", text: EMMA_LOADING_TEXT }]);
+      setLines((prev) => [...prev, { id: nid(), role: "bot", text: loadingText }]);
 
       window.setTimeout(() => {
-        const built = buildEmmaRoutine(valid);
+        const built = buildEmmaRoutine(valid, kb);
         const reasons: Record<string, string> = {};
         const resolve = (key: string) => matchCatalogProductId(catalogProducts, key);
 
@@ -218,7 +246,7 @@ export function BeautyAiAdvisor() {
         const ids = [...(washId ? [washId] : []), ...nextModules];
 
         const extras: string[] = [];
-        for (const mistKey of EMMA_HAIR_MIST_KEYS) {
+        for (const mistKey of mistKeys) {
           const id = resolve(mistKey);
           if (id && !ids.includes(id) && !extras.includes(id)) {
             extras.push(id);
@@ -285,14 +313,14 @@ export function BeautyAiAdvisor() {
         setPhase("result");
       }, 1400);
     },
-    [catalogProducts, showToast],
+    [catalogProducts, showToast, kb, loadingText, mistKeys],
   );
 
   const confirmAnswer = useCallback(() => {
     if (!question || selected.length === 0) return;
     const chosen = normalizeExclusiveSelection(question.id, selected);
     const labels = question.options.filter((o) => chosen.includes(o.id)).map((o) => o.label);
-    const reaction = emmaReactionForAnswer(question.id, chosen);
+    const reaction = emmaReactionForAnswer(question.id, chosen, kb);
 
     const nextAnswers: Partial<EmmaAnswers> = { ...answers };
     if (question.id === 1) nextAnswers.hairType = chosen[0];
@@ -310,7 +338,7 @@ export function BeautyAiAdvisor() {
     ]);
 
     const nextIndex = questionIndex + 1;
-    if (nextIndex >= EMMA_QUESTIONS.length) {
+    if (nextIndex >= questions.length) {
       const finalAnswers: EmmaAnswers = {
         hairType: (nextAnswers.hairType as string) || "normal",
         processes: nextAnswers.processes || [],
@@ -325,8 +353,8 @@ export function BeautyAiAdvisor() {
 
     setQuestionIndex(nextIndex);
     setSelected([]);
-    setLines((prev) => [...prev, { id: nid(), role: "bot", text: EMMA_QUESTIONS[nextIndex]!.prompt }]);
-  }, [question, selected, answers, questionIndex, finishAndRecommend]);
+    setLines((prev) => [...prev, { id: nid(), role: "bot", text: questions[nextIndex]!.prompt }]);
+  }, [question, selected, answers, questionIndex, finishAndRecommend, kb, questions]);
 
   const sendFreeMessage = useCallback(
     (raw: string) => {
@@ -409,12 +437,12 @@ export function BeautyAiAdvisor() {
   }, [resultIds, productMap, addToCart, showToast, washOptions, washChoice]);
 
   const explainWhy = useCallback(() => {
-    const linesWhy = buildWhyForMeLines(routineItems);
+    const linesWhy = buildWhyForMeLines(routineItems, undefined, kb);
     const text =
       linesWhy.map((w) => `• ${w.productKey}: ${w.text}`).join("\n") ||
       "Cada producto responde a lo que me contaste en el cuestionario 💗";
     setLines((prev) => [...prev, { id: nid(), role: "bot", text }]);
-  }, [routineItems]);
+  }, [routineItems, kb]);
 
   const restart = useCallback(() => {
     setPhase("intro");
@@ -430,16 +458,16 @@ export function BeautyAiAdvisor() {
     setRoutineItems([]);
     setDraft("");
     setTyping(false);
-    setLines([{ id: "intro", role: "bot", text: EMMA_INTRO }]);
-  }, []);
+    setLines([{ id: "intro", role: "bot", text: introText }]);
+  }, [introText]);
 
   const goBackQuestion = useCallback(() => {
     if (phase !== "question" || questionIndex <= 0) return;
     const prev = questionIndex - 1;
     setQuestionIndex(prev);
     setSelected([]);
-    setLines((prevLines) => [...prevLines, { id: nid(), role: "bot", text: EMMA_QUESTIONS[prev]!.prompt }]);
-  }, [phase, questionIndex]);
+    setLines((prevLines) => [...prevLines, { id: nid(), role: "bot", text: questions[prev]!.prompt }]);
+  }, [phase, questionIndex, questions]);
 
   const renderProducts = (ids: string[]) => {
     const products = ids.map((id) => productMap.get(id)).filter((p): p is StoreProduct => Boolean(p));
@@ -560,7 +588,7 @@ export function BeautyAiAdvisor() {
             {phase === "intro" ? (
               <div className="gb-ai-chips">
                 <button type="button" className="gb-ai-chip gb-ai-chip--primary" onClick={startQuiz}>
-                  {EMMA_START_BUTTON}
+                  {startButton}
                 </button>
               </div>
             ) : null}
@@ -568,7 +596,7 @@ export function BeautyAiAdvisor() {
             {phase === "question" && question ? (
               <div className="emma-quiz">
                 <p className="emma-progress" style={{ margin: "0 0 8px", fontSize: 12, color: "var(--text-muted)" }}>
-                  Pregunta {questionIndex + 1} de {EMMA_QUESTIONS.length}
+                  Pregunta {questionIndex + 1} de {questions.length}
                 </p>
                 <div className="gb-ai-chips emma-options">
                   {question.options.map((opt) => {

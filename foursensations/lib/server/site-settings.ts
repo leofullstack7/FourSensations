@@ -48,6 +48,9 @@ export async function mergeSiteSettingsData(patch: Partial<SiteSettingsData>): P
   if (patch.productFichas !== undefined) {
     next.productFichas = normalizeProductFichaMap(patch.productFichas);
   }
+  if (patch.emmaKnowledge !== undefined) {
+    next.emmaKnowledge = patch.emmaKnowledge;
+  }
   await prisma.siteSettings.upsert({
     where: { id: SETTINGS_ID },
     create: { id: SETTINGS_ID, data: next as Prisma.InputJsonValue },
