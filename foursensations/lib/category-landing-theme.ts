@@ -72,11 +72,11 @@ const bySlug: Record<string, Partial<CategoryLandingCopy>> = {
   },
   kits: {
     eyebrow: "Kits · Four Sensations",
-    headline: "Kits pensados para elevar tu ritual completo 💗",
+    headline: "¡TUS FAVORITOS SON MEJORES JUNTOS! 💗",
     subtitle:
-      "Selecciones curadas con productos que se aman juntos: ahorro real, resultado visible y ese glow de Four Girl desde el primer uso.",
+      "¡Todo lo que tu cabello ama, en un solo kit y una sola obsesión! 🎀\n\nDescubre nuestros kits diseñados para consentirte de principio a fin. Combinaciones irresistibles, rutinas que se complementan y precios especiales que te van a enamorar.",
     ctaExplore: "Ver todos los kits",
-    commercialLine: "Un solo kit. Todo lo que necesitas. Precio de enamorada.",
+    commercialLine: "¡Elige tu PERFECT MATCH y lleva tu rutina a otro nivel! ✨",
     benefits: [],
   },
   mayorista: {

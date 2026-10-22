@@ -413,7 +413,7 @@ export function CategoryLandingClient({
         <div className="fs-account-hero__copy">
           <p className="fs-account-hero__eyebrow">{copy.eyebrow}</p>
           <h1>{copy.headline}</h1>
-          <p>{copy.subtitle}</p>
+          <p style={{ whiteSpace: "pre-line" }}>{copy.subtitle}</p>
           {copy.commercialLine ? <p className="fs-cat-commercial">{copy.commercialLine}</p> : null}
           <div className="category-landing-cta-row" style={{ marginTop: 18 }}>
             <Link href="/" className="btn btn-outline btn-sm">
