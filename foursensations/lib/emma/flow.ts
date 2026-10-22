@@ -51,7 +51,7 @@ export const EMMA_QUESTIONS: EmmaQuestion[] = [
   },
   {
     id: 3,
-    prompt: "Ahora sí, cuéntame qué estás sintiendo en tu cabello. Puedes marcar todo lo que aplique",
+    prompt: "Ahora sí, cuéntame qué estás sintiendo en tu cabello. Puedes marcar todo lo que aplique 💗",
     mode: "multi",
     options: [
       { id: "resequedad", label: "Resequedad" },
@@ -65,7 +65,7 @@ export const EMMA_QUESTIONS: EmmaQuestion[] = [
   },
   {
     id: 4,
-    prompt: "Ahora vamos a la raíz: ¿notas alguna de estas situaciones en tu cuero cabelludo?",
+    prompt: "Ahora vamos a la raíz 👀 ¿Notas alguna de estas situaciones en tu cuero cabelludo?",
     mode: "multi",
     options: [
       { id: "grasa", label: "Exceso de grasa" },
@@ -79,7 +79,7 @@ export const EMMA_QUESTIONS: EmmaQuestion[] = [
   },
   {
     id: 5,
-    prompt: "Ya te voy conociendo, pero si pudieras mejorar una sola cosa de tu cabello primero, ¿cuál sería?",
+    prompt: "Ya te voy conociendo 💕 Si pudieras mejorar UNA sola cosa de tu cabello primero, ¿cuál sería?",
     mode: "single",
     options: [
       { id: "reparar", label: "Repararlo" },
@@ -95,7 +95,7 @@ export const EMMA_QUESTIONS: EmmaQuestion[] = [
   },
   {
     id: 6,
-    prompt: "Última, prometido 💗 ¿A cuáles de estas cosas expones tu cabello con frecuencia?",
+    prompt: "¡Última, prometido! ✨ ¿A cuáles de estas cosas expones tu cabello con frecuencia?",
     mode: "multi",
     options: [
       { id: "calor", label: "Calor frecuente (plancha, secador o rizador)" },
@@ -146,16 +146,16 @@ export function emmaReactionForAnswer(questionId: number, selectedIds: string[])
     if (selectedIds.includes("ninguno") && selectedIds.length === 1) {
       return "Perfecto 💗 Por ahora no identificas ninguna de esas situaciones en tu cuero cabelludo.";
     }
-    return "Perfecto 💗 Ya entendí mejor tu cuero cabelludo. Ahora viene tu prioridad #1.";
+    return "Perfecto 💗 Ya entendí mejor tu cuero cabelludo. Ahora dime qué te gustaría mejorar primero.";
   }
   if (questionId === 5) {
     return Q5_REACT[selectedIds[0] ?? ""] ?? "Perfecto 💗 Esa será nuestra prioridad. Me falta una última cosita.";
   }
   if (questionId === 6) {
     if (selectedIds.includes("ninguna") && selectedIds.length === 1) {
-      return "Perfecto 💗 Con todo lo que ya me contaste tengo suficiente para armar tu recomendación.";
+      return "¡Listoooo! 💗 Con lo que me contaste ya puedo armar tu rutina.";
     }
-    return "¡Listo! 💗 Ya entendí lo que vive tu cabello en el día a día. Ahora armo tu rutina…";
+    return "¡Listoooo! 💗 Ya tengo todo para armar tu rutina Four Sensations.";
   }
   return "Perfecto 💗";
 }
@@ -420,15 +420,69 @@ function coverageFromP3(answers: EmmaAnswers, already: EmmaRoutineItem[]): EmmaR
 function coverageFromP6(answers: EmmaAnswers, already: EmmaRoutineItem[]): EmmaRoutineItem[] {
   const out: EmmaRoutineItem[] = [];
   const has = (k: string) => already.some((x) => x.productKey === k);
-  if (answers.exposure.includes("calor") && !has("Fantasía Natural")) {
+  const needsProtect =
+    hasAny(answers.exposure, ["calor", "sol", "piscina_mar"]) || answers.feelings.includes("frizz");
+  if (needsProtect && !has("Fantasía Natural") && !answers.exposure.includes("ninguna")) {
+    const why = answers.exposure.includes("calor")
+      ? "Me contaste que usas calor con frecuencia."
+      : answers.exposure.includes("sol")
+        ? "Me contaste que expones tu cabello al sol."
+        : answers.exposure.includes("piscina_mar")
+          ? "Me contaste que tu cabello va a piscina o mar."
+          : "Marcaste frizz y conviene sellar/proteger.";
     pushUnique(out, {
       productKey: "Fantasía Natural",
       step: "Protección",
-      reason: "Me contaste que usas calor con frecuencia.",
-      evidence: "P6",
+      reason: why,
+      evidence: "P6/P3",
     });
   }
   return out;
+}
+
+const VALID_P1 = new Set(["seco", "graso", "normal", "caspa_acumulacion"]);
+const VALID_P5 = new Set([
+  "reparar",
+  "nutrir",
+  "grasa",
+  "caspa",
+  "caida",
+  "crecimiento",
+  "frizz",
+  "brillo",
+  "puntas",
+]);
+
+export function validateEmmaAnswers(a: Partial<EmmaAnswers>): EmmaAnswers | null {
+  if (!a.hairType || !VALID_P1.has(a.hairType)) return null;
+  if (!a.priority || !VALID_P5.has(a.priority)) return null;
+  const processes = normalizeExclusiveSelection(2, a.processes ?? []);
+  const scalp = normalizeExclusiveSelection(4, a.scalp ?? []);
+  const exposure = normalizeExclusiveSelection(6, a.exposure ?? []);
+  return {
+    hairType: a.hairType,
+    processes,
+    feelings: a.feelings ?? [],
+    scalp,
+    priority: a.priority,
+    exposure,
+  };
+}
+
+/** IDs de carrito: un solo lavado (base o alternativa) + módulos. Extra (mist) aparte. */
+export function emmaCartProductKeys(
+  rec: EmmaRecommendation,
+  wash: "base" | "alternative" = "base",
+): { routine: string[]; mist: string[] } {
+  const washKey =
+    wash === "alternative" && rec.alternativeWash
+      ? rec.alternativeWash.productKey
+      : rec.baseWash.productKey;
+  const routine = [washKey, ...rec.primary.map((p) => p.productKey)].filter(
+    (k, i, arr) => arr.indexOf(k) === i,
+  );
+  const mist = rec.extras.map((e) => e.productKey);
+  return { routine, mist };
 }
 
 /**
@@ -468,7 +522,8 @@ export function buildEmmaRoutine(answers: EmmaAnswers): EmmaRecommendation {
     {
       productKey: "BloomShine",
       step: "Hair Mist",
-      reason: "La cerecita del helado: un toque sensorial opcional, no es tratamiento de caspa ni caída.",
+      reason:
+        "Y ahora la cerecita del helado 🍒💗: un Hair Mist Four Sensations para cerrar con ese toque que obsesiona. Es opcional y no es tratamiento de caspa ni caída.",
       optional: true,
       evidence: "upsell",
     },
@@ -477,11 +532,15 @@ export function buildEmmaRoutine(answers: EmmaAnswers): EmmaRecommendation {
   const p1Label =
     answers.hairType === "caspa_acumulacion"
       ? "caspa o acumulación"
-      : answers.hairType;
+      : answers.hairType === "seco"
+        ? "seco"
+        : answers.hairType === "graso"
+          ? "graso"
+          : "normal";
   const p5Opt = EMMA_QUESTIONS[4]?.options.find((o) => o.id === answers.priority);
-  const summary = `Armé tu rutina con lo que me contaste: base de lavado por tu cabello ${p1Label}${
-    p5Opt ? ` y prioridad «${p5Opt.label}»` : ""
-  }. Cada producto tiene una razón verificable en tus respuestas 💗`;
+  const summary = `¡Armé tu rutina escuchando todo lo que me contaste! 💗 Tu base de lavado responde a tu cabello ${p1Label}${
+    p5Opt ? ` y tu prioridad #1 es «${p5Opt.label}»` : ""
+  }. Aquí va lo que elegiría para ti.`;
 
   return {
     primary,
@@ -492,6 +551,10 @@ export function buildEmmaRoutine(answers: EmmaAnswers): EmmaRecommendation {
     defaultWashKey: baseWash.productKey,
   };
 }
+
+export const EMMA_LOADING_TEXT = "¡Listoooo! 💗 Voy a unir todo lo que me contaste para elegir tu rutina.";
+
+export const EMMA_HAIR_MIST_KEYS = ["BloomShine", "Sweet Love", "Scarlette", "Golden Glow"] as const;
 
 export function matchCatalogProductId(
   catalog: { id: string; name: string }[],
@@ -516,7 +579,10 @@ export function matchCatalogProductId(
     "luna llena": ["luna llena"],
     suspiros: ["suspiros"],
     botanical: ["botanical"],
-    bloomshine: ["bloom", "bloomshine", "hair mist"],
+    bloomshine: ["bloomshine", "bloom shine", "hair mist"],
+    "sweet love": ["sweet love"],
+    scarlette: ["scarlette"],
+    "golden glow": ["golden glow"],
   };
   const needles = aliases[key] ?? [key];
   const hit = catalog.find((p) => {

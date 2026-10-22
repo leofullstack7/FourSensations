@@ -6,16 +6,21 @@ import { MotionDiv, MotionSpan } from "@/components/store/store-framer-motion";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { JuliProductSlider } from "@/components/store/JuliProductSlider";
 import {
+  EMMA_HAIR_MIST_KEYS,
   EMMA_INTRO,
   EMMA_LEFT_COPY,
+  EMMA_LOADING_TEXT,
   EMMA_QUESTIONS,
   EMMA_START_BUTTON,
   buildEmmaRoutine,
   emmaReactionForAnswer,
   matchCatalogProductId,
   normalizeExclusiveSelection,
+  validateEmmaAnswers,
   type EmmaAnswers,
+  type EmmaRoutineItem,
 } from "@/lib/emma/flow";
+import { buildWhyForMeLines } from "@/lib/emma/explanations";
 import { buildAdvisorReply, type AdvisorHistoryTurn, type AiAdvisorReply } from "@/lib/ai-advisor";
 import { ADVISOR_MAX_TURNS } from "@/lib/ai-advisor-context";
 import type { StoreProduct } from "@/lib/types/product";
@@ -91,6 +96,8 @@ export function BeautyAiAdvisor() {
     altId: string | null;
   } | null>(null);
   const [moduleIds, setModuleIds] = useState<string[]>([]);
+  const [routineItems, setRoutineItems] = useState<EmmaRoutineItem[]>([]);
+  const [mistIds, setMistIds] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
   const [typing, setTyping] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
@@ -171,11 +178,16 @@ export function BeautyAiAdvisor() {
 
   const finishAndRecommend = useCallback(
     (finalAnswers: EmmaAnswers) => {
+      const valid = validateEmmaAnswers(finalAnswers);
+      if (!valid) {
+        showToast("Necesito completar las respuestas para armar tu rutina.", "danger", "⚠️");
+        return;
+      }
       setPhase("loading");
-      setLines((prev) => [...prev, { id: nid(), role: "bot", text: "🪄Emma está armando tu rutina✨" }]);
+      setLines((prev) => [...prev, { id: nid(), role: "bot", text: EMMA_LOADING_TEXT }]);
 
       window.setTimeout(() => {
-        const built = buildEmmaRoutine(finalAnswers);
+        const built = buildEmmaRoutine(valid);
         const reasons: Record<string, string> = {};
         const resolve = (key: string) => matchCatalogProductId(catalogProducts, key);
 
@@ -188,54 +200,78 @@ export function BeautyAiAdvisor() {
           altId,
         });
         setWashChoice("base");
-        if (baseId) reasons[baseId] = `${built.baseWash.step}: ${built.baseWash.reason}`;
+        if (baseId) reasons[baseId] = built.baseWash.reason;
         if (altId && built.alternativeWash) {
-          reasons[altId] = `${built.alternativeWash.step}: ${built.alternativeWash.reason}`;
+          reasons[altId] = built.alternativeWash.reason;
         }
 
-        const moduleIds: string[] = [];
+        const nextModules: string[] = [];
         for (const item of built.primary) {
           const id = resolve(item.productKey);
           if (id && id !== baseId && id !== altId) {
-            moduleIds.push(id);
-            reasons[id] = `${item.step}: ${item.reason}`;
+            nextModules.push(id);
+            reasons[id] = item.reason;
           }
         }
 
         const washId = baseId;
-        const ids = [...(washId ? [washId] : []), ...moduleIds];
+        const ids = [...(washId ? [washId] : []), ...nextModules];
 
         const extras: string[] = [];
-        for (const item of built.extras) {
-          const id = resolve(item.productKey);
-          if (id && !ids.includes(id)) {
+        for (const mistKey of EMMA_HAIR_MIST_KEYS) {
+          const id = resolve(mistKey);
+          if (id && !ids.includes(id) && !extras.includes(id)) {
             extras.push(id);
-            reasons[id] = `${item.step}: ${item.reason}`;
+            reasons[id] =
+              built.extras[0]?.reason ??
+              "Hair Mist opcional: un toque sensorial, no es tratamiento de caspa ni caída.";
+            break; // un mist en la cerecita; el resto queda en catálogo
           }
         }
-        setModuleIds(moduleIds);
+
+        const allItems: EmmaRoutineItem[] = [
+          built.baseWash,
+          ...(built.alternativeWash ? [built.alternativeWash] : []),
+          ...built.primary,
+          ...built.extras,
+        ];
+        setRoutineItems(allItems);
+        setModuleIds(nextModules);
+        setMistIds(extras);
         setResultIds(ids);
         setResultReasons(reasons);
 
-        const altLine =
-          built.alternativeWash && altId
-            ? {
-                id: nid(),
-                role: "bot" as const,
-                text: `Tu base de lavado es ${built.baseWash.productKey}. También puedes elegir ${built.alternativeWash.productKey} como alternativa (solo uno entra al carrito). ${built.alternativeWash.reason}`,
-              }
-            : null;
+        const washBlock = built.alternativeWash && altId
+          ? {
+              id: nid(),
+              role: "bot" as const,
+              text: `Tu primera recomendación de lavado: ${built.baseWash.productKey}. ${built.baseWash.reason} También puedes elegir ${built.alternativeWash.productKey} como alternativa — ¿con cuál de estos dos sistemas te quedas? Solo uno entra al carrito.`,
+            }
+          : {
+              id: nid(),
+              role: "bot" as const,
+              text: `Tu primera recomendación de lavado: ${built.baseWash.productKey}. ${built.baseWash.reason}`,
+            };
 
         setLines((prev) => [
           ...prev,
-          { id: nid(), role: "bot", text: built.summary, productIds: ids },
-          ...(altLine ? [altLine] : []),
+          { id: nid(), role: "bot", text: built.summary },
+          washBlock,
+          {
+            id: nid(),
+            role: "bot",
+            text:
+              nextModules.length > 0
+                ? "Estos son los cuidados que sumé a tu rutina según tu prioridad y lo que me contaste:"
+                : "Con tu base de lavado ya tienes el punto de partida. Si más adelante marcas más señales, puedo afinar tratamientos.",
+            productIds: ids,
+          },
           ...(extras.length
             ? [
                 {
                   id: nid(),
                   role: "bot" as const,
-                  text: "Y ahora la cerecita del helado 🍒💗: un Hair Mist opcional Four Sensations (no es tratamiento de caspa ni caída).",
+                  text: "Y ahora la cerecita del helado 🍒💗: un Hair Mist Four Sensations para cerrar con ese toque que obsesiona. Un spray y todo cambia. (Opcional — no es tratamiento de caspa ni caída.)",
                   productIds: extras,
                 },
               ]
@@ -243,13 +279,13 @@ export function BeautyAiAdvisor() {
           {
             id: nid(),
             role: "bot",
-            text: "Si quieres, te explico por qué elegí cada uno, agregamos la rutina al carrito o me escribes aquí abajo 💗",
+            text: "¿Por qué para mí? · Cómo usarla · o lleva tu rutina al carrito 💗",
           },
         ]);
         setPhase("result");
-      }, 1600);
+      }, 1400);
     },
-    [catalogProducts],
+    [catalogProducts, showToast],
   );
 
   const confirmAnswer = useCallback(() => {
@@ -358,12 +394,27 @@ export function BeautyAiAdvisor() {
   );
 
   const addRoutineToCart = useCallback(() => {
+    // Solo lavado elegido + módulos (mist opcional no se fuerza)
     for (const id of resultIds) {
       const p = productMap.get(id);
       addToCart(id, p);
     }
-    showToast("Rutina agregada al carrito 💗", "success", "🛒");
-  }, [resultIds, productMap, addToCart, showToast]);
+    showToast(
+      washOptions?.altId
+        ? `Rutina al carrito con ${washChoice === "alternative" ? washOptions.altKey : washOptions.baseKey} 💗`
+        : "Rutina agregada al carrito 💗",
+      "success",
+      "🛒",
+    );
+  }, [resultIds, productMap, addToCart, showToast, washOptions, washChoice]);
+
+  const explainWhy = useCallback(() => {
+    const linesWhy = buildWhyForMeLines(routineItems);
+    const text =
+      linesWhy.map((w) => `• ${w.productKey}: ${w.text}`).join("\n") ||
+      "Cada producto responde a lo que me contaste en el cuestionario 💗";
+    setLines((prev) => [...prev, { id: nid(), role: "bot", text }]);
+  }, [routineItems]);
 
   const restart = useCallback(() => {
     setPhase("intro");
@@ -375,10 +426,20 @@ export function BeautyAiAdvisor() {
     setWashOptions(null);
     setWashChoice("base");
     setModuleIds([]);
+    setMistIds([]);
+    setRoutineItems([]);
     setDraft("");
     setTyping(false);
     setLines([{ id: "intro", role: "bot", text: EMMA_INTRO }]);
   }, []);
+
+  const goBackQuestion = useCallback(() => {
+    if (phase !== "question" || questionIndex <= 0) return;
+    const prev = questionIndex - 1;
+    setQuestionIndex(prev);
+    setSelected([]);
+    setLines((prevLines) => [...prevLines, { id: nid(), role: "bot", text: EMMA_QUESTIONS[prev]!.prompt }]);
+  }, [phase, questionIndex]);
 
   const renderProducts = (ids: string[]) => {
     const products = ids.map((id) => productMap.get(id)).filter((p): p is StoreProduct => Boolean(p));
@@ -506,6 +567,9 @@ export function BeautyAiAdvisor() {
 
             {phase === "question" && question ? (
               <div className="emma-quiz">
+                <p className="emma-progress" style={{ margin: "0 0 8px", fontSize: 12, color: "var(--text-muted)" }}>
+                  Pregunta {questionIndex + 1} de {EMMA_QUESTIONS.length}
+                </p>
                 <div className="gb-ai-chips emma-options">
                   {question.options.map((opt) => {
                     const active = selected.includes(opt.id);
@@ -522,14 +586,21 @@ export function BeautyAiAdvisor() {
                     );
                   })}
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-primary emma-continue"
-                  disabled={selected.length === 0}
-                  onClick={confirmAnswer}
-                >
-                  Continuar 💗
-                </button>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                  {questionIndex > 0 ? (
+                    <button type="button" className="btn btn-outline emma-continue" onClick={goBackQuestion}>
+                      ← Atrás
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn btn-primary emma-continue"
+                    disabled={selected.length === 0}
+                    onClick={confirmAnswer}
+                  >
+                    Continuar 💗
+                  </button>
+                </div>
               </div>
             ) : null}
 
@@ -537,12 +608,15 @@ export function BeautyAiAdvisor() {
               <div className="gb-ai-chips emma-result-actions">
                 {washOptions?.altId ? (
                   <>
+                    <p style={{ width: "100%", margin: "0 0 4px", fontSize: 12, fontWeight: 600 }}>
+                      ¿Con cuál sistema de lavado te quedas?
+                    </p>
                     <button
                       type="button"
                       className={`gb-ai-chip${washChoice === "base" ? " is-active" : ""}`}
                       onClick={() => applyWashChoice("base")}
                     >
-                      Lavado: {washOptions.baseKey}
+                      {washOptions.baseKey} (recomendada)
                     </button>
                     <button
                       type="button"
@@ -554,29 +628,24 @@ export function BeautyAiAdvisor() {
                   </>
                 ) : null}
                 <button type="button" className="gb-ai-chip gb-ai-chip--primary" onClick={addRoutineToCart}>
-                  Agregar mi rutina al carrito 💗
+                  ¡Lleva tu rutina a casa! 💗
                 </button>
-                <button
-                  type="button"
-                  className="gb-ai-chip"
-                  onClick={() =>
-                    setLines((prev) => [
-                      ...prev,
-                      {
-                        id: nid(),
-                        role: "bot",
-                        text:
-                          resultIds
-                            .map((id) => {
-                              const p = productMap.get(id);
-                              return p ? `• ${p.name}: ${resultReasons[id] || "Porque encaja con lo que me contaste."}` : "";
-                            })
-                            .filter(Boolean)
-                            .join("\n") || "Cada producto responde a lo que me contaste en el cuestionario 💗",
-                      },
-                    ])
-                  }
-                >
+                {mistIds.length > 0 ? (
+                  <button
+                    type="button"
+                    className="gb-ai-chip"
+                    onClick={() => {
+                      for (const id of mistIds) {
+                        const p = productMap.get(id);
+                        addToCart(id, p);
+                      }
+                      showToast("Hair Mist agregado (opcional) 💗", "success", "🍒");
+                    }}
+                  >
+                    Sumar Hair Mist al carrito
+                  </button>
+                ) : null}
+                <button type="button" className="gb-ai-chip" onClick={explainWhy}>
                   ¿Por qué para mí?
                 </button>
                 <button type="button" className="gb-ai-chip" onClick={restart}>

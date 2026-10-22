@@ -21,6 +21,7 @@ import {
 } from "@/lib/api/admin-families";
 import { AdminFamiliesPanel } from "@/components/admin/AdminFamiliesPanel";
 import { AdminLandingContentPanel } from "@/components/admin/AdminLandingContentPanel";
+import { AdminEmmaPanel } from "@/components/admin/AdminEmmaPanel";
 import { AdminImageBankModal } from "@/components/admin/AdminImageBankModal";
 import { AdminProductFichaEditor } from "@/components/admin/AdminProductFichaEditor";
 import { seedProductFicha, type ProductFichaCopy } from "@/lib/product-ficha";
@@ -172,7 +173,7 @@ import {
   resolveMenuTagFromEditor,
 } from "@/lib/admin/menu-utils";
 
-type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "discounts" | "coupons" | "sales" | "shipments" | "stock" | "customers" | "categories" | "families" | "menu" | "contenido" | "correos" | "versions" | "reports";
+type AdminPageId = "dashboard" | "products" | "category-products" | "combos" | "discounts" | "coupons" | "sales" | "shipments" | "stock" | "customers" | "categories" | "families" | "menu" | "contenido" | "emma" | "correos" | "versions" | "reports";
 
 type GoPageOptions = {
   productTab?: "list" | "add" | "bulk";
@@ -193,6 +194,7 @@ const ADMIN_PAGE_TITLES: Record<AdminPageId, string> = {
   families: "Familias",
   menu: "Gestión del Menú",
   contenido: "Contenido",
+  emma: "Centro de Emma",
   correos: "Correos",
   versions: "Versiones",
   reports: "Reportes",
@@ -218,6 +220,7 @@ const ADMIN_NAV_ITEMS: {
   { id: "families", icon: "🧬", label: "Familias", section: "config" },
   { id: "menu", icon: "🗂️", label: "Gestión de Menú", section: "config" },
   { id: "contenido", icon: "🖼️", label: "Contenido", section: "config" },
+  { id: "emma", icon: "💗", label: "Centro de Emma", section: "config" },
   { id: "correos", icon: "✉️", label: "Correos", section: "config" },
   { id: "versions", icon: "🕘", label: "Versiones", section: "config" },
   { id: "reports", icon: "📈", label: "Reportes", section: "config" },
@@ -2116,6 +2119,9 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
 
             <div className={`admin-page ${page === "contenido" ? "active" : ""}`} style={{ display: page === "contenido" ? "block" : "none" }}>
               <AdminLandingContentPanel active={page === "contenido"} showToast={showToast} />
+            </div>
+            <div className={`admin-page ${page === "emma" ? "active" : ""}`} style={{ display: page === "emma" ? "block" : "none" }}>
+              <AdminEmmaPanel active={page === "emma"} showToast={showToast} />
             </div>
             <div className={`admin-page ${page === "correos" ? "active" : ""}`} style={{ display: page === "correos" ? "block" : "none" }}>
               <AdminEmailPanel active={page === "correos"} showToast={showToast} />
