@@ -2336,6 +2336,28 @@
   line-height: 1.15;
   color: var(--text);
 }
+.product-buy__colors {
+  margin: 12px 0 4px;
+}
+.product-buy__colors-label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.product-buy__colors-hint {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dusty-rose, #c9918b);
+}
+.product-buy__colors--pulse {
+  border-radius: 14px;
+  padding: 12px;
+  border: 1px solid rgba(201, 145, 139, 0.55);
+  background: rgba(255, 248, 245, 0.95);
+  animation: product-variant-pulse 1.15s ease-in-out 5;
+}
 .product-buy__actions {
   display: grid;
   gap: 8px;

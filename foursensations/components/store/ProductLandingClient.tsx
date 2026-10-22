@@ -73,26 +73,41 @@ export function ProductLandingClient({
   variants?: StoreProduct[];
   ficha?: ProductFichaCopy | null;
 }) {
-  const { addToCart, toggleFavorite, favorites } = useStorefrontUi();
-  const theme = productHeroThemeFromSlug(product.slug || product.id);
-  const copy = getCatalogProductCopy(product.name);
-  const displayName = getProductDisplayName(ficha?.title || product.name);
-  const images = useMemo(() => galleryPool(product), [product]);
+  const { addToCart, toggleFavorite, favorites, showToast } = useStorefrontUi();
+  const needsColorChoice = variants.length > 1;
+  const [chosenVariant, setChosenVariant] = useState<StoreProduct | null>(null);
+  const [pulseColors, setPulseColors] = useState(needsColorChoice);
   const [activeSrc, setActiveSrc] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const isFav = favorites.includes(product.id);
-  const categoryHref = `/categoria/${product.category}${
-    product.subcategory ? `?grupo=${encodeURIComponent(product.subcategory)}` : ""
+  const activeProduct = chosenVariant ?? product;
+
+  useEffect(() => {
+    setChosenVariant(null);
+    setPulseColors(variants.length > 1);
+    setActiveSrc(null);
+  }, [product.id, variants.length]);
+
+  const theme = productHeroThemeFromSlug(activeProduct.slug || activeProduct.id);
+  const copy = getCatalogProductCopy(activeProduct.name);
+  const displayName = getProductDisplayName(ficha?.title || activeProduct.name);
+  const images = useMemo(() => galleryPool(activeProduct), [activeProduct]);
+  const isFav = favorites.includes(activeProduct.id);
+  const categoryHref = `/categoria/${activeProduct.category}${
+    activeProduct.subcategory ? `?grupo=${encodeURIComponent(activeProduct.subcategory)}` : ""
   }`;
 
   const featured = activeSrc || images[0] || "";
   const title = ficha?.title?.trim() || displayName.title;
   const subtitle = ficha ? ficha.subtitle : displayName.subtitle;
-  const kicker = ficha?.tagline?.trim() || copy?.tagline || product.subcategory || getCategoryLabel(product.category);
+  const kicker =
+    ficha?.tagline?.trim() ||
+    copy?.tagline ||
+    activeProduct.subcategory ||
+    getCategoryLabel(activeProduct.category);
   const lead = ficha ? ficha.hook : copy?.hook || "";
   const blurb = ficha?.description?.trim()
     || copy?.description
-    || product.description?.trim()
+    || activeProduct.description?.trim()
     || "Ficha Four Sensations extraída del catálogo oficial.";
   const idealFor = ficha ? ficha.idealFor : copy?.idealFor || "";
   const benefits = ficha ? ficha.benefits : copy?.benefits ?? [];
@@ -115,9 +130,9 @@ export function ProductLandingClient({
 
   return (
     <main className={`product-landing-page product-landing-page--${theme}`}>
-      <section className="product-hero" aria-label={product.name}>
+      <section className="product-hero" aria-label={activeProduct.name}>
         <div className="product-hero__stage">
-          <ProductHeroPan urls={images} alt={product.name} />
+          <ProductHeroPan urls={images} alt={activeProduct.name} />
           <div className="product-hero__fade" aria-hidden />
           <div className="product-hero__copy">
             <p className="product-hero__kicker">{kicker}</p>
@@ -143,40 +158,58 @@ export function ProductLandingClient({
                 <div className="product-buy__preview">
                   <ProductModalZoomImage
                     src={featured}
-                    alt={product.name}
+                    alt={activeProduct.name}
                     objectFit="cover"
                     sizes="(max-width: 900px) 92vw, 360px"
                   />
                 </div>
               ) : null}
-              <p className="product-buy__brand">{product.brand}</p>
+              <p className="product-buy__brand">{activeProduct.brand}</p>
               <h2 className="product-buy__name">{title}</h2>
               {subtitle ? <p className="product-buy__subtitle">{subtitle}</p> : null}
               <div className="product-buy__price">
-                <StoreProductPrice product={product} currentStyle={{ fontSize: 30 }} />
+                <StoreProductPrice product={activeProduct} currentStyle={{ fontSize: 30 }} />
               </div>
-              {variants.length > 1 ? (
-                <div className="product-buy__colors">
+              {needsColorChoice ? (
+                <div className={`product-buy__colors${pulseColors ? " product-buy__colors--pulse" : ""}`}>
                   <p className="product-buy__colors-label">Elige el color</p>
+                  {!chosenVariant ? (
+                    <p className="product-buy__colors-hint">Selecciona un color para poder añadir al carrito</p>
+                  ) : null}
                   <ProductColorSwatchField
                     items={variants}
-                    selectedId={product.id}
+                    selectedId={chosenVariant?.id ?? null}
                     onSelect={(id) => {
                       const next = variants.find((item) => item.id === id);
-                      if (next?.slug) window.location.assign(`/producto/${next.slug}`);
+                      if (!next) return;
+                      setChosenVariant(next);
+                      setPulseColors(false);
+                      setActiveSrc(null);
                     }}
                   />
                 </div>
               ) : null}
               <div className="product-buy__actions">
-                <button type="button" className="btn btn-primary" onClick={() => addToCart(product.id, product, { confirmVariant: true })}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    if (needsColorChoice && !chosenVariant) {
+                      setPulseColors(true);
+                      showToast("Selecciona el color que deseas antes de agregar al carrito", "info", "🎨");
+                      return;
+                    }
+                    const toAdd = chosenVariant ?? product;
+                    addToCart(toAdd.id, toAdd, { variantChosen: true });
+                  }}
+                >
                   Añadir al carrito
                 </button>
                 <button
                   type="button"
                   className="btn btn-outline"
                   aria-pressed={isFav}
-                  onClick={() => toggleFavorite(product.id)}
+                  onClick={() => toggleFavorite(activeProduct.id)}
                 >
                   {isFav ? "En favoritos" : "Guardar"}
                 </button>
@@ -206,7 +239,7 @@ export function ProductLandingClient({
             ) : null}
 
             {images.length > 0 ? (
-              <div className="product-mosaic" aria-label={`Galería de ${product.name}`}>
+              <div className="product-mosaic" aria-label={`Galería de ${activeProduct.name}`}>
                 {images.map((src, i) => {
                   const selected = featured === src;
                   return (
@@ -223,7 +256,7 @@ export function ProductLandingClient({
                       >
                         <MosaicImage
                           src={src}
-                          alt={`${product.name} ${i + 1}`}
+                          alt={`${activeProduct.name} ${i + 1}`}
                           width={i === 0 ? 640 : 280}
                           height={i === 0 ? 640 : 280}
                           className="product-mosaic__img"
@@ -252,7 +285,7 @@ export function ProductLandingClient({
           className="product-lightbox"
           role="dialog"
           aria-modal="true"
-          aria-label={`Foto de ${product.name}`}
+          aria-label={`Foto de ${activeProduct.name}`}
           onClick={() => setLightboxSrc(null)}
         >
           <button type="button" className="product-lightbox__close" onClick={() => setLightboxSrc(null)}>
@@ -261,7 +294,7 @@ export function ProductLandingClient({
           <div className="product-lightbox__stage" onClick={(e) => e.stopPropagation()}>
             <ProductModalZoomImage
               src={lightboxSrc}
-              alt={product.name}
+              alt={activeProduct.name}
               objectFit="contain"
               sizes="100vw"
             />

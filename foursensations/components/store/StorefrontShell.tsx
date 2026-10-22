@@ -189,6 +189,8 @@ export function StorefrontShell({
   const [authMode, setAuthMode] = useState<"login" | "fav-warning">("login");
   const [customerAuthTab, setCustomerAuthTab] = useState<"login" | "register">("login");
   const [selectedProduct, setSelectedProduct] = useState<StoreProduct | null>(null);
+  /** El cliente hizo clic en un color/variante en el modal (obligatorio antes del carrito). */
+  const [variantColorChosen, setVariantColorChosen] = useState(false);
   const [modalImgIdx, setModalImgIdx] = useState(0);
   const [pulseVariantColors, setPulseVariantColors] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -318,12 +320,14 @@ export function StorefrontShell({
     preloadStorefrontProductImages(p);
     setSelectedProduct(p);
     setModalImgIdx(0);
-    setPulseVariantColors(Boolean(opts?.pulseVariantColors));
+    const needsColor = productNeedsVariantSelection(p, productsRef.current);
+    setVariantColorChosen(false);
+    setPulseVariantColors(Boolean(opts?.pulseVariantColors) || needsColor);
     document.body.style.overflow = "hidden";
   }, []);
 
   const addToCart = useCallback(
-    (productId: string, productSnapshot?: StoreProduct, opts?: { confirmVariant?: boolean }) => {
+    (productId: string, productSnapshot?: StoreProduct, opts?: { variantChosen?: boolean }) => {
       if (isBombaCapilarProduct(productId) || (productSnapshot && isBombaCapilarProduct(productSnapshot.id))) {
         const { dulce, primaveral } = findBombaCapilarParts(productsRef.current);
         const kit = [dulce, primaveral].filter((p): p is StoreProduct => Boolean(p));
@@ -353,7 +357,7 @@ export function StorefrontShell({
         showToast("No se pudo agregar al carrito. Abre el producto e inténtalo de nuevo.", "danger", "⚠️");
         return;
       }
-      if (!opts?.confirmVariant && productNeedsVariantSelection(product, productsRef.current)) {
+      if (productNeedsVariantSelection(product, productsRef.current) && !opts?.variantChosen) {
         showToast("Elige el color o variante antes de agregar al carrito", "info", "🎨");
         void ensureFullCatalog().finally(() => {
           // Espera a que el catálogo se fusione en estado antes de abrir el modal con swatches.
@@ -536,6 +540,7 @@ export function StorefrontShell({
     setSelectedProduct(null);
     setModalImgIdx(0);
     setPulseVariantColors(false);
+    setVariantColorChosen(false);
     document.body.style.overflow = "";
   };
 
@@ -1190,32 +1195,33 @@ export function StorefrontShell({
                     </div>
                     {showSelectedProductColorPicker ? (
                       <div
-                        className={`product-modal-color-picker${pulseVariantColors ? " product-modal-color-picker--pulse" : ""}`}
+                        className={`product-modal-color-picker${!variantColorChosen ? " product-modal-color-picker--pulse" : ""}`}
                         style={{ marginBottom: 20 }}
                       >
                         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dark)", marginBottom: 10 }}>
                           Colores disponibles
                         </div>
-                        {pulseVariantColors ? (
+                        {!variantColorChosen ? (
                           <p className="product-modal-color-picker__hint">
-                            Recuerda seleccionar que color deseas
+                            Selecciona el color que deseas antes de agregar al carrito
                           </p>
                         ) : null}
                         <ProductColorSwatchField
                           items={selectedProductVariants}
-                          selectedId={selectedProduct.id}
+                          selectedId={variantColorChosen ? selectedProduct.id : null}
                           onSelect={(id) => {
                             const next = products.find((p) => p.id === id);
                             if (next) {
                               setSelectedProduct(next);
                               setModalImgIdx(0);
+                              setVariantColorChosen(true);
                               setPulseVariantColors(false);
                             }
                           }}
                           size="sm"
                         />
                       </div>
-                    ) : productHasColorSwatch(selectedProduct) ? (
+                    ) : productHasColorSwatch(selectedProduct) && selectedProductVariants.length < 2 ? (
                       <div className="product-modal-color-single" style={{ marginBottom: 20 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dark)", marginBottom: 10 }}>
                           Color
@@ -1227,26 +1233,29 @@ export function StorefrontShell({
                           size="sm"
                         />
                       </div>
-                    ) : pulseVariantColors && selectedProductVariants.length >= 2 ? (
+                    ) : selectedProductVariants.length >= 2 ? (
                       <div
-                        className="product-modal-color-picker product-modal-color-picker--pulse"
+                        className={`product-modal-color-picker${!variantColorChosen ? " product-modal-color-picker--pulse" : ""}`}
                         style={{ marginBottom: 20 }}
                       >
                         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dark)", marginBottom: 10 }}>
                           Variantes disponibles
                         </div>
-                        <p className="product-modal-color-picker__hint">
-                          Recuerda seleccionar que color deseas
-                        </p>
+                        {!variantColorChosen ? (
+                          <p className="product-modal-color-picker__hint">
+                            Selecciona la variante que deseas antes de agregar al carrito
+                          </p>
+                        ) : null}
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                           {selectedProductVariants.map((v) => (
                             <button
                               key={v.id}
                               type="button"
-                              className={`btn btn-sm ${v.id === selectedProduct.id ? "btn-primary" : "btn-outline"}`}
+                              className={`btn btn-sm ${variantColorChosen && v.id === selectedProduct.id ? "btn-primary" : "btn-outline"}`}
                               onClick={() => {
                                 setSelectedProduct(v);
                                 setModalImgIdx(0);
+                                setVariantColorChosen(true);
                                 setPulseVariantColors(false);
                               }}
                             >
@@ -1265,13 +1274,14 @@ export function StorefrontShell({
                       style={{ flex: 1, justifyContent: "center" }}
                       onClick={() => {
                         if (
-                          pulseVariantColors &&
-                          productNeedsVariantSelection(selectedProduct, products)
+                          productNeedsVariantSelection(selectedProduct, products) &&
+                          !variantColorChosen
                         ) {
-                          showToast("Recuerda seleccionar que color deseas", "info", "🎨");
+                          setPulseVariantColors(true);
+                          showToast("Selecciona el color o variante que deseas", "info", "🎨");
                           return;
                         }
-                        addToCart(selectedProduct.id, selectedProduct, { confirmVariant: true });
+                        addToCart(selectedProduct.id, selectedProduct, { variantChosen: true });
                         closeProductModal();
                       }}
                     >

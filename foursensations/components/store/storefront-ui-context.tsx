@@ -22,12 +22,12 @@ export type StorefrontUiContextValue = {
   cartCount: number;
   /**
    * `productSnapshot` evita fallar cuando el producto aún no está en el catálogo del shell.
-   * Con variantes, sin `confirmVariant` abre el modal para elegir color.
+   * Con variantes, hace falta `variantChosen: true` (el cliente eligió color); si no, abre el modal.
    */
   addToCart: (
     id: string,
     productSnapshot?: StoreProduct,
-    opts?: { confirmVariant?: boolean },
+    opts?: { variantChosen?: boolean },
   ) => void;
   addComboToCart: (combo: import("@/lib/types/store-combo").StoreCombo) => void;
   toggleFavorite: (id: string) => void;
