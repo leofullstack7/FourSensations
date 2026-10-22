@@ -52,10 +52,12 @@ export function computedDiscountPercent(price: number, originalPrice: number | n
 }
 
 /**
- * Precio público: solo muestra oferta si hay descuento gestionado en admin
- * (`discountPercent` activo, con o sin fecha de fin).
- * No inventa % a partir de `originalPrice` (datos viejos/importados pueden
- * tener un “antes” basura y pintar descuentos falsos del 90%+).
+ * Precio público / card:
+ * - «precio» (DB) = precio descuento de venta
+ * - «originalPrice» = precio original (tachado si hay descuento real)
+ * - Si solo hay original (descuento vacío/0 o igual al original) → se muestra el original
+ * - Si original > descuento → tachado + badge %
+ * - Descuento gestionado por % (panel Descuentos) sigue teniendo prioridad
  */
 export function resolveProductPrice(p: ProductDiscountFields, now = new Date()): ResolvedProductPrice {
   if (p.isWholesalePrice && p.originalPrice != null && p.originalPrice > p.price) {
@@ -81,7 +83,30 @@ export function resolveProductPrice(p: ProductDiscountFields, now = new Date()):
     };
   }
 
-  return { price: p.price, originalPrice: null, discountPercent: null };
+  const original =
+    p.originalPrice != null && p.originalPrice > 0 ? Math.round(p.originalPrice) : null;
+  const discount = p.price > 0 ? Math.round(p.price) : null;
+
+  // Solo original (+ mayorista): sin precio descuento distinto → portada = original
+  if (original != null && (discount == null || discount === original)) {
+    return { price: original, originalPrice: null, discountPercent: null };
+  }
+
+  // Precio descuento + original mayor → oferta con tachado
+  if (discount != null && original != null && original > discount) {
+    return {
+      price: discount,
+      originalPrice: original,
+      discountPercent: computedDiscountPercent(discount, original),
+    };
+  }
+
+  // Solo precio descuento / venta
+  if (discount != null) {
+    return { price: discount, originalPrice: null, discountPercent: null };
+  }
+
+  return { price: original ?? 0, originalPrice: null, discountPercent: null };
 }
 
 export function formatDiscountBadge(percent: number): string {

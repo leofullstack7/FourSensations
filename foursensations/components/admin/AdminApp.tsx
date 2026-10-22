@@ -2783,7 +2783,7 @@ function AdminProductListTab({
               <th>Marca</th>
               <th>Categoría</th>
               <th title="Orden en la sección Productos Destacados del home (sin etiqueta pública)">Prioridad home</th>
-              <th>Precio</th>
+              <th>Precio descuento</th>
               <th title="Precio que ven las cuentas mayorista">Precio mayorista</th>
               <th>Stock</th>
               <th style={{ textAlign: "center" }}>Variantes</th>
@@ -3180,8 +3180,8 @@ function AdminAddProductForm({
           <input type="number" className="form-input" value={originalPrice} onChange={(e) => setOriginalPrice(e.target.value)} placeholder="Ej. 89000" />
         </div>
         <div className="form-group">
-          <label className="form-label">Precio con descuento *</label>
-          <input type="number" className="form-input" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Precio de venta" />
+          <label className="form-label">Precio descuento *</label>
+          <input type="number" className="form-input" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Precio de venta / oferta" />
         </div>
         <div className="form-group">
           <label className="form-label">Precio mayorista</label>
@@ -3464,7 +3464,7 @@ function AdminAddProductForm({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Precio con descuento</label>
+                  <label className="form-label">Precio descuento</label>
                   <input
                     className="form-input"
                     type="number"
@@ -10365,7 +10365,7 @@ function AdminProductDetailModal({
                     )}
                   </div>
                   <div className="admin-card" style={{ padding: 12 }}>
-                    <strong>Precio:</strong> {formatPrice(product.price)}
+                    <strong>Precio descuento:</strong> {formatPrice(product.price)}
                   </div>
                   <div className="admin-card" style={{ padding: 12 }}>
                     <strong>Precio mayorista:</strong>{" "}
@@ -10550,14 +10550,19 @@ function AdminProductDetailModal({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Precio</label>
+                  <label className="form-label">Precio descuento</label>
                   <input
                     type="number"
                     className="form-input"
                     value={editPrice}
                     disabled={editBusy}
                     onChange={(e) => setEditPrice(e.target.value)}
+                    placeholder="Vacío o igual al original = sin oferta"
                   />
+                  <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
+                    Si lo dejas en 0 o igual al precio original, la tienda muestra solo el original. Si es menor, el
+                    original sale tachado.
+                  </p>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Precio original</label>
