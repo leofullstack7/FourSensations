@@ -2,7 +2,13 @@ import type { Prisma } from "@prisma/client";
 import { orderPayloadForEmail } from "@/lib/server/email/order-notification";
 import { sendTransactionalEmail } from "@/lib/server/email/send";
 import { getWhatsAppDisplayNumber } from "@/lib/storefront-contact";
-import { escapeHtml } from "@/lib/server/email/templates";
+import {
+  EMAIL_FONT_BODY,
+  EMAIL_FONT_DISPLAY,
+  EMAIL_GOOGLE_FONTS,
+  escapeHtml,
+  formatColombiaDateTime,
+} from "@/lib/server/email/templates";
 
 function extractShippingMeta(shippingAddress: Prisma.JsonValue): {
   zoneId: string;
@@ -133,15 +139,7 @@ export async function sendOrderConfirmationToCustomer(order: CustomerOrderConfir
       ? "Cupón de bienvenida"
       : "";
 
-  const dateLabel = order.createdAt
-    ? new Date(order.createdAt).toLocaleString("es-CO", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    : "";
+  const dateLabel = order.createdAt ? formatColombiaDateTime(order.createdAt) : "";
 
   const itemRows = order.items
     .map((item) => {
@@ -165,24 +163,24 @@ export async function sendOrderConfirmationToCustomer(order: CustomerOrderConfir
 
   const html = `<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
-<body style="margin:0;padding:0;background:#fdeff4;font-family:Arial,Helvetica,sans-serif;">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>${EMAIL_GOOGLE_FONTS}</head>
+<body style="margin:0;padding:0;background:#fdeff4;font-family:${EMAIL_FONT_BODY};">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fdeff4;padding:24px 12px;">
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;">
         <tr><td style="padding:8px 8px 18px;text-align:center;">
-          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;color:#5a245f;font-weight:700;">Four Sensations</p>
-          <p style="margin:6px 0 0;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:#b08ab0;">EL CLUB DE LOS CABELLOS PERFECTOS</p>
+          <p style="margin:0;font-family:${EMAIL_FONT_DISPLAY};font-size:28px;color:#5a245f;font-weight:800;letter-spacing:-0.02em;line-height:1.15;">Four Sensations</p>
+          <p style="margin:6px 0 0;font-family:${EMAIL_FONT_BODY};font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:#b08ab0;font-weight:700;">EL CLUB DE LOS CABELLOS PERFECTOS</p>
         </td></tr>
 
         <tr><td style="padding:0 0 14px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;border:1px solid #f0d4e0;">
             <tr><td style="padding:22px 22px 8px;text-align:center;">
               <p style="margin:0 0 8px;font-size:18px;">🎀 ♡</p>
-              <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:24px;line-height:1.3;color:#5a245f;font-weight:800;">
-                Girl, ¡tu pedido está <span style="font-family:Georgia,serif;font-style:italic;color:#c4547a;font-weight:700;">confirmado</span>!
+              <p style="margin:0;font-family:${EMAIL_FONT_DISPLAY};font-size:24px;line-height:1.25;color:#5a245f;font-weight:800;letter-spacing:-0.02em;">
+                Girl, ¡tu pedido está <span style="color:#c4547a;font-weight:800;">confirmado</span>!
               </p>
-              <p style="margin:12px 0 0;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#b08ab0;font-weight:700;">
+              <p style="margin:12px 0 0;font-family:${EMAIL_FONT_BODY};font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#b08ab0;font-weight:700;">
                 GRACIAS POR SER PARTE DE ESTE CLUB. TU CABELLO ESTÁ EN LAS MEJORES MANOS.
               </p>
             </td></tr>
@@ -213,7 +211,7 @@ export async function sendOrderConfirmationToCustomer(order: CustomerOrderConfir
         <tr><td style="padding:0 0 14px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;border:1px solid #f0d4e0;">
             <tr><td style="padding:18px 20px 6px;">
-              <p style="margin:0;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#5a245f;font-weight:800;">👤 TUS DATOS DE COMPRA</p>
+              <p style="margin:0;font-family:${EMAIL_FONT_DISPLAY};font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:#5a245f;font-weight:800;">👤 TUS DATOS DE COMPRA</p>
             </td></tr>
             <tr><td style="padding:8px 20px 18px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -238,7 +236,7 @@ export async function sendOrderConfirmationToCustomer(order: CustomerOrderConfir
         <tr><td style="padding:0 0 14px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;border:1px solid #f0d4e0;">
             <tr><td style="padding:18px 20px 6px;">
-              <p style="margin:0;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#5a245f;font-weight:800;">🛍️ PRODUCTOS DE TU PEDIDO</p>
+              <p style="margin:0;font-family:${EMAIL_FONT_DISPLAY};font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:#5a245f;font-weight:800;">🛍️ PRODUCTOS DE TU PEDIDO</p>
             </td></tr>
             <tr><td style="padding:4px 12px 16px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -260,7 +258,7 @@ export async function sendOrderConfirmationToCustomer(order: CustomerOrderConfir
               <td style="width:52%;vertical-align:top;padding-right:8px;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;border:1px solid #f0d4e0;">
                   <tr><td style="padding:16px 18px;">
-                    <p style="margin:0 0 12px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#5a245f;font-weight:800;">💳 DETALLE DE PAGO</p>
+                    <p style="margin:0 0 12px;font-family:${EMAIL_FONT_DISPLAY};font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:#5a245f;font-weight:800;">💳 DETALLE DE PAGO</p>
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#7a5564;">
                       <tr><td style="padding:4px 0;">Subtotal</td><td align="right" style="padding:4px 0;">${money(order.subtotal)}</td></tr>
                       ${
@@ -281,7 +279,7 @@ export async function sendOrderConfirmationToCustomer(order: CustomerOrderConfir
               <td style="width:48%;vertical-align:top;padding-left:8px;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;border:1px solid #f0d4e0;height:100%;">
                   <tr><td style="padding:16px 18px;">
-                    <p style="margin:0 0 10px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#5a245f;font-weight:800;">🚚 INFORMACIÓN SOBRE EL ENVÍO</p>
+                    <p style="margin:0 0 10px;font-family:${EMAIL_FONT_DISPLAY};font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:#5a245f;font-weight:800;">🚚 INFORMACIÓN SOBRE EL ENVÍO</p>
                     <p style="margin:0;font-size:13px;line-height:1.6;color:#7a5564;">
                       Preparamos tu pedido en máximo <strong style="color:#5a245f;">2 días hábiles</strong> desde Manizales.
                       ${isPickup ? "Puedes recogerlo en tienda cuando te avisemos." : "Te enviaremos la guía cuando salga."}
@@ -295,8 +293,8 @@ export async function sendOrderConfirmationToCustomer(order: CustomerOrderConfir
         </td></tr>
 
         <tr><td style="padding:8px;text-align:center;">
-          <p style="margin:0;font-family:Georgia,serif;font-size:16px;color:#5a245f;">Four Sensations</p>
-          <p style="margin:6px 0 0;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#b08ab0;">EL CLUB DE LOS CABELLOS PERFECTOS</p>
+          <p style="margin:0;font-family:${EMAIL_FONT_DISPLAY};font-size:18px;color:#5a245f;font-weight:800;letter-spacing:-0.02em;">Four Sensations</p>
+          <p style="margin:6px 0 0;font-family:${EMAIL_FONT_BODY};font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#b08ab0;font-weight:700;">EL CLUB DE LOS CABELLOS PERFECTOS</p>
         </td></tr>
       </table>
     </td></tr>

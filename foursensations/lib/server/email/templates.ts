@@ -1,4 +1,4 @@
-/** Plantillas HTML compartidas — estética “maison nocturna” Four Sensations. */
+/** Plantillas HTML compartidas — tipografía alineada a la tienda (Nunito = --font-display). */
 
 export function escapeHtml(s: string): string {
   return s
@@ -12,9 +12,29 @@ export function formatCop(amount: number): string {
   return `$${amount.toLocaleString("es-CO")} COP`;
 }
 
-const FONT =
-  "Georgia, 'Palatino Linotype', 'Book Antiqua', Palatino, 'Times New Roman', serif";
-const SANS = "Helvetica, Arial, sans-serif";
+/** Misma familia que los títulos de hero de categoría en la web. */
+export const EMAIL_FONT_DISPLAY = "'Nunito', Arial, Helvetica, sans-serif";
+export const EMAIL_FONT_BODY = "'Nunito', Arial, Helvetica, sans-serif";
+export const EMAIL_GOOGLE_FONTS =
+  `<link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,600&display=swap" rel="stylesheet"/>`;
+
+/** Fecha/hora en zona Colombia (UTC-5). Render corre en UTC; sin timeZone la hora sale mal. */
+export function formatColombiaDateTime(value?: Date | string | null): string {
+  const d = value != null ? new Date(value) : new Date();
+  const safe = Number.isNaN(d.getTime()) ? new Date() : d;
+  return safe.toLocaleString("es-CO", {
+    timeZone: "America/Bogota",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+const FONT = EMAIL_FONT_DISPLAY;
+const SANS = EMAIL_FONT_BODY;
 
 type ShellOpts = {
   preheader: string;
@@ -34,6 +54,7 @@ export function emailShell(opts: ShellOpts): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  ${EMAIL_GOOGLE_FONTS}
   <title>${escapeHtml(opts.heroTitle)}</title>
 </head>
 <body style="margin:0;padding:0;background:#120914;font-family:${FONT};">
