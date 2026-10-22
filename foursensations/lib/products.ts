@@ -14,18 +14,37 @@ import { STOREFRONT_PRODUCTS_CACHE_TAG } from "@/lib/server/revalidate-storefron
 import { resolveProductPrice } from "@/lib/product-discount";
 import type { StoreProduct } from "@/lib/types/product";
 import { prisma } from "@/lib/prisma";
-import { mergeLocalProductPhotoUrls } from "@/lib/server/product-photo-files";
 import { slugify } from "@/lib/slugify";
 import { normalizeMenuLookup } from "@/lib/store/menu-item-href";
 import { enrichStorefrontDisplayProducts } from "@/lib/store/variant-groups";
-import { preferFastStorefrontUrls, toFastProductMediaUrl } from "@/lib/util/image-url";
+import { toFastProductMediaUrl } from "@/lib/util/image-url";
 
-/** Solo portada + hover: cargar 80 fotos por producto reventaba Render free (512Mi). */
+/** Solo portada + hover en listados: cargar todas las fotos reventaba Render free (512Mi). */
 const productStoreInclude = {
   images: { orderBy: { sortOrder: "asc" as const }, take: 2 },
   tintFamily: { select: { name: true } },
   tintType: { select: { name: true } },
 };
+
+/** Ficha de producto: todas las imágenes del editor (principal + extras). */
+const productDetailInclude = {
+  images: { orderBy: { sortOrder: "asc" as const } },
+  tintFamily: { select: { name: true } },
+  tintType: { select: { name: true } },
+};
+
+/** URLs del editor sin duplicar estático/API ni inyectar el dump local del SKU. */
+function editorPhotoUrls(primary: string | null | undefined, galleryRows: { url: string }[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of [primary, ...galleryRows.map((g) => g.url)]) {
+    const url = toFastProductMediaUrl((raw ?? "").trim());
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    out.push(url);
+  }
+  return out;
+}
 
 type ProductRow = {
   id: string;
@@ -61,12 +80,7 @@ type ProductRow = {
 };
 
 function rowToStore(p: ProductRow, galleryRows: { url: string }[] = []): StoreProduct {
-  const rawUrls: string[] = [];
-  for (const raw of [p.imageUrl, ...galleryRows.map((g) => g.url)]) {
-    const url = toFastProductMediaUrl(raw?.trim() || "");
-    if (url) rawUrls.push(url);
-  }
-  const all = mergeLocalProductPhotoUrls(p.name, preferFastStorefrontUrls(rawUrls));
+  const all = editorPhotoUrls(p.imageUrl, galleryRows);
   const primary = all[0] || "";
   const hover = all[1] || "";
   const gallery = all.slice(1);
@@ -405,23 +419,10 @@ export async function getStorefrontProductBySlug(slug: string): Promise<StorePro
   try {
     const row = await prisma.product.findFirst({
       where: { slug: wanted, active: true },
-      include: productStoreInclude,
+      include: productDetailInclude,
     });
     if (!row) return null;
-    const product = rowToStore(row, row.images);
-    const photos = mergeLocalProductPhotoUrls(product.name, [
-      product.img,
-      ...(product.imgHover ? [product.imgHover] : []),
-      ...product.gallery,
-    ]);
-    const primary = photos[0] || product.img;
-    const rest = photos.slice(1);
-    return {
-      ...product,
-      img: primary,
-      imgHover: rest[0] || null,
-      gallery: rest,
-    };
+    return rowToStore(row, row.images);
   } catch {
     return null;
   }

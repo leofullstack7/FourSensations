@@ -8,7 +8,11 @@ import { ProductModalZoomImage } from "@/components/store/ProductModalZoomImage"
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreProductPrice } from "@/components/store/StoreProductPrice";
 import type { StoreProduct } from "@/lib/types/product";
-import { isDisplayableImageUrl, shouldBypassNextImageOptimizer } from "@/lib/util/image-url";
+import {
+  isDisplayableImageUrl,
+  preferFastStorefrontUrls,
+  shouldBypassNextImageOptimizer,
+} from "@/lib/util/image-url";
 import { productHeroThemeFromSlug } from "@/lib/store/product-hero-theme";
 import { getCategoryLabel } from "@/lib/category-labels";
 import { getCatalogProductCopy } from "@/lib/catalog-product-copy";
@@ -16,6 +20,7 @@ import { getProductDisplayName } from "@/lib/product-display-names";
 import type { ProductFichaCopy } from "@/lib/product-ficha";
 import { ProductColorSwatchField } from "@/components/store/ProductColorSwatchField";
 
+/** Galería de ficha = solo principal + extras del editor (sin dump local del SKU). */
 function galleryPool(product: StoreProduct): string[] {
   const seen = new Set<string>();
   const urls: string[] = [];
@@ -26,6 +31,37 @@ function galleryPool(product: StoreProduct): string[] {
     urls.push(url);
   }
   return urls;
+}
+
+function MosaicImage({
+  src,
+  alt,
+  width,
+  height,
+  className,
+}: {
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+  className?: string;
+}) {
+  const candidates = useMemo(() => preferFastStorefrontUrls([src]), [src]);
+  const [index, setIndex] = useState(0);
+  const current = index < candidates.length ? candidates[index] : "";
+  if (!current) return null;
+  return (
+    <Image
+      key={current}
+      src={current}
+      alt={alt}
+      width={width}
+      height={height}
+      className={className}
+      unoptimized={shouldBypassNextImageOptimizer(current)}
+      onError={() => setIndex((i) => (i + 1 < candidates.length ? i + 1 : candidates.length))}
+    />
+  );
 }
 
 export function ProductLandingClient({
@@ -185,13 +221,12 @@ export function ProductLandingClient({
                         className="product-mosaic__pick"
                         onClick={() => setActiveSrc(src)}
                       >
-                        <Image
+                        <MosaicImage
                           src={src}
                           alt={`${product.name} ${i + 1}`}
                           width={i === 0 ? 640 : 280}
                           height={i === 0 ? 640 : 280}
                           className="product-mosaic__img"
-                          unoptimized={shouldBypassNextImageOptimizer(src)}
                         />
                       </button>
                       {selected ? (
