@@ -25,6 +25,7 @@ const COLLAGE_LABELS: Record<LandingCollageSlug, string> = {
   "cuidado-corporal": "Cuidado corporal",
   kits: "Kits",
   accesorios: "Accesorios",
+  mayorista: "Mayorista",
 };
 
 const SHOTS = ["fs-account-collage__shot--a", "fs-account-collage__shot--b", "fs-account-collage__shot--c"] as const;
@@ -466,6 +467,11 @@ export function AdminLandingContentPanel({ active, showToast }: Props) {
               <p style={{ marginTop: 12, fontSize: 12, color: "var(--text-muted)" }}>
                 Estas tres fotos alimentan el collage de la landing <strong>Accesorios</strong>. También puedes
                 cambiar el widget «Accesorios capilares» en la pestaña Widgets Home.
+              </p>
+            ) : null}
+            {section === "mayorista" ? (
+              <p style={{ marginTop: 12, fontSize: 12, color: "var(--text-muted)" }}>
+                Estas tres fotos alimentan el collage del hero en <strong>/mayorista</strong>.
               </p>
             ) : null}
           </div>

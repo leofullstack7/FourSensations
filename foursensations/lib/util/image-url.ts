@@ -69,16 +69,12 @@ function storedApiFromStatic(url: string): string | null {
   return m ? `/api/media/stored/${m[1]}` : null;
 }
 
-/** Prioriza SKU estático; stored estático; API stored como respaldo. */
+/**
+ * Expande cada URL a variantes rápidas (estático → API) **sin reordenar**.
+ * La primera URL de entrada (portada del editor) debe seguir siendo la primera candidata;
+ * nunca promover una extra de `/media/productos` por encima de la principal.
+ */
 export function preferFastStorefrontUrls(urls: string[]): string[] {
-  const score = (u: string) => {
-    if (/^\/media\/productos\//i.test(u)) return 0;
-    if (/^\/media\/stored\//i.test(u)) return 1;
-    if (/^\/api\/media\/productos\//i.test(u)) return 2;
-    if (/^\/api\/media\/stored\//i.test(u)) return 3;
-    if (isHttpImageUrl(u)) return 1;
-    return 4;
-  };
   const seen = new Set<string>();
   const out: string[] = [];
   const push = (u: string) => {
@@ -86,13 +82,15 @@ export function preferFastStorefrontUrls(urls: string[]): string[] {
     seen.add(u);
     out.push(u);
   };
-  for (const raw of [...urls].sort((a, b) => score(a) - score(b))) {
-    const u = toFastProductMediaUrl(raw);
+  for (const raw of urls) {
+    const trimmed = (raw ?? "").trim();
+    if (!trimmed) continue;
+    const u = toFastProductMediaUrl(trimmed);
     push(u);
     // Si el estático de build no existe (404), el card debe caer al API al instante.
     const api = storedApiFromStatic(u);
     if (api) push(api);
-    if (/^\/api\/media\/stored\/[a-z0-9]+$/i.test(raw.trim())) push(raw.trim());
+    if (/^\/api\/media\/stored\/[a-z0-9]+$/i.test(trimmed)) push(trimmed);
   }
   return out;
 }

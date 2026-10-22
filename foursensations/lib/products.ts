@@ -33,16 +33,21 @@ const productDetailInclude = {
   tintType: { select: { name: true } },
 };
 
-/** URLs del editor sin duplicar estático/API ni inyectar el dump local del SKU. */
+/**
+ * Portada = `imageUrl` del editor (siempre primero).
+ * Extras = `ProductImage` en orden; nunca sustituyen la portada.
+ */
 function editorPhotoUrls(primary: string | null | undefined, galleryRows: { url: string }[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const raw of [primary, ...galleryRows.map((g) => g.url)]) {
+  const push = (raw: string | null | undefined) => {
     const url = toFastProductMediaUrl((raw ?? "").trim());
-    if (!url || seen.has(url)) continue;
+    if (!url || seen.has(url)) return;
     seen.add(url);
     out.push(url);
-  }
+  };
+  push(primary);
+  for (const row of galleryRows) push(row.url);
   return out;
 }
 

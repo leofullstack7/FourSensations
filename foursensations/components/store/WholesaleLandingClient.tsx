@@ -71,7 +71,19 @@ type WholesaleMe = {
   address?: string | null;
 };
 
-export function WholesaleLandingClient({ products }: { products: StoreProduct[] }) {
+const DEFAULT_MAYORISTA_COLLAGE = [
+  "/mayorista/vitrina-1.png",
+  "/mayorista/vitrina-2.png",
+  "/mayorista/vitrina-3.png",
+] as const;
+
+export function WholesaleLandingClient({
+  products,
+  collageUrls = [],
+}: {
+  products: StoreProduct[];
+  collageUrls?: string[];
+}) {
   useReveal();
   const router = useRouter();
   const { data: session, update, status: sessionStatus } = useSession();
@@ -205,7 +217,11 @@ export function WholesaleLandingClient({ products }: { products: StoreProduct[] 
           </div>
         </div>
         <ProductCollage
-          sources={["/mayorista/vitrina-1.png", "/mayorista/vitrina-2.png", "/mayorista/vitrina-3.png"]}
+          sources={
+            collageUrls.length > 0
+              ? collageUrls.slice(0, 3)
+              : [...DEFAULT_MAYORISTA_COLLAGE]
+          }
         />
       </section>
 
