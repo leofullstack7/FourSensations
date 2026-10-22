@@ -29,6 +29,15 @@ export async function ensureStoreSchemaExtras(): Promise<void> {
       await addColumnIfMissing("Order", "storeEmailSentAt", "TIMESTAMP(3)");
       await addColumnIfMissing("Order", "customerEmailSentAt", "TIMESTAMP(3)");
       await addColumnIfMissing("Product", "badgeMessage", "TEXT");
+      await addColumnIfMissing("Product", "category2", "TEXT");
+      await addColumnIfMissing("Product", "subcategory2", "TEXT");
+      try {
+        await prisma.$executeRawUnsafe(
+          `CREATE INDEX IF NOT EXISTS "Product_category2_idx" ON "Product"("category2")`,
+        );
+      } catch {
+        /* ignore */
+      }
       try {
         await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Coupon_kind_idx" ON "Coupon"("kind")`);
         await prisma.$executeRawUnsafe(

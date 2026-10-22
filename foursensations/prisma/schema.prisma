@@ -73,6 +73,9 @@ model Product {
   brand         String         @default("Four Sensations")
   category      String
   subcategory   String
+  /// Segunda categoría opcional (el producto puede listarse en dos categorías a la vez).
+  category2     String?
+  subcategory2  String?
   description   String         @db.Text
   price         Int
   originalPrice Int?

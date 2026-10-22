@@ -151,7 +151,7 @@ const getCachedStorefrontProducts = unstable_cache(
     const mapped = rows.map((r) => rowToStore(r, r.images));
     return enrichStorefrontDisplayProducts(mapped, mapped);
   },
-  ["storefront-products-v14-gallery8-api-first"],
+  ["storefront-products-v15-price-cat2"],
   { revalidate: 300, tags: [STOREFRONT_PRODUCTS_CACHE_TAG] }
 );
 
@@ -181,7 +181,11 @@ function categoryProductWhere(categorySlug: string, excludeIds: string[] = []) {
     active: true,
     AND: [
       {
-        OR: [{ category: categorySlug }, ...(also.length > 0 ? [{ slug: { in: also } }] : [])],
+        OR: [
+          { category: categorySlug },
+          { category2: categorySlug },
+          ...(also.length > 0 ? [{ slug: { in: also } }] : []),
+        ],
       },
       ...(excludeIds.length > 0 ? [{ id: { notIn: excludeIds } }] : []),
     ],
@@ -263,7 +267,10 @@ export async function getStorefrontProductsByCategory(categorySlug: string): Pro
         const featuredIds = cat?.storefrontFeaturedProductIds ?? [];
 
         const rows = await prisma.product.findMany({
-          where: { active: true, category: categorySlug },
+          where: {
+            active: true,
+            OR: [{ category: categorySlug }, { category2: categorySlug }],
+          },
           orderBy: [{ featuredInHome: "desc" }, { name: "asc" }],
           include: productStoreInclude,
         });
@@ -272,7 +279,7 @@ export async function getStorefrontProductsByCategory(categorySlug: string): Pro
           featuredIds.length > 0 ? featuredIds : defaultFeaturedProductIds(products);
         return orderCategoryProductsByFeatured(products, ids);
       },
-      ["storefront-products-by-category-v14", categorySlug],
+      ["storefront-products-by-category-v15-cat2", categorySlug],
       { revalidate: 300, tags: [categoryProductsCacheTag(categorySlug)] },
     )();
   } catch {

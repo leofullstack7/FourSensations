@@ -30,6 +30,9 @@ export type AdminProduct = {
   brand: string;
   category: string;
   subcategory: string;
+  /** Segunda categoría (slug); null = solo una. */
+  category2?: string | null;
+  subcategory2?: string | null;
   tags: string[];
   price: number;
   originalPrice: number | null;

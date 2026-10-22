@@ -26,6 +26,8 @@ export const adminProductCreateSchema = z.object({
   brand: z.string().trim().min(1).max(120).optional(),
   category: z.string().trim().min(1).max(80),
   subcategory: z.string().trim().min(1).max(120),
+  category2: z.string().trim().max(80).nullable().optional(),
+  subcategory2: z.string().trim().max(120).nullable().optional(),
   tags: z.array(z.string().trim().min(1).max(60)).max(30).optional().default([]),
   description: z.string().trim().min(1, "La descripción es obligatoria").max(20_000),
   price: z.coerce.number({ invalid_type_error: "El precio debe ser un número" }).int("El precio debe ser un número entero (sin decimales)").nonnegative("El precio no puede ser negativo"),
@@ -70,6 +72,9 @@ export const adminProductUpdateSchema = z
     category: z.string().trim().min(1).max(80).optional(),
     /** Vacío permitido al editar variantes (no forzar min(1)). */
     subcategory: z.string().trim().max(120).optional(),
+    /** Segunda categoría (null/"" = quitar). */
+    category2: z.string().trim().max(80).nullable().optional(),
+    subcategory2: z.string().trim().max(120).nullable().optional(),
     tags: z.array(z.string().trim().max(60)).max(30).optional(),
     description: z.string().trim().max(20_000).optional(),
     price: z
@@ -124,6 +129,8 @@ export function formatZodError(err: z.ZodError): { message: string; issues: z.Zo
     brand: "Familia / marca",
     category: "Categoría",
     subcategory: "Subcategoría",
+    category2: "2ª categoría",
+    subcategory2: "2ª subcategoría",
     description: "Descripción",
     price: "Precio",
     originalPrice: "Precio original",

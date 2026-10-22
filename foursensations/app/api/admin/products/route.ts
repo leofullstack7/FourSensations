@@ -141,6 +141,16 @@ export async function POST(req: NextRequest) {
         brand,
         category: data.category,
         subcategory: data.subcategory,
+        category2: (() => {
+          const c2 = data.category2?.trim() || null;
+          if (!c2 || c2 === data.category) return null;
+          return c2;
+        })(),
+        subcategory2: (() => {
+          const c2 = data.category2?.trim() || null;
+          if (!c2 || c2 === data.category) return null;
+          return data.subcategory2?.trim() || null;
+        })(),
         tags,
         description: data.description,
         price: data.price,

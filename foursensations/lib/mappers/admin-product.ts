@@ -18,6 +18,8 @@ export function prismaProductToAdmin(p: ProductWithImages): AdminProduct {
     brand: p.brand,
     category: p.category,
     subcategory: p.subcategory,
+    category2: p.category2 ?? null,
+    subcategory2: p.subcategory2 ?? null,
     tags: Array.isArray(p.tags) ? p.tags : [],
     price: p.price,
     originalPrice: p.originalPrice,

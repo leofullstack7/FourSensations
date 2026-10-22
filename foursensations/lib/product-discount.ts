@@ -53,11 +53,10 @@ export function computedDiscountPercent(price: number, originalPrice: number | n
 
 /**
  * Precio público / card:
- * - «precio» (DB) = precio descuento de venta
- * - «originalPrice» = precio original (tachado si hay descuento real)
- * - Si solo hay original (descuento vacío/0 o igual al original) → se muestra el original
- * - Si original > descuento → tachado + badge %
- * - Descuento gestionado por % (panel Descuentos) sigue teniendo prioridad
+ * - «precio» (DB) = precio de venta que fijó el admin
+ * - «originalPrice» = precio original (tachado si es mayor)
+ * - El % del panel Descuentos NO debe recalcular ni pisar ese precio de venta
+ * - Solo si no hay par oferta explícito se usa el % gestionado sobre la base
  */
 export function resolveProductPrice(p: ProductDiscountFields, now = new Date()): ResolvedProductPrice {
   if (p.isWholesalePrice && p.originalPrice != null && p.originalPrice > p.price) {
@@ -67,14 +66,29 @@ export function resolveProductPrice(p: ProductDiscountFields, now = new Date()):
       discountPercent: computedDiscountPercent(p.price, p.originalPrice),
     };
   }
+
+  const original =
+    p.originalPrice != null && p.originalPrice > 0 ? Math.round(p.originalPrice) : null;
+  const sale = p.price > 0 ? Math.round(p.price) : null;
+
+  // Par del editor (precio + original): siempre gana frente al % gestionado.
+  // Caso Pack x4: precio 139900 + original 160000 (no 139200 de un 13% redondeado).
+  if (sale != null && original != null && original > sale) {
+    return {
+      price: sale,
+      originalPrice: original,
+      discountPercent: computedDiscountPercent(sale, original),
+    };
+  }
+
   if (isActiveManagedDiscount(p, now)) {
     const pct = Math.round(p.discountPercent!);
     const base =
       p.discountBasePrice != null && p.discountBasePrice > 0
         ? p.discountBasePrice
-        : p.originalPrice != null && p.originalPrice > 0
-          ? p.originalPrice
-          : p.price;
+        : original != null && original > 0
+          ? original
+          : sale ?? 0;
     const discounted = computeDiscountedPrice(base, pct);
     return {
       price: discounted,
@@ -83,27 +97,14 @@ export function resolveProductPrice(p: ProductDiscountFields, now = new Date()):
     };
   }
 
-  const original =
-    p.originalPrice != null && p.originalPrice > 0 ? Math.round(p.originalPrice) : null;
-  const discount = p.price > 0 ? Math.round(p.price) : null;
-
   // Solo original (+ mayorista): sin precio descuento distinto → portada = original
-  if (original != null && (discount == null || discount === original)) {
+  if (original != null && (sale == null || sale === original)) {
     return { price: original, originalPrice: null, discountPercent: null };
   }
 
-  // Precio descuento + original mayor → oferta con tachado
-  if (discount != null && original != null && original > discount) {
-    return {
-      price: discount,
-      originalPrice: original,
-      discountPercent: computedDiscountPercent(discount, original),
-    };
-  }
-
   // Solo precio descuento / venta
-  if (discount != null) {
-    return { price: discount, originalPrice: null, discountPercent: null };
+  if (sale != null) {
+    return { price: sale, originalPrice: null, discountPercent: null };
   }
 
   return { price: original ?? 0, originalPrice: null, discountPercent: null };

@@ -593,7 +593,11 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
 
   const productFilterSubcategoryOptions = useMemo(() => {
     const pool = productFilterCategorySlug
-      ? products.filter((p) => p.category === productFilterCategorySlug)
+      ? products.filter(
+          (p) =>
+            p.category === productFilterCategorySlug ||
+            p.category2 === productFilterCategorySlug,
+        )
       : products;
     const seen = new Set<string>();
     const out: string[] = [];
@@ -610,7 +614,11 @@ export function AdminApp({ initialSession }: { initialSession?: Session | null }
 
   const productFilterTagOptions = useMemo(() => {
     const pool = productFilterCategorySlug
-      ? products.filter((p) => p.category === productFilterCategorySlug)
+      ? products.filter(
+          (p) =>
+            p.category === productFilterCategorySlug ||
+            p.category2 === productFilterCategorySlug,
+        )
       : products;
     const seen = new Set<string>();
     const out: string[] = [];
@@ -9884,6 +9892,8 @@ function AdminProductDetailModal({
   const [editBrand, setEditBrand] = useState("");
   const [editCategory, setEditCategory] = useState("");
   const [editSubcategory, setEditSubcategory] = useState("");
+  const [editCategory2, setEditCategory2] = useState("");
+  const [editSubcategory2, setEditSubcategory2] = useState("");
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editPrice, setEditPrice] = useState("");
   const [editOriginalPrice, setEditOriginalPrice] = useState("");
@@ -9904,6 +9914,8 @@ function AdminProductDetailModal({
     setEditBrand(p.brand || "");
     setEditCategory(p.category);
     setEditSubcategory(p.subcategory || "");
+    setEditCategory2(p.category2?.trim() || "");
+    setEditSubcategory2(p.subcategory2?.trim() || "");
     setEditTags(productOwnTags(p));
     setEditPrice(String(p.price));
     setEditOriginalPrice(p.originalPrice != null ? String(p.originalPrice) : "");
@@ -9969,6 +9981,31 @@ function AdminProductDetailModal({
     }
     return out;
   }, [subRowsForEdit, editSubcategory]);
+
+  const category2SelectOptions = useMemo(
+    () =>
+      sortedCats
+        .filter((c) => c.slug !== editCategory)
+        .map((c) => ({
+          value: c.slug,
+          label: `${c.icon ? `${c.icon} ` : ""}${c.name}`,
+        })),
+    [sortedCats, editCategory],
+  );
+
+  const subRowsForEdit2 = useMemo(() => {
+    if (!editCategory2) return [];
+    const c = categoryTree.find((x) => x.slug === editCategory2);
+    return c ? [...c.subcategories].sort((a, b) => a.sortOrder - b.sortOrder) : [];
+  }, [editCategory2, categoryTree]);
+
+  const subcategory2SelectOptions = useMemo(() => {
+    const out = subRowsForEdit2.map((s) => ({ value: s.name, label: s.name }));
+    if (editSubcategory2 && !subRowsForEdit2.some((s) => s.name === editSubcategory2)) {
+      out.unshift({ value: editSubcategory2, label: editSubcategory2 });
+    }
+    return out;
+  }, [subRowsForEdit2, editSubcategory2]);
 
   const tagCatalogOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -10331,6 +10368,13 @@ function AdminProductDetailModal({
                   </div>
                   <div className="admin-card" style={{ padding: 12 }}>
                     <strong>Categoría:</strong> {categoryDisplayName(product.category, categoryTree)}
+                    {product.category2 ? (
+                      <>
+                        {" · "}
+                        <strong>2ª:</strong> {categoryDisplayName(product.category2, categoryTree)}
+                        {product.subcategory2 ? ` / ${product.subcategory2}` : ""}
+                      </>
+                    ) : null}
                   </div>
                   <div className="admin-card" style={{ padding: 12 }}>
                     <strong>Subcategoría:</strong> {product.subcategory || "—"}
@@ -10490,6 +10534,10 @@ function AdminProductDetailModal({
                   onChange={(slug) => {
                     setEditCategory(slug);
                     setEditSubcategory("");
+                    if (editCategory2 === slug) {
+                      setEditCategory2("");
+                      setEditSubcategory2("");
+                    }
                   }}
                   createOptionLabel="➕ Crear categoría…"
                   newPlaceholder="Nombre de la categoría…"
@@ -10514,6 +10562,46 @@ function AdminProductDetailModal({
                   onCreate={async (name) => {
                     const cat = categoryTree.find((c) => c.slug === editCategory);
                     if (!cat) throw new Error("Elige una categoría válida primero");
+                    const created = await createAdminSubcategory(cat.id, { name });
+                    await onReloadCategories();
+                    showToast(`Subcategoría «${created.name}» creada`, "success", "✅");
+                    return created.name;
+                  }}
+                />
+                <AdminCreatableSelect
+                  label="2ª categoría (opcional)"
+                  value={editCategory2}
+                  options={category2SelectOptions}
+                  onChange={(slug) => {
+                    setEditCategory2(slug);
+                    setEditSubcategory2("");
+                  }}
+                  createOptionLabel="➕ Crear categoría…"
+                  newPlaceholder="Nombre de la categoría…"
+                  disabled={editBusy}
+                  allowEmpty
+                  emptyLabel="Sin 2ª categoría"
+                  hint="El producto puede aparecer en dos categorías a la vez en la tienda."
+                  onCreate={async (name) => {
+                    const created = await createAdminCategory({ name });
+                    await onReloadCategories();
+                    showToast(`Categoría «${created.name}» creada`, "success", "✅");
+                    return created.slug;
+                  }}
+                />
+                <AdminCreatableSelect
+                  label="2ª subcategoría"
+                  value={editSubcategory2}
+                  options={subcategory2SelectOptions}
+                  onChange={setEditSubcategory2}
+                  createOptionLabel="➕ Crear subcategoría…"
+                  newPlaceholder="Nombre de la subcategoría…"
+                  disabled={editBusy || !editCategory2}
+                  allowEmpty
+                  emptyLabel={editCategory2 ? "Seleccionar…" : "Elige 2ª categoría primero"}
+                  onCreate={async (name) => {
+                    const cat = categoryTree.find((c) => c.slug === editCategory2);
+                    if (!cat) throw new Error("Elige una 2ª categoría válida primero");
                     const created = await createAdminSubcategory(cat.id, { name });
                     await onReloadCategories();
                     showToast(`Subcategoría «${created.name}» creada`, "success", "✅");
@@ -10905,11 +10993,17 @@ function AdminProductDetailModal({
                     }
 
                     try {
+                      const cat2 = editCategory2.trim();
                       await onSave({
                         name: editName.trim(),
                         brand: editBrand.trim() || "Four Sensations",
                         category: editCategory.trim(),
                         subcategory: editSubcategory.trim(),
+                        category2: cat2 && cat2 !== editCategory.trim() ? cat2 : null,
+                        subcategory2:
+                          cat2 && cat2 !== editCategory.trim()
+                            ? editSubcategory2.trim() || null
+                            : null,
                         tags: editTags,
                         price: priceNum,
                         originalPrice: originalNum,

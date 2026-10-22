@@ -152,10 +152,30 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
         ...(d.brand !== undefined && !brandAppliedViaHelper && { brand: d.brand }),
         ...(d.category !== undefined && { category: d.category }),
         ...(d.subcategory !== undefined && { subcategory: d.subcategory }),
+        ...(() => {
+          if (d.category2 === undefined && d.subcategory2 === undefined) return {};
+          const primary = d.category !== undefined ? d.category : existing.category;
+          const raw2 =
+            d.category2 !== undefined ? d.category2?.trim() || null : existing.category2 ?? null;
+          const c2 = raw2 && raw2 !== primary ? raw2 : null;
+          const sub2 = c2
+            ? d.subcategory2 !== undefined
+              ? d.subcategory2?.trim() || null
+              : existing.subcategory2 ?? null
+            : null;
+          return { category2: c2, subcategory2: sub2 };
+        })(),
         ...(d.tags !== undefined && { tags: d.tags.map((t) => t.trim()).filter(Boolean) }),
         ...(d.description !== undefined && { description: d.description }),
         ...(d.price !== undefined && { price: d.price }),
         ...(d.originalPrice !== undefined && { originalPrice: d.originalPrice }),
+        // Al editar precio desde el producto, el par precio/original gana: limpia % gestionado
+        // que recalculaba mal (ej. 13% de 160000 → 139200 en vez de 139900 del admin).
+        ...((d.price !== undefined || d.originalPrice !== undefined) && {
+          discountPercent: null,
+          discountEndsAt: null,
+          discountBasePrice: null,
+        }),
         ...(d.wholesalePrice !== undefined && { wholesalePrice: d.wholesalePrice }),
         ...(d.stock !== undefined && { stock: d.stock }),
         ...(d.rating !== undefined && { rating: d.rating }),
@@ -196,7 +216,9 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
         d.colorName !== undefined ||
         d.active !== undefined ||
         d.category !== undefined ||
-        d.price !== undefined)
+        d.category2 !== undefined ||
+        d.price !== undefined ||
+        d.originalPrice !== undefined)
     ) {
       revalidateStorefrontProducts();
     }
@@ -207,7 +229,10 @@ export async function PUT(req: NextRequest, { params }: RouteCtx) {
       d.name !== undefined ||
       d.description !== undefined ||
       d.price !== undefined ||
-      d.wholesalePrice !== undefined
+      d.originalPrice !== undefined ||
+      d.wholesalePrice !== undefined ||
+      d.category !== undefined ||
+      d.category2 !== undefined
     ) {
       revalidateStorefrontProducts();
       revalidatePath(`/producto/${row.slug}`);
