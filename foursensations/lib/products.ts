@@ -19,9 +19,12 @@ import { normalizeMenuLookup } from "@/lib/store/menu-item-href";
 import { enrichStorefrontDisplayProducts } from "@/lib/store/variant-groups";
 import { toFastProductMediaUrl } from "@/lib/util/image-url";
 
-/** Solo portada + hover en listados: cargar todas las fotos reventaba Render free (512Mi). */
+/**
+ * Listados: portada (`imageUrl`) + extras del editor.
+ * take:8 cubre la galería típica de variante sin cargar cientos de fotos.
+ */
 const productStoreInclude = {
-  images: { orderBy: { sortOrder: "asc" as const }, take: 2 },
+  images: { orderBy: { sortOrder: "asc" as const }, take: 8 },
   tintFamily: { select: { name: true } },
   tintType: { select: { name: true } },
 };
@@ -148,7 +151,7 @@ const getCachedStorefrontProducts = unstable_cache(
     const mapped = rows.map((r) => rowToStore(r, r.images));
     return enrichStorefrontDisplayProducts(mapped, mapped);
   },
-  ["storefront-products-v13-stored-api-fallback"],
+  ["storefront-products-v14-gallery8-api-first"],
   { revalidate: 300, tags: [STOREFRONT_PRODUCTS_CACHE_TAG] }
 );
 
@@ -269,7 +272,7 @@ export async function getStorefrontProductsByCategory(categorySlug: string): Pro
           featuredIds.length > 0 ? featuredIds : defaultFeaturedProductIds(products);
         return orderCategoryProductsByFeatured(products, ids);
       },
-      ["storefront-products-by-category", categorySlug],
+      ["storefront-products-by-category-v14", categorySlug],
       { revalidate: 300, tags: [categoryProductsCacheTag(categorySlug)] },
     )();
   } catch {
@@ -437,10 +440,11 @@ export async function getStorefrontColorSiblings(product: StoreProduct): Promise
   const code = product.variantGroupCode?.trim();
   if (!code || !process.env.DATABASE_URL) return [product];
   try {
+    // Galería completa por variante (misma que la ficha): al cambiar color debe cambiar el mosaico.
     const rows = await prisma.product.findMany({
       where: { active: true, variantGroupCode: code },
       orderBy: [{ variantGroupOrder: "asc" }, { name: "asc" }],
-      include: productStoreInclude,
+      include: productDetailInclude,
     });
     const list = rows.map((row) => rowToStore(row, row.images));
     return list.length > 0 ? list : [product];

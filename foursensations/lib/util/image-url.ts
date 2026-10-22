@@ -70,9 +70,12 @@ function storedApiFromStatic(url: string): string | null {
 }
 
 /**
- * Expande cada URL a variantes rápidas (estático → API) **sin reordenar**.
- * La primera URL de entrada (portada del editor) debe seguir siendo la primera candidata;
- * nunca promover una extra de `/media/productos` por encima de la principal.
+ * Expande cada URL a candidatos **sin reordenar portadas**.
+ * La primera URL de entrada (portada del editor) sigue siendo la primera lógica;
+ * nunca promovemos extras de `/media/productos` por encima.
+ *
+ * Stored: prioriza `/api/media/stored/{id}` (bytes en DB). El estático
+ * `/media/stored/*.webp` a menudo no existe en Render free y dejaba cards en blanco.
  */
 export function preferFastStorefrontUrls(urls: string[]): string[] {
   const seen = new Set<string>();
@@ -86,11 +89,30 @@ export function preferFastStorefrontUrls(urls: string[]): string[] {
     const trimmed = (raw ?? "").trim();
     if (!trimmed) continue;
     const u = toFastProductMediaUrl(trimmed);
-    push(u);
-    // Si el estático de build no existe (404), el card debe caer al API al instante.
-    const api = storedApiFromStatic(u);
-    if (api) push(api);
-    if (/^\/api\/media\/stored\/[a-z0-9]+$/i.test(trimmed)) push(trimmed);
+    const apiFromStatic = storedApiFromStatic(u);
+    const apiDirect = /^\/api\/media\/stored\/[a-z0-9]+$/i.test(trimmed) ? trimmed : null;
+    const api = apiDirect || apiFromStatic;
+    if (api) {
+      push(api);
+      if (u !== api) push(u);
+    } else {
+      push(u);
+    }
   }
   return out;
+}
+
+/**
+ * Una URL por foto para galerías/carruseles (API stored preferida).
+ * Los componentes con onError siguen pudiendo usar preferFastStorefrontUrls.
+ */
+export function displayStorefrontUrls(urls: string[]): string[] {
+  const expanded = preferFastStorefrontUrls(urls);
+  return expanded.filter((u, _i, arr) => {
+    const staticMatch = u.match(/^\/media\/stored\/([a-z0-9]+)\./i);
+    if (staticMatch && arr.some((x) => x === `/api/media/stored/${staticMatch[1]}`)) {
+      return false;
+    }
+    return true;
+  });
 }

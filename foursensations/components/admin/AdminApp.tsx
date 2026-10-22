@@ -152,7 +152,7 @@ import {
   isBulkCsvZipMatchRateTooLow,
 } from "@/lib/bulk-import/match-rate";
 
-import { isDisplayableImageUrl, isHttpImageUrl } from "@/lib/util/image-url";
+import { isDisplayableImageUrl } from "@/lib/util/image-url";
 import type { AdminCategoryTree } from "@/lib/types/admin-category";
 import type { AdminProduct, AdminSale } from "@/lib/types/admin";
 import { formatPrice } from "@/lib/format";
@@ -10122,7 +10122,7 @@ function AdminProductDetailModal({
         const galleryHasPrevious = (updated.images ?? []).some((im) => im.url === previousMain);
         if (
           previousMain &&
-          isHttpImageUrl(previousMain) &&
+          isDisplayableImageUrl(previousMain) &&
           previousMain !== url &&
           !galleryHasPrevious
         ) {

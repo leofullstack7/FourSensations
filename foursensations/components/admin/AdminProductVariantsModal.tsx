@@ -11,7 +11,7 @@ import {
   uploadAdminProductImage,
 } from "@/lib/api/admin-upload";
 import { updateAdminProduct } from "@/lib/api/admin-products";
-import { isHttpImageUrl } from "@/lib/util/image-url";
+import { isDisplayableImageUrl } from "@/lib/util/image-url";
 import { isValidColorHex, normalizeColorHex } from "@/lib/product-color";
 
 function VariantThumb({
@@ -23,7 +23,7 @@ function VariantThumb({
   emoji: string;
   onExpand?: () => void;
 }) {
-  const hasImage = isHttpImageUrl(imageUrl);
+  const hasImage = isDisplayableImageUrl(imageUrl);
   const inner = hasImage ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={imageUrl!} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -363,7 +363,7 @@ export function AdminProductVariantsModal({
       const galleryHasPrevious = (updated.images ?? []).some((im) => im.url === previousMain);
       if (
         previousMain &&
-        isHttpImageUrl(previousMain) &&
+        isDisplayableImageUrl(previousMain) &&
         previousMain !== url &&
         !galleryHasPrevious
       ) {
@@ -634,7 +634,7 @@ export function AdminProductVariantsModal({
                     imageUrl={v.imageUrl}
                     emoji={draft.emoji || v.emoji}
                     onExpand={
-                      isHttpImageUrl(v.imageUrl) ? () => setExpandedImage(v.imageUrl!) : undefined
+                      isDisplayableImageUrl(v.imageUrl) ? () => setExpandedImage(v.imageUrl!) : undefined
                     }
                   />
                   <div style={{ minWidth: 0 }}>
@@ -927,7 +927,7 @@ export function AdminProductVariantsModal({
                         ) : null}
                       </div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                        {v.imageUrl && isHttpImageUrl(v.imageUrl) ? (
+                        {v.imageUrl && isDisplayableImageUrl(v.imageUrl) ? (
                           <span style={{ position: "relative", display: "inline-block" }}>
                             <VariantGalleryThumb
                               src={v.imageUrl}
@@ -953,7 +953,7 @@ export function AdminProductVariantsModal({
                           <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Sin foto principal</span>
                         )}
                         {gallery.map((img) =>
-                          isHttpImageUrl(img.url) ? (
+                          isDisplayableImageUrl(img.url) ? (
                             <span key={img.id} style={{ position: "relative", display: "inline-block" }}>
                               <VariantGalleryThumb
                                 src={img.url}

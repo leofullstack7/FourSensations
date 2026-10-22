@@ -9,6 +9,7 @@ import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import { StoreProductPrice } from "@/components/store/StoreProductPrice";
 import type { StoreProduct } from "@/lib/types/product";
 import {
+  displayStorefrontUrls,
   isDisplayableImageUrl,
   preferFastStorefrontUrls,
   shouldBypassNextImageOptimizer,
@@ -20,17 +21,17 @@ import { getProductDisplayName } from "@/lib/product-display-names";
 import type { ProductFichaCopy } from "@/lib/product-ficha";
 import { ProductColorSwatchField } from "@/components/store/ProductColorSwatchField";
 
-/** Galería de ficha = solo principal + extras del editor (sin dump local del SKU). */
+/** Galería de ficha = principal + extras del editor de esa variante (sin dump del SKU). */
 function galleryPool(product: StoreProduct): string[] {
   const seen = new Set<string>();
-  const urls: string[] = [];
-  for (const raw of [product.img, product.imgHover, ...(product.gallery ?? [])]) {
-    const url = raw?.trim() || "";
+  const raw: string[] = [];
+  for (const candidate of [product.img, product.imgHover, ...(product.gallery ?? [])]) {
+    const url = candidate?.trim() || "";
     if (!url || seen.has(url) || !isDisplayableImageUrl(url)) continue;
     seen.add(url);
-    urls.push(url);
+    raw.push(url);
   }
-  return urls;
+  return displayStorefrontUrls(raw);
 }
 
 function MosaicImage({
@@ -47,7 +48,11 @@ function MosaicImage({
   className?: string;
 }) {
   const candidates = useMemo(() => preferFastStorefrontUrls([src]), [src]);
+  const candidatesKey = candidates.join("|");
   const [index, setIndex] = useState(0);
+  useEffect(() => {
+    setIndex(0);
+  }, [candidatesKey]);
   const current = index < candidates.length ? candidates[index] : "";
   if (!current) return null;
   return (

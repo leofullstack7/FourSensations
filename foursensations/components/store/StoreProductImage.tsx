@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   isDisplayableImageUrl,
   preferFastStorefrontUrls,
@@ -36,7 +36,13 @@ export function StoreProductImage({
     return preferFastStorefrontUrls(raw);
   }, [src, fallbacks]);
 
+  const candidatesKey = candidates.join("|");
   const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    setIndex(0);
+  }, [candidatesKey]);
+
   const current = index < candidates.length ? candidates[index] : "";
 
   if (!current) {

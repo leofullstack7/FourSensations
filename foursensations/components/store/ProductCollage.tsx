@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import type { StaticImageData } from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   isDisplayableImageUrl,
   preferFastStorefrontUrls,
@@ -19,8 +19,11 @@ function CollageShot({ src, priority }: { src: CollageSource; priority?: boolean
     if (!isDisplayableImageUrl(src) && !src.startsWith("/")) return [];
     return preferFastStorefrontUrls([src]);
   }, [src]);
-
+  const candidatesKey = candidates.join("|");
   const [index, setIndex] = useState(0);
+  useEffect(() => {
+    setIndex(0);
+  }, [candidatesKey]);
   const current = typeof src === "string" ? (index < candidates.length ? candidates[index] : "") : src;
 
   if (!current) return null;

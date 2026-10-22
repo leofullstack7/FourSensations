@@ -2,7 +2,10 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { shouldBypassNextImageOptimizer } from "@/lib/util/image-url";
+import {
+  displayStorefrontUrls,
+  shouldBypassNextImageOptimizer,
+} from "@/lib/util/image-url";
 
 const PAN_MS = 20000;
 const FADE_MS = 1200;
@@ -31,30 +34,37 @@ function usePrefersReducedMotion(): boolean {
 
 export function ProductHeroPan({ urls, alt }: { urls: string[]; alt: string }) {
   const reduced = usePrefersReducedMotion();
+  const resolvedUrls = useMemo(() => displayStorefrontUrls(urls), [urls]);
   const start = useMemo(
-    () => (urls.length > 0 ? Math.floor(Math.random() * urls.length) : 0),
-    [urls],
+    () => (resolvedUrls.length > 0 ? Math.floor(Math.random() * resolvedUrls.length) : 0),
+    [resolvedUrls],
   );
   const indexRef = useRef(start);
   const dirRef = useRef<PanDir>("up");
   const idRef = useRef(0);
   const [layers, setLayers] = useState<Layer[]>(() =>
-    urls[start] ? [{ id: 0, src: urls[start], dir: "up", fading: false, enter: false }] : [],
+    resolvedUrls[start]
+      ? [{ id: 0, src: resolvedUrls[start], dir: "up", fading: false, enter: false }]
+      : [],
   );
 
   useEffect(() => {
     indexRef.current = start;
     dirRef.current = "up";
     idRef.current = 0;
-    setLayers(urls[start] ? [{ id: 0, src: urls[start], dir: "up", fading: false, enter: false }] : []);
-  }, [urls, start]);
+    setLayers(
+      resolvedUrls[start]
+        ? [{ id: 0, src: resolvedUrls[start], dir: "up", fading: false, enter: false }]
+        : [],
+    );
+  }, [resolvedUrls, start]);
 
   const advance = useCallback(() => {
-    if (urls.length === 0) return;
+    if (resolvedUrls.length === 0) return;
     const leavingId = idRef.current;
-    const nextIndex = (indexRef.current + 1) % urls.length;
+    const nextIndex = (indexRef.current + 1) % resolvedUrls.length;
     const nextDir: PanDir = dirRef.current === "up" ? "down" : "up";
-    const nextSrc = urls[nextIndex];
+    const nextSrc = resolvedUrls[nextIndex];
     if (!nextSrc) return;
     indexRef.current = nextIndex;
     dirRef.current = nextDir;
@@ -73,22 +83,22 @@ export function ProductHeroPan({ urls, alt }: { urls: string[]; alt: string }) {
     window.setTimeout(() => {
       setLayers((prev) => prev.filter((layer) => layer.id !== leavingId));
     }, FADE_MS);
-  }, [urls]);
+  }, [resolvedUrls]);
 
   const topId = layers[layers.length - 1]?.id;
 
   useEffect(() => {
-    if (reduced || topId == null || urls.length === 0) return;
+    if (reduced || topId == null || resolvedUrls.length === 0) return;
     const timer = window.setTimeout(advance, PAN_MS);
     return () => window.clearTimeout(timer);
-  }, [advance, reduced, topId, urls.length]);
+  }, [advance, reduced, topId, resolvedUrls.length]);
 
-  if (urls.length === 0) {
+  if (resolvedUrls.length === 0) {
     return <div className="product-hero__bg product-hero__bg--empty" aria-hidden />;
   }
 
   if (reduced) {
-    const src = urls[start] ?? urls[0]!;
+    const src = resolvedUrls[start] ?? resolvedUrls[0]!;
     return (
       <Image
         src={src}

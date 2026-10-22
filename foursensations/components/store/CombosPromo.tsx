@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { formatPrice } from "@/lib/format";
-import { isHttpImageUrl } from "@/lib/util/image-url";
+import { isDisplayableImageUrl } from "@/lib/util/image-url";
 import type { StoreCombo } from "@/lib/types/store-combo";
 import { useStorefrontUi } from "@/components/store/storefront-ui-context";
 import combosHero from "@/assets/foursensations/hero1.webp";
@@ -22,7 +22,7 @@ export function ComboWaveCard({
 }) {
   const { addComboToCart } = useStorefrontUi();
   const save = savingsPct(combo);
-  const cover = combo.items.find((i) => isHttpImageUrl(i.product.imageUrl ?? ""))?.product;
+  const cover = combo.items.find((i) => isDisplayableImageUrl(i.product.imageUrl ?? ""))?.product;
 
   return (
     <article className={`gb-combo-wave-card${featured ? " gb-combo-wave-card--featured" : ""}`}>
@@ -33,7 +33,7 @@ export function ComboWaveCard({
       </div>
       <div className="gb-combo-wave-inner">
         <div className="gb-combo-wave-cover">
-          {cover && isHttpImageUrl(cover.imageUrl) ? (
+          {cover && isDisplayableImageUrl(cover.imageUrl) ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={cover.imageUrl!} alt="" />
           ) : (
@@ -48,7 +48,7 @@ export function ComboWaveCard({
             {combo.items.map((item) => (
               <li key={item.id}>
                 <span className="gb-combo-wave-item-thumb">
-                  {isHttpImageUrl(item.product.imageUrl) ? (
+                  {isDisplayableImageUrl(item.product.imageUrl) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={item.product.imageUrl!} alt="" />
                   ) : (

@@ -4,7 +4,11 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProductModalZoomImage } from "@/components/store/ProductModalZoomImage";
 import { StoreDiscountBadge } from "@/components/store/StoreProductPrice";
-import { isDisplayableImageUrl } from "@/lib/util/image-url";
+import {
+  displayStorefrontUrls,
+  isDisplayableImageUrl,
+  shouldBypassNextImageOptimizer,
+} from "@/lib/util/image-url";
 import type { StoreProduct } from "@/lib/types/product";
 
 const CAROUSEL_ITEM = 108;
@@ -15,14 +19,14 @@ const CAROUSEL_SPEED = 22;
 export function ProductModalGallery({ product }: { product: StoreProduct }) {
   const urls = useMemo(() => {
     const seen = new Set<string>();
-    const out: string[] = [];
-    for (const raw of [product.img, product.imgHover, ...product.gallery]) {
-      const url = raw?.trim() ?? "";
+    const raw: string[] = [];
+    for (const candidate of [product.img, product.imgHover, ...product.gallery]) {
+      const url = candidate?.trim() ?? "";
       if (!isDisplayableImageUrl(url) || seen.has(url)) continue;
       seen.add(url);
-      out.push(url);
+      raw.push(url);
     }
-    return out;
+    return displayStorefrontUrls(raw);
   }, [product.gallery, product.img, product.imgHover]);
 
   const [index, setIndex] = useState(0);
@@ -149,7 +153,7 @@ export function ProductModalGallery({ product }: { product: StoreProduct }) {
                       fill
                       sizes="108px"
                       loading="lazy"
-                      unoptimized={false}
+                      unoptimized={shouldBypassNextImageOptimizer(url)}
                       style={{ objectFit: "cover" }}
                     />
                   </button>

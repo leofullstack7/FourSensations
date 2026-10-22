@@ -29,7 +29,7 @@ import { formatDiscountBadge, resolveProductPrice } from "@/lib/product-discount
 import { loadFavorites, saveFavorites } from "@/lib/favorites-storage";
 import { STOREFRONT_TOPBAR_MESSAGES } from "@/lib/store-topbar-messages";
 import { findBombaCapilarParts, isBombaCapilarProduct } from "@/lib/bomba-capilar";
-import { isDisplayableImageUrl, isHttpImageUrl } from "@/lib/util/image-url";
+import { isDisplayableImageUrl } from "@/lib/util/image-url";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { StoreFloatingActions } from "@/components/store/StoreFloatingActions";
 import { WelcomeCouponModal } from "@/components/store/WelcomeCouponModal";
@@ -393,7 +393,7 @@ export function StorefrontShell({
   const addComboToCart = useCallback(
     (combo: StoreCombo) => {
       const lineId = cartComboLineId(combo.id);
-      const cover = combo.items.find((i) => isHttpImageUrl(i.product.imageUrl))?.product;
+      const cover = combo.items.find((i) => isDisplayableImageUrl(i.product.imageUrl))?.product;
       const line: CartLine = {
         id: lineId,
         name: combo.name,
@@ -407,7 +407,7 @@ export function StorefrontShell({
         reviews: 0,
         badge: "sale",
         description: combo.items.map((i) => `${i.quantity}× ${i.product.name}`).join(" · "),
-        img: cover?.imageUrl && isHttpImageUrl(cover.imageUrl) ? cover.imageUrl : "",
+        img: cover?.imageUrl && isDisplayableImageUrl(cover.imageUrl) ? cover.imageUrl : "",
         emoji: cover?.emoji || "🎁",
         isNew: true,
         featuredInHome: false,
