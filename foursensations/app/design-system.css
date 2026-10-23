@@ -4366,10 +4366,31 @@ footer {
 }
 .admin-kanban__card.is-dragging { opacity: 0.55; cursor: grabbing; }
 .admin-kanban__card.is-saving { opacity: 0.7; }
-.admin-kanban__card.is-late {
-  background: linear-gradient(145deg, #fff5f5, #ffe4e8);
-  border-color: rgba(190,60,80,0.45);
-  box-shadow: 0 8px 22px rgba(170,40,60,0.14);
+.admin-kanban__card.is-checked {
+  border-color: rgba(196,84,122,0.55);
+  box-shadow: 0 0 0 2px rgba(196,84,122,0.18), 0 8px 20px rgba(40,16,28,0.08);
+}
+.admin-kanban__card-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.admin-kanban__check {
+  flex-shrink: 0;
+  display: grid;
+  place-items: start;
+  padding-top: 2px;
+  cursor: pointer;
+}
+.admin-kanban__check input {
+  width: 16px;
+  height: 16px;
+  accent-color: #c4547a;
+  cursor: pointer;
+}
+.admin-kanban__card-main {
+  flex: 1;
+  min-width: 0;
 }
 .admin-kanban__card-top {
   display: flex;

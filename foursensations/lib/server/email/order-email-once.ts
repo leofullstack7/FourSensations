@@ -13,6 +13,7 @@ type OrderWithItems = {
   customerName: string | null;
   customerEmail: string | null;
   customerPhone: string | null;
+  customerNote?: string | null;
   subtotal: number;
   shipping: number;
   discount: number;

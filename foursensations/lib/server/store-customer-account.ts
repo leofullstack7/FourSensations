@@ -71,6 +71,8 @@ export type CustomerOrderView = {
   currency: string;
   createdAt: string;
   city: string | null;
+  /** Fase actual del kanban de envío (1–5). */
+  fulfillmentStage: number;
   items: CustomerOrderItemView[];
 };
 
@@ -94,24 +96,30 @@ export async function listCustomerOrders(userId: string, email: string | null): 
     take: 50,
   });
 
-  return rows.map((order) => ({
-    id: order.id,
-    reference: order.reference,
-    status: order.status,
-    paymentStatus: order.paymentStatus,
-    subtotal: order.subtotal,
-    shipping: order.shipping,
-    total: order.total,
-    currency: order.currency,
-    createdAt: order.createdAt.toISOString(),
-    city: readCity(order.shippingAddress),
-    items: order.items.map((item) => ({
-      id: item.id,
-      name: item.name,
-      imageUrl: item.imageUrl,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      lineTotal: item.lineTotal,
-    })),
-  }));
+  return rows.map((order) => {
+    const stageRaw = (order as { fulfillmentStage?: number }).fulfillmentStage;
+    const stage =
+      typeof stageRaw === "number" && stageRaw >= 1 && stageRaw <= 5 ? stageRaw : 1;
+    return {
+      id: order.id,
+      reference: order.reference,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      subtotal: order.subtotal,
+      shipping: order.shipping,
+      total: order.total,
+      currency: order.currency,
+      createdAt: order.createdAt.toISOString(),
+      city: readCity(order.shippingAddress),
+      fulfillmentStage: stage,
+      items: order.items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        imageUrl: item.imageUrl,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        lineTotal: item.lineTotal,
+      })),
+    };
+  });
 }

@@ -46,23 +46,6 @@ export function bogotaDateKey(input: Date | string | number = new Date()): strin
   }).format(d);
 }
 
-/** Hora 0–23 en America/Bogota. */
-export function bogotaHour(input: Date | string | number = new Date()): number {
-  const d = input instanceof Date ? input : new Date(input);
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "America/Bogota",
-    hour: "2-digit",
-    hour12: false,
-  }).formatToParts(d);
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-  return Number.isFinite(hour) ? hour : 0;
-}
-
-/** Fase 2 + después de las 15:00 Colombia → tarjeta roja (no sale hoy). */
-export function isFulfillmentStageLate(stage: number, now = new Date()): boolean {
-  return stage === 2 && bogotaHour(now) >= 15;
-}
-
 export function todayBogotaKey(): string {
   return bogotaDateKey(new Date());
 }

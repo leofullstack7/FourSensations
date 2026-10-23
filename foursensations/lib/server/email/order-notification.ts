@@ -11,6 +11,9 @@ import {
 function parseShippingFromJson(shippingAddress: Prisma.JsonValue): {
   shippingZoneLabel: string;
   shippingAddressLine: string;
+  addressLine1: string;
+  addressLine2: string;
+  postalCode: string;
   shippingCarrierLabel: string;
   neighborhood: string;
   documentNumber: string;
@@ -25,6 +28,13 @@ function parseShippingFromJson(shippingAddress: Prisma.JsonValue): {
       typeof shippingAddress === "object" && shippingAddress !== null && !Array.isArray(shippingAddress)
         ? (shippingAddress as Record<string, unknown>)
         : {};
+    const str = (...keys: string[]) => {
+      for (const k of keys) {
+        const v = addr[k];
+        if (typeof v === "string" && v.trim()) return v.trim();
+      }
+      return "";
+    };
     const label =
       typeof addr.shippingZoneLabel === "string" && addr.shippingZoneLabel.trim()
         ? addr.shippingZoneLabel
@@ -34,24 +44,27 @@ function parseShippingFromJson(shippingAddress: Prisma.JsonValue): {
         ? addr.shippingCarrierLabel
         : typeof addr.shippingCarrier === "string" && addr.shippingCarrier === "interrapidismo"
           ? "Interrapidísimo"
-          : "Envía";
-    const parts = [addr.line1, addr.line2, addr.city, addr.region, addr.postalCode]
-      .map((v) => (typeof v === "string" ? v.trim() : ""))
-      .filter(Boolean);
+          : typeof addr.shippingCarrier === "string" && addr.shippingCarrier === "pickup"
+            ? "Recoger en tienda"
+            : "Envía";
+    const line1 = str("line1", "address", "street", "direccion");
+    const line2 = str("line2");
+    const city = str("city", "ciudad");
+    const region = str("region", "state", "departamento");
+    const postalCode = str("postalCode", "zip", "codigoPostal");
+    const parts = [line1, line2, city, region, postalCode].filter(Boolean);
     return {
       shippingZoneLabel: label,
       shippingAddressLine: parts.length ? parts.join(", ") : "No especificada",
+      addressLine1: line1,
+      addressLine2: line2,
+      postalCode,
       shippingCarrierLabel: carrier,
-      neighborhood:
-        typeof addr.neighborhood === "string"
-          ? addr.neighborhood
-          : typeof addr.line2 === "string"
-            ? addr.line2
-            : "",
-      documentNumber: typeof addr.documentNumber === "string" ? addr.documentNumber : "",
-      city: typeof addr.city === "string" ? addr.city : "",
-      region: typeof addr.region === "string" ? addr.region : "",
-      fulfillment: typeof addr.fulfillment === "string" ? addr.fulfillment : "",
+      neighborhood: str("neighborhood", "barrio") || line2,
+      documentNumber: str("documentNumber", "document", "cedula"),
+      city,
+      region,
+      fulfillment: str("fulfillment"),
       couponCode: typeof addr.couponCode === "string" ? addr.couponCode : "",
       couponDiscount: typeof addr.couponDiscount === "number" ? addr.couponDiscount : 0,
     };
@@ -59,6 +72,9 @@ function parseShippingFromJson(shippingAddress: Prisma.JsonValue): {
     return {
       shippingZoneLabel: "No especificada",
       shippingAddressLine: "No especificada",
+      addressLine1: "",
+      addressLine2: "",
+      postalCode: "",
       shippingCarrierLabel: "Envía",
       neighborhood: "",
       documentNumber: "",
@@ -85,6 +101,8 @@ function money(n: number): string {
   return `$${Math.max(0, Math.floor(n)).toLocaleString("es-CO")} COP`;
 }
 
+const wrap = "word-break:break-word;overflow-wrap:anywhere;white-space:pre-wrap;";
+
 export async function sendOrderNotification(order: {
   reference: string;
   customerName: string;
@@ -105,10 +123,14 @@ export async function sendOrderNotification(order: {
     imageUrl?: string | null;
   }>;
   shippingAddress: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  postalCode?: string;
   neighborhood?: string;
   documentNumber?: string;
   city?: string;
   region?: string;
+  customerNote?: string | null;
   createdAt?: Date | string | null;
 }): Promise<void> {
   const to = await resolveStoreNotifyEmail();
@@ -121,15 +143,21 @@ export async function sendOrderNotification(order: {
   const nameEsc = escapeHtml(order.customerName);
   const emailEsc = escapeHtml(order.customerEmail);
   const phoneEsc = escapeHtml(order.customerPhone || "—");
-  const addrEsc = escapeHtml(order.shippingAddress);
-  const barrioEsc = escapeHtml(order.neighborhood || "—");
+  const line1Esc = escapeHtml(order.addressLine1 || order.shippingAddress || "—");
+  const line2Esc = escapeHtml(order.addressLine2 || "—");
+  const postalEsc = escapeHtml(order.postalCode || "—");
+  const fullAddrEsc = escapeHtml(order.shippingAddress || "—");
   const docEsc = escapeHtml(order.documentNumber || "—");
-  const cityEsc = escapeHtml(
-    [order.city, order.region].filter(Boolean).join(", ") || order.shippingZoneLabel,
-  );
+  const cityEsc = escapeHtml(order.city || "—");
+  const regionEsc = escapeHtml(order.region || "—");
+  const noteEsc = escapeHtml(order.customerNote?.trim() || "—");
+  const zoneEsc = escapeHtml(order.shippingZoneLabel || "—");
   const payEsc = escapeHtml(paymentLabel(order.paymentProvider));
-  const isPickup = /recoger/i.test(order.shippingZoneLabel) || /tienda/i.test(order.shippingCarrierLabel || "");
-  const methodEsc = escapeHtml(isPickup ? "Recoger en tienda" : order.shippingCarrierLabel || order.shippingZoneLabel);
+  const isPickup =
+    /recoger/i.test(order.shippingZoneLabel) || /tienda/i.test(order.shippingCarrierLabel || "");
+  const methodEsc = escapeHtml(
+    isPickup ? "Recoger en tienda" : order.shippingCarrierLabel || order.shippingZoneLabel,
+  );
   const discount = Math.max(0, order.discount ?? 0);
   const couponLabel = order.couponCode?.trim()
     ? `Cupón ${order.couponCode.trim()}`
@@ -149,7 +177,7 @@ export async function sendOrderNotification(order: {
         <td style="padding:10px 8px;border-bottom:1px solid #f7e4ec;">
           <table role="presentation" cellpadding="0" cellspacing="0"><tr>
             <td style="padding-right:10px;">${img}</td>
-            <td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#5a245f;font-weight:600;">${escapeHtml(item.productName)}</td>
+            <td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#5a245f;font-weight:600;${wrap}">${escapeHtml(item.productName)}</td>
           </tr></table>
         </td>
         <td style="padding:10px 8px;border-bottom:1px solid #f7e4ec;text-align:center;font-size:13px;color:#7a5564;">${item.quantity}</td>
@@ -205,18 +233,73 @@ export async function sendOrderNotification(order: {
             <tr><td style="padding:8px 20px 18px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;line-height:1.75;">
                 <tr>
-                  <td style="width:50%;vertical-align:top;padding-right:10px;color:#5a245f;">
+                  <td style="width:50%;vertical-align:top;padding-right:10px;color:#5a245f;${wrap}">
                     <span style="color:#c4547a;font-size:11px;">Nombre completo</span><br/><strong>${nameEsc}</strong><br/>
                     <span style="color:#c4547a;font-size:11px;">Cédula</span><br/>${docEsc}<br/>
                     <span style="color:#c4547a;font-size:11px;">Celular</span><br/>${phoneEsc}<br/>
                     <span style="color:#c4547a;font-size:11px;">Correo electrónico</span><br/>${emailEsc}
                   </td>
-                  <td style="width:50%;vertical-align:top;color:#5a245f;">
-                    <span style="color:#c4547a;font-size:11px;">Dirección</span><br/>${addrEsc}<br/>
-                    <span style="color:#c4547a;font-size:11px;">Barrio</span><br/>${barrioEsc}<br/>
-                    <span style="color:#c4547a;font-size:11px;">Ciudad</span><br/>${cityEsc}<br/>
-                    <span style="color:#c4547a;font-size:11px;">Método</span><br/>${methodEsc}<br/>
+                  <td style="width:50%;vertical-align:top;color:#5a245f;${wrap}">
+                    <span style="color:#c4547a;font-size:11px;">Método de entrega</span><br/>${methodEsc}<br/>
+                    <span style="color:#c4547a;font-size:11px;">Zona</span><br/>${zoneEsc}<br/>
                     <span style="color:#c4547a;font-size:11px;">Pago</span><br/>${payEsc}
+                  </td>
+                </tr>
+              </table>
+            </td></tr>
+          </table>
+        </td></tr>
+
+        <tr><td style="padding:0 0 14px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;border:1px solid #f0d4e0;">
+            <tr><td style="padding:18px 20px 6px;">
+              <p style="margin:0;font-family:${EMAIL_FONT_DISPLAY};font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:#5a245f;font-weight:800;">📦 INFORMACIÓN DE ENVÍO</p>
+            </td></tr>
+            <tr><td style="padding:8px 20px 18px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;line-height:1.7;color:#5a245f;">
+                <tr>
+                  <td style="padding:6px 0;${wrap}">
+                    <span style="color:#c4547a;font-size:11px;">Dirección</span><br/>
+                    <strong>${line1Esc}</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 0;${wrap}">
+                    <span style="color:#c4547a;font-size:11px;">Apto / torre</span><br/>
+                    ${line2Esc}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 0;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="width:33%;vertical-align:top;padding-right:8px;${wrap}">
+                          <span style="color:#c4547a;font-size:11px;">Ciudad</span><br/>${cityEsc}
+                        </td>
+                        <td style="width:33%;vertical-align:top;padding-right:8px;${wrap}">
+                          <span style="color:#c4547a;font-size:11px;">Departamento</span><br/>${regionEsc}
+                        </td>
+                        <td style="width:34%;vertical-align:top;${wrap}">
+                          <span style="color:#c4547a;font-size:11px;">Cód. postal</span><br/>${postalEsc}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 0;${wrap}">
+                    <span style="color:#c4547a;font-size:11px;">Dirección completa</span><br/>
+                    ${fullAddrEsc}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 0 0;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fdf0f5;border-radius:12px;">
+                      <tr><td style="padding:12px 14px;${wrap}">
+                        <span style="color:#c4547a;font-size:11px;font-weight:700;">Especificaciones adicionales / notas de la cliente</span><br/>
+                        <span style="color:#5a245f;font-size:13px;line-height:1.55;">${noteEsc}</span>
+                      </td></tr>
+                    </table>
                   </td>
                 </tr>
               </table>
@@ -244,39 +327,23 @@ export async function sendOrderNotification(order: {
         </td></tr>
 
         <tr><td style="padding:0 0 14px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            <tr>
-              <td style="width:52%;vertical-align:top;padding-right:8px;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;border:1px solid #f0d4e0;">
-                  <tr><td style="padding:16px 18px;">
-                    <p style="margin:0 0 12px;font-family:${EMAIL_FONT_DISPLAY};font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:#5a245f;font-weight:800;">💳 DETALLE DE PAGO</p>
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#7a5564;">
-                      <tr><td style="padding:4px 0;">Subtotal</td><td align="right">${money(order.subtotal)}</td></tr>
-                      ${
-                        discount > 0
-                          ? `<tr><td style="padding:4px 0;">Descuento${couponLabel ? ` (${escapeHtml(couponLabel)})` : ""}</td><td align="right" style="color:#c4547a;">−${money(discount)}</td></tr>`
-                          : ""
-                      }
-                      <tr><td style="padding:4px 0;">Envío</td><td align="right">${money(order.shipping)}</td></tr>
-                    </table>
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;background:#fce8f1;border-radius:12px;">
-                      <tr><td style="padding:12px 14px;font-size:13px;color:#5a245f;font-weight:700;">Total</td>
-                      <td align="right" style="padding:12px 14px;font-size:18px;color:#5a245f;font-weight:800;">${money(order.total)}</td></tr>
-                    </table>
-                  </td></tr>
-                </table>
-              </td>
-              <td style="width:48%;vertical-align:top;padding-left:8px;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;border:1px solid #f0d4e0;">
-                  <tr><td style="padding:16px 18px;">
-                    <p style="margin:0 0 10px;font-family:${EMAIL_FONT_DISPLAY};font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:#5a245f;font-weight:800;">📦 MÉTODO DE ENTREGA</p>
-                    <p style="margin:0 0 8px;font-size:13px;color:#5a245f;"><strong>${methodEsc}</strong></p>
-                    <p style="margin:0 0 8px;font-size:13px;color:#7a5564;">📍 ${addrEsc}</p>
-                    <p style="margin:0;font-size:13px;color:#7a5564;">💳 ${payEsc}</p>
-                  </td></tr>
-                </table>
-              </td>
-            </tr>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;border:1px solid #f0d4e0;">
+            <tr><td style="padding:16px 18px;">
+              <p style="margin:0 0 12px;font-family:${EMAIL_FONT_DISPLAY};font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:#5a245f;font-weight:800;">💳 DETALLE DE PAGO</p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#7a5564;">
+                <tr><td style="padding:4px 0;">Subtotal</td><td align="right">${money(order.subtotal)}</td></tr>
+                ${
+                  discount > 0
+                    ? `<tr><td style="padding:4px 0;">Descuento${couponLabel ? ` (${escapeHtml(couponLabel)})` : ""}</td><td align="right" style="color:#c4547a;">−${money(discount)}</td></tr>`
+                    : ""
+                }
+                <tr><td style="padding:4px 0;">Envío</td><td align="right">${money(order.shipping)}</td></tr>
+              </table>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;background:#fce8f1;border-radius:12px;">
+                <tr><td style="padding:12px 14px;font-size:13px;color:#5a245f;font-weight:700;">Total</td>
+                <td align="right" style="padding:12px 14px;font-size:18px;color:#5a245f;font-weight:800;">${money(order.total)}</td></tr>
+              </table>
+            </td></tr>
           </table>
         </td></tr>
 
@@ -308,6 +375,7 @@ export function orderPayloadForEmail(order: {
   customerName: string | null;
   customerEmail: string | null;
   customerPhone: string | null;
+  customerNote?: string | null;
   subtotal: number;
   shipping: number;
   discount?: number;
@@ -339,10 +407,14 @@ export function orderPayloadForEmail(order: {
       imageUrl: item.imageUrl ?? null,
     })),
     shippingAddress: parsed.shippingAddressLine,
+    addressLine1: parsed.addressLine1,
+    addressLine2: parsed.addressLine2,
+    postalCode: parsed.postalCode,
     neighborhood: parsed.neighborhood,
     documentNumber: parsed.documentNumber,
     city: parsed.city,
     region: parsed.region,
+    customerNote: order.customerNote?.trim() || null,
     createdAt: order.createdAt ?? null,
   };
 }

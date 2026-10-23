@@ -552,6 +552,132 @@
   font-size: 16px;
 }
 
+.fs-order-track-actions {
+  margin-top: 14px;
+}
+
+.fs-order-track-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(138, 95, 176, 0.35);
+  background: linear-gradient(135deg, rgba(138, 95, 176, 0.12), rgba(201, 166, 232, 0.18));
+  color: #6e4494;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.fs-order-track-btn:hover {
+  background: linear-gradient(135deg, rgba(138, 95, 176, 0.2), rgba(201, 166, 232, 0.28));
+  transform: translateY(-1px);
+}
+
+.fs-order-track {
+  margin-top: 16px;
+  padding: 16px 8px 8px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(245, 241, 248, 0.85));
+  border: 1px solid rgba(201, 166, 232, 0.28);
+  overflow-x: auto;
+}
+
+.fs-order-track__line {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  min-width: 640px;
+}
+
+.fs-order-track__step {
+  position: relative;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 0 6px;
+  min-width: 0;
+}
+
+.fs-order-track__step:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: -50%;
+  right: 50%;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(201, 166, 232, 0.35);
+  z-index: 0;
+}
+
+.fs-order-track__step.is-done:not(:first-child)::before,
+.fs-order-track__step.is-active:not(:first-child)::before {
+  background: linear-gradient(90deg, #8a5fb0, #c9a6e8);
+}
+
+.fs-order-track__connector {
+  display: none;
+}
+
+.fs-order-track__dot {
+  position: relative;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  line-height: 1;
+  color: rgba(138, 95, 176, 0.45);
+  background: #fff;
+  border: 2px solid rgba(201, 166, 232, 0.55);
+  margin-bottom: 10px;
+}
+
+.fs-order-track__step.is-done .fs-order-track__dot,
+.fs-order-track__step.is-active .fs-order-track__dot {
+  color: #fff;
+  background: linear-gradient(135deg, #8a5fb0, #b583d6);
+  border-color: transparent;
+  box-shadow: 0 6px 14px rgba(138, 95, 176, 0.28);
+}
+
+.fs-order-track__step.is-active .fs-order-track__dot {
+  transform: scale(1.12);
+}
+
+.fs-order-track__title {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.fs-order-track__step.is-done .fs-order-track__title,
+.fs-order-track__step.is-active .fs-order-track__title {
+  color: var(--dark);
+}
+
+.fs-order-track__body {
+  display: block;
+  margin-top: 6px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: #6e4494;
+  max-width: 140px;
+}
+
 .fs-orders-empty {
   text-align: center;
   padding: 36px 16px;
