@@ -1,4 +1,5 @@
 import type { CartLine, StoreProduct } from "@/lib/types/product";
+import { SHIPPING_ZONES, type ShippingZoneId } from "@/lib/checkout/shipping-zones";
 
 export const CART_KEY = "gb_cart";
 
@@ -20,9 +21,9 @@ export function saveCart(cart: CartLine[]): void {
   localStorage.setItem(CART_KEY, JSON.stringify(cart));
 }
 
-/** Estimación de envío en carrito (tarifa nacional Envía; el checkout usa zona y cobertura). */
-export function computeShippingCop(_subtotal: number): number {
-  return 15_900;
+/** Estimación de envío en carrito según zona de sesión (fallback nacional). */
+export function computeShippingCop(_subtotal: number, zoneId: ShippingZoneId = "nacional"): number {
+  return SHIPPING_ZONES[zoneId]?.rateSubtotalLow ?? SHIPPING_ZONES.nacional.rateSubtotalLow;
 }
 
 /** Actualiza precios e imágenes del carrito con el catálogo vivo. Combos no se tocan. */

@@ -22,6 +22,7 @@ import { formatProductVariantLabel } from "@/lib/store/variant-cart";
 import { normalizeColorHex } from "@/lib/product-color";
 import { loadCart, saveCart, syncCartPricesFromCatalog } from "@/lib/cart-storage";
 import { searchColombiaCities, type ColombiaCity } from "@/lib/checkout/colombia-cities";
+import { loadShippingSession, saveShippingSession, shippingPrefFromCity } from "@/lib/shipping-session";
 import { formatPrice } from "@/lib/format";
 import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
 import { loadWholesaleCheckoutMode, saveWholesaleCheckoutMode, type WholesaleCheckoutMode } from "@/lib/wholesale-checkout-mode";
@@ -176,6 +177,13 @@ export function CheckoutPageClient() {
     const initialMode = loadWholesaleCheckoutMode();
     setWholesaleMode(initialMode);
     setCart(loadCart());
+    const shipPref = loadShippingSession();
+    if (shipPref?.asked) {
+      if (shipPref.city.trim()) setCity(shipPref.city);
+      if (shipPref.department.trim()) setRegion(shipPref.department);
+      setShippingZoneId(shipPref.zoneId);
+      setShippingCarrier(resolveShippingCarrier(shipPref.city, shipPref.department || undefined));
+    }
     setHydrated(true);
     void (async () => {
       try {
@@ -224,8 +232,10 @@ export function CheckoutPageClient() {
     if (shippingZoneId === "pickup") return;
     const c = city.trim();
     if (c.length < 2) return;
-    setShippingZoneId(guessShippingZoneFromCity(c));
+    const zone = guessShippingZoneFromCity(c);
+    setShippingZoneId(zone);
     setShippingCarrier(resolveShippingCarrier(c, region.trim() || undefined));
+    saveShippingSession(shippingPrefFromCity(c, region, "checkout"));
   }, [city, region, shippingZoneId]);
 
   useEffect(() => {
@@ -247,6 +257,7 @@ export function CheckoutPageClient() {
     setCity(row.city);
     setRegion(row.department);
     setCityOpen(false);
+    saveShippingSession(shippingPrefFromCity(row.city, row.department, "checkout"));
   };
 
   const persist = useCallback((next: CartLine[]) => {
@@ -1215,7 +1226,26 @@ export function CheckoutPageClient() {
                       role="radio"
                       aria-checked={selected}
                       className={`gb-co-zone-card${selected ? " gb-co-zone-card--active" : ""}`}
-                      onClick={() => setShippingZoneId(zid)}
+                      onClick={() => {
+                        setShippingZoneId(zid);
+                        if (zid === "manizales") {
+                          setCity("Manizales");
+                          setRegion("Caldas");
+                          saveShippingSession(shippingPrefFromCity("Manizales", "Caldas", "zone"));
+                        } else if (zid === "villamaria") {
+                          setCity("Villamaría");
+                          setRegion("Caldas");
+                          saveShippingSession(shippingPrefFromCity("Villamaría", "Caldas", "zone"));
+                        } else {
+                          saveShippingSession({
+                            asked: true,
+                            city: city.trim(),
+                            department: region.trim(),
+                            zoneId: "nacional",
+                            source: "zone",
+                          });
+                        }
+                      }}
                       whileHover={reduceMotion ? undefined : { scale: 1.02 }}
                       whileTap={reduceMotion ? undefined : { scale: 0.98 }}
                       layout

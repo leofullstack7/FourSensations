@@ -20,6 +20,17 @@ import { getCategoryLabel } from "@/lib/category-labels";
 import { formatPrice } from "@/lib/format";
 import { preloadStorefrontProductImages } from "@/lib/preload-storefront-image";
 import { computeShippingCop, loadCart, saveCart, syncCartPricesFromCatalog } from "@/lib/cart-storage";
+import { SHIPPING_ZONES, type ShippingZoneId } from "@/lib/checkout/shipping-zones";
+
+const CART_DELIVERY_ZONE_IDS = ["manizales", "villamaria", "nacional"] as const satisfies readonly ShippingZoneId[];
+import {
+  loadShippingSession,
+  resolveShippingFromCoords,
+  saveShippingSession,
+  shippingPrefFromCity,
+  shippingPrefFromZone,
+  type ShippingSessionPref,
+} from "@/lib/shipping-session";
 import { WHOLESALE_THRESHOLD_COP } from "@/lib/admin/customer-crm";
 import { applyWholesalePricing, withWholesalePrices } from "@/lib/wholesale-pricing";
 import { loadWholesaleCheckoutMode, saveWholesaleCheckoutMode, type WholesaleCheckoutMode } from "@/lib/wholesale-checkout-mode";
@@ -182,6 +193,9 @@ export function StorefrontShell({
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  const [shippingPref, setShippingPref] = useState<ShippingSessionPref | null>(null);
+  const [shippingPromptOpen, setShippingPromptOpen] = useState(false);
+  const [geoBusy, setGeoBusy] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const router = useRouter();
   const { navigateTo, isNavigating } = useStoreNavigation();
@@ -201,7 +215,22 @@ export function StorefrontShell({
     setCart(loadCart());
     setWholesaleMode(loadWholesaleCheckoutMode());
     setWholesaleModeReady(true);
+    const pref = loadShippingSession();
+    if (pref) setShippingPref(pref);
   }, []);
+
+  const applyShippingPref = useCallback((pref: ShippingSessionPref) => {
+    setShippingPref(pref);
+    saveShippingSession(pref);
+    setShippingPromptOpen(false);
+  }, []);
+
+  const chooseShippingZone = useCallback(
+    (zoneId: ShippingZoneId) => {
+      applyShippingPref(shippingPrefFromZone(zoneId, "zone", shippingPref));
+    },
+    [applyShippingPref, shippingPref],
+  );
 
   useEffect(() => {
     if (!isWholesaleCustomer) return;
@@ -257,6 +286,41 @@ export function StorefrontShell({
     setToasts((t) => [...t, { id, msg, type, icon }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3800);
   }, []);
+
+  const requestShippingGeo = useCallback(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      showToast("Tu navegador no permite ubicación. Elige la ciudad en el carrito.", "default", "📍");
+      setShippingPromptOpen(true);
+      return;
+    }
+    setGeoBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        void (async () => {
+          try {
+            const pref = await resolveShippingFromCoords(pos.coords.latitude, pos.coords.longitude);
+            applyShippingPref(pref);
+            const label =
+              pref.zoneId === "nacional" && !pref.city
+                ? "Zona nacional"
+                : pref.city || SHIPPING_ZONES[pref.zoneId].shortLabel;
+            showToast(`Envío para ${label}`, "success", "💗");
+          } catch {
+            showToast("No pudimos leer tu ubicación. Elige la ciudad manualmente.", "danger", "⚠️");
+            setShippingPromptOpen(true);
+          } finally {
+            setGeoBusy(false);
+          }
+        })();
+      },
+      () => {
+        setGeoBusy(false);
+        showToast("Activa la ubicación o elige tu ciudad en el carrito.", "default", "📍");
+        setShippingPromptOpen(true);
+      },
+      { enableHighAccuracy: false, timeout: 12_000, maximumAge: 60_000 },
+    );
+  }, [applyShippingPref, showToast]);
 
   useEffect(() => {
     const syncNavHeight = () => {
@@ -613,6 +677,13 @@ export function StorefrontShell({
     document.body.style.overflow = "hidden";
   }, []);
 
+  useEffect(() => {
+    if (!cartOpen) return;
+    const pref = shippingPref ?? loadShippingSession();
+    if (pref && !shippingPref) setShippingPref(pref);
+    if (!pref?.asked) setShippingPromptOpen(true);
+  }, [cartOpen, shippingPref]);
+
   const closeCart = () => {
     setCartOpen(false);
     document.body.style.overflow = "";
@@ -626,7 +697,8 @@ export function StorefrontShell({
   }, []);
 
   const subtotal = getCartTotal();
-  const shipping = buyingAsWholesale ? 0 : computeShippingCop(subtotal);
+  const shippingZoneId: ShippingZoneId = shippingPref?.zoneId ?? "nacional";
+  const shipping = buyingAsWholesale ? 0 : computeShippingCop(subtotal, shippingZoneId);
   const cartTotal = buyingAsWholesale ? subtotal : subtotal + shipping;
 
   return (
@@ -947,16 +1019,42 @@ export function StorefrontShell({
       <div className={`cart-overlay${cartOpen ? " open" : ""}`} id="cart-overlay-bg" onClick={closeCart} role="presentation" />
 
       <aside className={`cart-sidebar${cartOpen ? " open" : ""}`} id="cart-sidebar">
-        <div className="cart-header">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div className="cart-header cart-header--shipping">
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
             <span className="cart-title">Mi Carrito</span>
             <span className="cart-count-badge" id="cart-sidebar-count">
               {cartCount}
             </span>
           </div>
-          <button type="button" className="modal-close" onClick={closeCart}>
-            ✕
-          </button>
+          <div className="cart-header-actions">
+            {!buyingAsWholesale ? (
+              <div className="cart-geo-wrap">
+                <span className="cart-geo-oval" aria-hidden />
+                <button
+                  type="button"
+                  className="cart-geo-btn"
+                  onClick={requestShippingGeo}
+                  disabled={geoBusy}
+                  title="Usar mi ubicación para el envío"
+                >
+                  {geoBusy ? "ubicando…" : "mi ubicación para envío"}
+                </button>
+                <span className="cart-geo-heart" aria-hidden>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M12 21s-7.2-4.35-9.6-8.4C.6 9.3 2.1 5.7 5.7 5.1c1.8-.3 3.5.5 4.5 1.9 1-1.4 2.7-2.2 4.5-1.9 3.6.6 5.1 4.2 3.3 7.5C19.2 16.65 12 21 12 21z"
+                      fill="#fff"
+                      stroke="rgba(170,120,130,0.55)"
+                      strokeWidth="1.4"
+                    />
+                  </svg>
+                </span>
+              </div>
+            ) : null}
+            <button type="button" className="modal-close" onClick={closeCart} aria-label="Cerrar carrito">
+              ✕
+            </button>
+          </div>
         </div>
         <div className="cart-items" id="cart-items">
           {cart.length === 0 ? (
@@ -1067,6 +1165,55 @@ export function StorefrontShell({
               </button>
             </div>
           ) : null}
+          {!buyingAsWholesale ? (
+            <div className="cart-shipping-zone">
+              {shippingPromptOpen || !shippingPref?.asked ? (
+                <div className="cart-shipping-prompt" role="dialog" aria-label="Ciudad de envío">
+                  <p className="cart-shipping-prompt__title">¿Desde qué ciudad recibes tu pedido?</p>
+                  <p className="cart-shipping-prompt__hint">Así calculamos el envío correcto desde el primer momento.</p>
+                  <div className="cart-shipping-zone__btns" role="group" aria-label="Elige tu ciudad">
+                    <button type="button" className="cart-zone-chip" onClick={() => applyShippingPref(shippingPrefFromCity("Manizales", "Caldas", "prompt"))}>
+                      Manizales
+                    </button>
+                    <button type="button" className="cart-zone-chip" onClick={() => applyShippingPref(shippingPrefFromCity("Villamaría", "Caldas", "prompt"))}>
+                      Villamaría
+                    </button>
+                    <button type="button" className="cart-zone-chip" onClick={() => applyShippingPref(shippingPrefFromZone("nacional", "prompt", shippingPref))}>
+                      Otra ciudad
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="cart-shipping-zone__label">
+                    Recibir en{" "}
+                    <strong>
+                      {shippingPref.city?.trim() || SHIPPING_ZONES[shippingZoneId].shortLabel}
+                    </strong>
+                  </p>
+                  <div className="cart-shipping-zone__btns" role="radiogroup" aria-label="Zona de envío">
+                    {CART_DELIVERY_ZONE_IDS.map((zid) => {
+                      const z = SHIPPING_ZONES[zid];
+                      const active = shippingZoneId === zid;
+                      return (
+                        <button
+                          key={zid}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          className={`cart-zone-chip${active ? " is-active" : ""}`}
+                          onClick={() => chooseShippingZone(zid)}
+                        >
+                          {z.shortLabel}
+                          <span className="cart-zone-chip__rate">{formatPrice(z.rateSubtotalLow)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
           <div className="cart-summary">
             <div className="cart-summary-row">
               <span>Subtotal</span>
@@ -1074,7 +1221,7 @@ export function StorefrontShell({
             </div>
             {buyingAsWholesale ? null : (
               <div className="cart-summary-row">
-                <span>Envío</span>
+                <span>Envío{shippingPref?.asked ? ` · ${SHIPPING_ZONES[shippingZoneId].shortLabel}` : ""}</span>
                 <span id="cart-shipping">{shipping === 0 ? "Gratis 🎉" : formatPrice(shipping)}</span>
               </div>
             )}
